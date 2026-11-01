@@ -440,6 +440,8 @@ class ScheduleService:
         )
         validate_schedule(item)
         item.next_run_at = compute_next(item, now) if item.enabled else None
+        if item.kind == "once" and item.enabled and item.next_run_at is None:
+            raise InvalidInput("a once schedule must start in the future")
         async with self.store.transaction() as tx:
             await self._check_mowers(tx, item)
             existing = await tx.count_schedules(account_id)

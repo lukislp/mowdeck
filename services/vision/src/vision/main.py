@@ -52,7 +52,13 @@ from vision.adapters.providers.llm import load_litellm
 from vision.application.assist import AssistConfig, VisionService
 from vision.application.auto import AutoAnalysis, AutoSettings
 from vision.application.executor import DriveConfig, Executor
-from vision.application.ports import Clock, ProviderFactory, SecretBox, Store
+from vision.application.ports import (
+    Clock,
+    ProviderFactory,
+    SecretBox,
+    Store,
+    StructuredFactory,
+)
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
 from vision.domain.auto import AutoConfig, parse_codes
 from vision.domain.context import Motion
@@ -104,6 +110,7 @@ def build_app(
     bus: EventBus | None = None,
     store: Store | None = None,
     factory: ProviderFactory | None = None,
+    structured: StructuredFactory | None = None,
     authorizer: Authorizer | None = None,
     principal_resolver: PrincipalResolver | None = None,
     entitlements: Entitlements | None = None,
@@ -126,10 +133,14 @@ def build_app(
     plans: Entitlements = (
         entitlements if entitlements is not None else client_from_settings(settings)
     )
-    provider_factory: ProviderFactory = factory or DefaultProviderFactory(
+    default_factory = DefaultProviderFactory(
         timeout_seconds=settings.vision_provider_timeout_seconds,
         retries=settings.vision_provider_retries,
     )
+    provider_factory: ProviderFactory = factory or default_factory
+    # Structured answers (ADR 0075) always use the default factory: the fake for `fake/...`
+    # models, else LiteLLM; tests swap it with `structured`.
+    structured_factory: StructuredFactory = structured or default_factory
     mower_view = view or BusMowerView()
     now = clock or utc_now
     connection: FgaConnection | None = None
@@ -151,8 +162,10 @@ def build_app(
                 allow_fake=settings.vision_allow_fake_provider,
                 api_base_policy=settings.vision_user_api_base_policy,
                 tests_per_hour=settings.vision_provider_tests_per_hour,
+                structured_per_hour=settings.vision_structured_per_hour,
             ),
             clock=now,
+            structured_factory=structured_factory,
         )
         publisher = BusPublisher(active_bus, producer=settings.service_name)
         fleet = BusFleetGateway(active_bus, timeout_seconds=settings.vision_fleet_timeout_seconds)

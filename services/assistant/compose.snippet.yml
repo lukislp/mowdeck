@@ -1,0 +1,38 @@
+# Compose block of the assistant (already part of infra/compose/docker-compose.yml; ADR 0075).
+# Build context is the repository root. Optional: the "assistant" profile. HTTP only with the
+# caller's token: no NATS user, no database, no secret.
+services:
+
+  assistant:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/assistant:${MOWDECK_VERSION:-dev}
+    profiles: [assistant]
+    build:
+      context: ../..
+      dockerfile: services/assistant/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
+      MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      MOWDECK_NATS_ENABLED: "false"
+      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_ASSISTANT_INTERPRETER: ${ASSISTANT_INTERPRETER:-provider}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.assistant.rule=PathPrefix(`/api/v1/assistant`)
+      - traefik.http.routers.assistant.entrypoints=web
+      - traefik.http.services.assistant.loadbalancer.server.port=8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      identity:
+        condition: service_healthy
+    networks: [mowdeck]

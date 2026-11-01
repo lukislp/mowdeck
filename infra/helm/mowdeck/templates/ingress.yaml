@@ -10,7 +10,7 @@ Stripe webhook of Billing when it is enabled), so a rate limit can be attached t
 {{- if .Values.ingress.enabled }}
 {{- $ing := .Values.ingress }}
 {{- $routes := list }}
-{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" }}
+{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" "assistant" "assistant" }}
 {{- if (index $.Values.services $key).enabled }}
 {{- $routes = append $routes (dict "path" (printf "/api/v1/%s" $component) "type" "Prefix" "component" $component "port" 8000) }}
 {{- end }}

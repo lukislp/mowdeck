@@ -256,8 +256,21 @@ config:
   VISION_AUTO_PHOTO_RETRY_SECONDS: "15"
   # How long Vision waits for the gateway's photo (above GATEWAY_PHOTO_TIMEOUT_SECONDS).
   VISION_PHOTO_TIMEOUT_SECONDS: "35"
+  # Text-only structured answers per user and hour (POST /vision/me/provider/structured): the
+  # interface the optional assistant (chat control, ADR 0075) uses to reuse the AI provider.
+  VISION_STRUCTURED_PER_HOUR: "30"
   # Longest time the Device-Gateway takes for a photo (a camera frame needs 5 to 15 s).
   GATEWAY_PHOTO_TIMEOUT_SECONDS: "30"
+
+  # --- Assistant: chat control (ADR 0075), only with services.assistant.enabled ---
+  # provider: requests are read by the user's AI provider (Settings, AI provider; through
+  # Vision, never a key in the assistant); phrases: a built-in phrase parser without any AI.
+  # Demo mode always uses phrases.
+  ASSISTANT_INTERPRETER: provider
+  # Proposals per user and minute (per replica).
+  ASSISTANT_REQUESTS_PER_MINUTE: "20"
+  # Timeout of one structured answer from the AI provider.
+  ASSISTANT_AI_TIMEOUT_SECONDS: "60"
   # --- Vision's camera frames through the camera relay (ADR 0045) ---
   # Compose sets GATEWAY_RELAY_URL by hand; here services.cameraRelay.enabled points the
   # Device-Gateway at the relay's in-cluster Service, with the shared secret
@@ -807,6 +820,21 @@ services:
     nodeSelector: {}
     tolerations: []
     affinity: {}
+  # Chat control (ADR 0075): the optional assistant add-on. Off by default (Compose: the
+  # "assistant" profile). It proposes actions from a typed request and executes nothing; HTTP
+  # only (Identity, Fleet, Telemetry, Vision with the caller's token): no NATS user, no database,
+  # no secret. Enabled, Identity lists its descriptor and the web app shows the chat box.
+  assistant:
+    enabled: false
+    replicas: 1
+    resources:
+      requests: {cpu: 20m, memory: 96Mi}
+      limits: {memory: 256Mi}
+    autoscaling: {enabled: false, minReplicas: 2, maxReplicas: 4, targetCPUUtilizationPercentage: 75}
+    pdb: {enabled: false, minAvailable: 1}
+    extraEnv: {}
+    extraVolumes: []
+    extraVolumeMounts: []
   # Subscriptions and payments (ADR 0031). Off by default: billing.enabled=false means nothing
   # of it is rendered (Compose: the "billing" profile). Add <fullname>-billing to Identity's
   # module URLs via services.identity.extraEnv only when enabled (docs/ops/billing.md).

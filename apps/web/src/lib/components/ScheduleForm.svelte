@@ -201,6 +201,7 @@
   const kindOptions = $derived([
     { value: 'weekly', label: m.sched_kind_weekly() },
     { value: 'every_n_days', label: m.sched_kind_every_n_days() },
+    { value: 'once', label: m.sched_kind_once() },
   ]);
 
   function toggleDay(day: Weekday): void {
@@ -423,7 +424,8 @@
         label={m.sched_kind()}
         options={kindOptions}
         value={form.kind}
-        onchange={(value) => (form.kind = value === 'every_n_days' ? 'every_n_days' : 'weekly')}
+        onchange={(value) =>
+          (form.kind = value === 'every_n_days' || value === 'once' ? value : 'weekly')}
         testid="sched-kind"
       />
       {#if form.kind === 'weekly'}
@@ -453,6 +455,16 @@
           </div>
           {#if err('days')}<span class="error" role="alert">{err('days')}</span>{/if}
         </fieldset>
+      {:else if form.kind === 'once'}
+        <Field
+          id="sched-anchor"
+          type="date"
+          label={m.sched_once_date()}
+          hint={m.sched_once_hint()}
+          mono
+          bind:value={form.anchorDate}
+          error={err('anchor_date')}
+        />
       {:else}
         <div class="pair">
           <Field

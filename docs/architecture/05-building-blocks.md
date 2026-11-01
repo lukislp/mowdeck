@@ -29,6 +29,7 @@ flowchart TB
         billing["Billing (optional)"]
         vision["Vision (AI assist)"]
         relay["Camera relay (optional)"]
+        assistant["Assistant: chat control (optional add-on)"]
     end
 
     nats[("NATS JetStream")]
@@ -46,6 +47,11 @@ flowchart TB
     gw --> notif
     gw --> entitle
     gw --> planner
+    gw --> assistant
+    assistant -. "public API, caller's token" .-> identity
+    assistant -.-> fleet
+    assistant -.-> telemetry
+    assistant -.-> vision
     identity --> fga
     entitle --> fga
     planner --> fga
@@ -95,6 +101,7 @@ Only the Device-Gateway talks to mowers. App, Home Assistant and bridges are equ
 | Billing (available, optional, Phase 4) | subscriptions through a payment provider (Stripe Checkout and customer portal), signed webhooks processed once that set plan statuses in Entitlements over `entitlements.plan.set`; not started when billing is disabled ([ADR 0031](../adr/0031-billing-with-stripe-adapter.md)) | customers, subscriptions, invoice references, webhook ledger | webhooks | no |
 | Vision (available, Phase 6) | AI assist for stuck mowers and Find Dock: camera snapshot and map context to a vision model (any family through LiteLLM, per-user providers, an optional installation model), a proposed maneuver a user with `can_drive` approves, driven through `fleet.drive.*` with blades off and a safety watch ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) | proposals, step audit, short-lived images, cost accounting, encrypted user provider keys | running executions | yes |
 | Camera relay (in progress, optional) | one camera source session per account and mower shared by every viewer of that account: leases (viewer, Vision) with heartbeat, grace and limits, signed tickets bound to account, lease and random paths, lifecycle events on the stream `CAMERA`; the media plane: MediaMTX (WHEP, ICE on one UDP/TCP port) with the relay as its auth callback, the source pipeline (ffmpeg: the `fake` source, the H.264 transcoder) and the reconcile loop; the Agora driver follows ([ADR 0045](../adr/0045-camera-relay.md)) | none (sessions and leases in memory, one replica) | concurrent sessions | no |
+| Assistant (available, optional add-on) | chat control: a typed request becomes a work order of validated mower actions (start now or once later, pause, resume, dock) built from the mower's real capabilities, areas and the caller's relations; the web app executes it after the user confirmed, through Fleet and the Scheduler. HTTP only with the caller's token (no NATS user, no database); the AI is the user's provider through Vision's structured answers ([ADR 0075](../adr/0075-chat-control-assistant-add-on.md)) | none | requests | no |
 | Web app (PWA, available, Phase 2) | UI for users and operators: SvelteKit 2 SPA served by the `web` service at `/` ([ADR 0020](../adr/0020-web-app-architecture.md)) | none | static, CDN capable | no |
 | ESP32 bridge | firmware on the mower, Bluetooth to WLAN | none | none | yes |
 | HACS integration (available, Phase 3; own repository [`lukislp/mowdeck-hacs`](https://github.com/lukislp/mowdeck-hacs)) | Home Assistant as client: custom integration `mowdeck` with config flow (URL and API token), lawn mower, sensors, numbers, select, buttons, GPS tracker and actions, live states over the Realtime WebSocket ([ADR 0025](../adr/0025-home-assistant-integration-as-api-client.md), [guide](../dev/home-assistant.md)) | none | none | no |
@@ -133,7 +140,8 @@ Details and examples: [shared libraries](../dev/libraries.md).
 | Planner | available (0.1.0): patterns from the registry with their settings schemas, previews and plans for a mower or a raw map (map area, spot in local metres or WGS84), the validation chain on every plan, `SpotMowPlan` with hash for `StartMow.spot_plan`, execution mode (`custom_paths`, `native`, `unsupported`), coverage and gaps from Telemetry's track (`tracks.positions.query`), templates per account, plan feature `spot_mowing` ([ADR 0030](../adr/0030-mowing-patterns-and-planner.md)) | `services/planner` |
 | Billing | available (0.1.0), optional (Compose profile `billing`, Helm `services.billing.enabled`): `PaymentProvider` with `StripeProvider` (SDK 16, `api_base` for stripe-mock) and `FakeProvider`, one customer per account, Checkout in subscription mode with trial, tax id and `automatic_tax`, the customer portal, prices from `infra/billing/prices.yaml`, webhooks with signature check and the `webhook_events` ledger, Stripe status to plan status (grace from the end of the last paid period), `billing.subscription.changed`, owner only (`can_manage_billing`) ([ADR 0031](../adr/0031-billing-with-stripe-adapter.md)) | `services/billing` |
 | Camera relay | in progress (0.1.0), optional (Compose profile `relay`, Helm `services.cameraRelay.enabled`): the session domain (states with grace, start timeout and backoff, leases with heartbeat and binding deadline, Vision caps and daily minutes, account separation), Ed25519 tickets, `relay.camera.attach|renew|detach` responders and the `camera.relay.*` events; the media plane with MediaMTX, the auth callback, the reconcile loop, the `fake` source and the transcoder (step 4); Fleet's camera endpoint as the front door with `transport` `auto|relay|direct`, renew, detach and the stream audit (step 5); the web player and the Agora driver follow ([ADR 0045](../adr/0045-camera-relay.md)) | `services/camera-relay` |
-| Vision | available (0.1.0): `VisionProvider` port with a LiteLLM adapter (model string, JSON schema or prompt mode, validation retry, cost accounting) and a rule based fake, per-user providers with AES-GCM keys and an installation default (`ai_recover`, `ai_recover_hosted`), proposals with approval, execution through the drive channel at 5 Hz (`ttl_ms` 1000, blades off) with abort on emergency stop, sensor stop, geofence, missing state and cancellation, verification, rounds, `find_dock` ending in `return_to_dock`, `vision.proposal.created` ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)) | `services/vision` |
+| Vision | available (0.1.0): `VisionProvider` port with a LiteLLM adapter (model string, JSON schema or prompt mode, validation retry, cost accounting) and a rule based fake, per-user providers with AES-GCM keys and an installation default (`ai_recover`, `ai_recover_hosted`), proposals with approval, execution through the drive channel at 5 Hz (`ttl_ms` 1000, blades off) with abort on emergency stop, sensor stop, geofence, missing state and cancellation, verification, rounds, `find_dock` ending in `return_to_dock`, `vision.proposal.created` ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)); structured text answers on the caller's provider for optional modules ([ADR 0075](../adr/0075-chat-control-assistant-add-on.md)) | `services/vision` |
+| Assistant | available (0.1.0), optional (Compose profile `assistant`, Helm `services.assistant.enabled`): catalog from the mower's relations, connection, areas and activity, strict schema, validation of the answer (all or nothing), the user's AI provider through Vision or a phrase parser (demo mode), proposals the web app executes after confirmation ([ADR 0075](../adr/0075-chat-control-assistant-add-on.md)) | `services/assistant` |
 
 ## Extension points
 

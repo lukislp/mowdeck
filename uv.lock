@@ -5,6 +5,7 @@ requires-python = "==3.13.*"
 [manifest]
 members = [
     "agora-bridge",
+    "assistant",
     "billing",
     "camera-relay",
     "device-gateway",
@@ -336,6 +337,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e6/26/3b59f2bdae5f640389becb1f673cded775287f5fc4f816309d9ca9a3f93d/asgiref-3.12.1.tar.gz", hash = "sha256:59dcb51c272ad209d59bed5708a64a333083e86017d7fcdd67498eeab7784340", size = 42378, upload-time = "2026-07-14T09:56:18.087Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c0/1b/54f4ad77cd8a584fa70746c47df988e002cf1ee1eba43364d46f87803647/asgiref-3.12.1-py3-none-any.whl", hash = "sha256:fe386d1c2bff7259ea95929266d12a8cf9a8b5a1c2598402967d8792e7a7c094", size = 25478, upload-time = "2026-07-14T09:56:16.926Z" },
+]
+
+[[package]]
+name = "assistant"
+version = "0.1.0"
+source = { editable = "services/assistant" }
+dependencies = [
+    { name = "httpx" },
+    { name = "mowdeck-auth" },
+    { name = "mowdeck-contracts" },
+    { name = "mowdeck-service-kit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mowdeck-auth", editable = "libs/mowdeck-auth" },
+    { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
+    { name = "mowdeck-service-kit", editable = "libs/mowdeck-service-kit" },
 ]
 
 [[package]]
@@ -2012,6 +2032,7 @@ source = { virtual = "." }
 dev = [
     { name = "agora-bridge" },
     { name = "aiortc" },
+    { name = "assistant" },
     { name = "billing" },
     { name = "camera-relay" },
     { name = "copier" },
@@ -2057,6 +2078,7 @@ dev = [
 dev = [
     { name = "agora-bridge", editable = "integrations/agora-bridge" },
     { name = "aiortc", specifier = ">=1.15.0" },
+    { name = "assistant", editable = "services/assistant" },
     { name = "billing", editable = "services/billing" },
     { name = "camera-relay", editable = "services/camera-relay" },
     { name = "copier", specifier = ">=9.18.2" },

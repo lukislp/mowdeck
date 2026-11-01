@@ -80,6 +80,31 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vision/me/provider/structured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Structured Answer
+         * @description A text-only question to the caller's effective provider (own, else the installation's)
+         *     whose answer is one JSON object shaped by ``schema`` (ADR 0075): the interface other
+         *     modules (the optional assistant) use to reuse the AI provider without seeing a key. Its own
+         *     hourly limit per user (``MOWDECK_VISION_STRUCTURED_PER_HOUR``); recorded in the cost
+         *     accounting as kind ``structured``. The text and the answer are neither logged nor stored;
+         *     the caller validates the answer.
+         */
+        post: operations["structured_answer_api_v1_vision_me_provider_structured_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vision/me/provider/test": {
         parameters: {
             query?: never;
@@ -1058,6 +1083,63 @@ export type components = {
          */
         StepOutcome: "pending" | "done" | "aborted" | "skipped";
         /**
+         * StructuredIn
+         * @description ``POST /me/provider/structured``: a text-only question whose answer is one JSON object
+         *     (ADR 0075). The schema goes to the model as its structured output format (strict JSON
+         *     schema: every object closed, every property required); the answer is not validated against
+         *     it here, the caller validates it against its own rules.
+         */
+        StructuredIn: {
+            /**
+             * Name
+             * @default answer
+             */
+            name: string;
+            /**
+             * Purpose
+             * @description The calling module (cost accounting and logs), e.g. `assistant`.
+             */
+            purpose: string;
+            /**
+             * Schema
+             * @description JSON schema of the answer.
+             */
+            schema: {
+                [key: string]: unknown;
+            };
+            /** System */
+            system: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * StructuredOut
+         * @description The answer of a structured request: the model's JSON object and what it cost.
+         */
+        StructuredOut: {
+            /**
+             * Cost Usd
+             * @description LiteLLM's estimate; null when unknown.
+             */
+            cost_usd: number | null;
+            /** Family */
+            family: string;
+            /** Hosted */
+            hosted: boolean;
+            /** Input Tokens */
+            input_tokens: number | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Output */
+            output: {
+                [key: string]: unknown;
+            };
+            /** Output Tokens */
+            output_tokens: number | null;
+        };
+        /**
          * UiAreaDef
          * @description An area the module occupies in the web app shell.
          */
@@ -1254,6 +1336,58 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    structured_answer_api_v1_vision_me_provider_structured_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StructuredIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructuredOut"];
+                };
+            };
+            /** @description `vision-provider-missing`: no own provider, no hosted default. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A field is out of its limits or the schema is not an object. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `vision-quota`: the hourly limit of structured answers. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `vision-provider-failed`: no JSON object came back. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

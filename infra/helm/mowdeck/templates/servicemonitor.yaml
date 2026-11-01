@@ -1,6 +1,6 @@
 {{- /* Prometheus Operator: scrape /metrics of every MowDeck service (needs the operator's CRDs). */ -}}
 {{- if .Values.metrics.serviceMonitor.enabled }}
-{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" "camera-relay" "cameraRelay" }}
+{{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" "camera-relay" "cameraRelay" "assistant" "assistant" }}
 {{- if (index $.Values.services $key).enabled }}
 ---
 apiVersion: monitoring.coreos.com/v1

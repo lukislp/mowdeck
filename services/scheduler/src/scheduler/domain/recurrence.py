@@ -1,5 +1,5 @@
-"""When a schedule fires: weekly on chosen days, or every N days from an anchor date, always at
-a wall-clock time in the schedule's time zone.
+"""When a schedule fires: weekly on chosen days, every N days from an anchor date, or once on the
+anchor date, always at a wall-clock time in the schedule's time zone.
 
 Occurrences are computed per local calendar date and only then converted to UTC with
 :mod:`zoneinfo` (``fold=0``), which gives the two DST rules we want without special cases:
@@ -23,7 +23,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-RecurrenceKind = Literal["weekly", "every_n_days"]
+RecurrenceKind = Literal["weekly", "every_n_days", "once"]
+"""``once`` fires a single time, on ``anchor`` at ``at`` (a one-off run, ADR 0075)."""
 
 MAX_SEARCH_DAYS = 800
 """Upper bound of the search for the next occurrence (every N days allows N up to 365)."""
@@ -43,6 +44,8 @@ class Recurrence:
         """Does the rule fire on the local calendar date ``day``?"""
         if self.kind == "weekly":
             return day.weekday() in self.days
+        if self.kind == "once":
+            return self.anchor is not None and day == self.anchor
         if self.anchor is None or not self.interval_days:
             return False
         delta = (day - self.anchor).days

@@ -3,15 +3,21 @@
 import base64
 import binascii
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import PrincipalRef, VisionPhotoProblem, VisionTask, VisionTrigger
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from vision.application.assist import ProposalDetails
 from vision.application.auto import AutoView
-from vision.application.providers import ProviderView, TestResult
+from vision.application.providers import (
+    STRUCTURED_SYSTEM_MAX,
+    STRUCTURED_TEXT_MAX,
+    ProviderView,
+    StructuredResult,
+    TestResult,
+)
 from vision.domain.errors import InvalidInput
 from vision.domain.families import Family
 from vision.domain.job import JobContext
@@ -622,6 +628,53 @@ class ProviderTestOut(BaseModel):
             output_tokens=result.output_tokens,
             cost_usd=result.cost_usd,
             detail=result.detail,
+        )
+
+
+class StructuredIn(BaseModel):
+    """``POST /me/provider/structured``: a text-only question whose answer is one JSON object
+    (ADR 0075). The schema goes to the model as its structured output format (strict JSON
+    schema: every object closed, every property required); the answer is not validated against
+    it here, the caller validates it against its own rules."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str = Field(
+        min_length=1,
+        max_length=32,
+        pattern=r"^[a-z0-9_]+$",
+        description="The calling module (cost accounting and logs), e.g. `assistant`.",
+    )
+    name: str = Field(default="answer", min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    system: str = Field(min_length=1, max_length=STRUCTURED_SYSTEM_MAX)
+    text: str = Field(min_length=1, max_length=STRUCTURED_TEXT_MAX)
+    json_schema: dict[str, Any] = Field(alias="schema", description="JSON schema of the answer.")
+
+
+class StructuredOut(BaseModel):
+    """The answer of a structured request: the model's JSON object and what it cost."""
+
+    output: dict[str, Any]
+    model: str
+    family: str
+    hosted: bool
+    latency_ms: int
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None = Field(description="LiteLLM's estimate; null when unknown.")
+
+    @classmethod
+    def of(cls, result: StructuredResult) -> "StructuredOut":
+        """From the use case result."""
+        return cls(
+            output=result.output,
+            model=result.model,
+            family=result.family,
+            hosted=result.hosted,
+            latency_ms=result.latency_ms,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            cost_usd=result.cost_usd,
         )
 
 

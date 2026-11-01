@@ -668,9 +668,10 @@ export type components = {
          * @description ``POST /schedules``.
          *
          *     ``kind=weekly`` needs ``days_of_week``; ``kind=every_n_days`` needs ``anchor_date`` (the first
-         *     day it fires) and ``interval_days``. ``start_time`` is wall-clock time in the schedule's time
-         *     zone (the target's site, or ``timezone``). ``area_ids`` empty means every area of the
-         *     mower's map; a group target always mows every area of each mower.
+         *     day it fires) and ``interval_days``; ``kind=once`` needs ``anchor_date`` (the day of its one
+         *     run, which must lie in the future with ``start_time``). ``start_time`` is wall-clock time in
+         *     the schedule's time zone (the target's site, or ``timezone``). ``area_ids`` empty means
+         *     every area of the mower's map; a group target always mows every area of each mower.
          */
         ScheduleIn: {
             /** Anchor Date */
@@ -701,7 +702,7 @@ export type components = {
              * Kind
              * @enum {string}
              */
-            kind: "weekly" | "every_n_days";
+            kind: "weekly" | "every_n_days" | "once";
             /** Name */
             name: string;
             /** @description Start settings of every run (`SchedulePattern`), laid over the mower's mow defaults. Settings beyond the angle and the border laps must be offered by every mower of the target (422 otherwise). */
@@ -873,7 +874,7 @@ export type components = {
             /** Interval Days */
             interval_days?: number | null;
             /** Kind */
-            kind?: ("weekly" | "every_n_days") | null;
+            kind?: ("weekly" | "every_n_days" | "once") | null;
             /** Name */
             name?: string | null;
             /** @description null: none */

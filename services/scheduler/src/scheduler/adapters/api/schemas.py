@@ -88,15 +88,16 @@ class ScheduleIn(In):
     """``POST /schedules``.
 
     ``kind=weekly`` needs ``days_of_week``; ``kind=every_n_days`` needs ``anchor_date`` (the first
-    day it fires) and ``interval_days``. ``start_time`` is wall-clock time in the schedule's time
-    zone (the target's site, or ``timezone``). ``area_ids`` empty means every area of the
-    mower's map; a group target always mows every area of each mower.
+    day it fires) and ``interval_days``; ``kind=once`` needs ``anchor_date`` (the day of its one
+    run, which must lie in the future with ``start_time``). ``start_time`` is wall-clock time in
+    the schedule's time zone (the target's site, or ``timezone``). ``area_ids`` empty means
+    every area of the mower's map; a group target always mows every area of each mower.
     """
 
     name: PlainText = Field(min_length=1, max_length=100)
     target_type: Literal["mower", "group"]
     target_id: UUID
-    kind: Literal["weekly", "every_n_days"]
+    kind: Literal["weekly", "every_n_days", "once"]
     days_of_week: list[Weekday] = Field(default_factory=list, max_length=7)
     anchor_date: date | None = None
     interval_days: int | None = Field(default=None, ge=1, le=365)
@@ -137,6 +138,9 @@ class ScheduleIn(In):
         if self.kind == "every_n_days" and (self.anchor_date is None or not self.interval_days):
             msg = "an every_n_days schedule needs anchor_date and interval_days"
             raise ValueError(msg)
+        if self.kind == "once" and self.anchor_date is None:
+            msg = "a once schedule needs anchor_date"
+            raise ValueError(msg)
         return self
 
 
@@ -146,7 +150,7 @@ class SchedulePatch(In):
     name: PlainText | None = Field(default=None, min_length=1, max_length=100)
     target_type: Literal["mower", "group"] | None = None
     target_id: UUID | None = None
-    kind: Literal["weekly", "every_n_days"] | None = None
+    kind: Literal["weekly", "every_n_days", "once"] | None = None
     days_of_week: list[Weekday] | None = Field(default=None, max_length=7)
     anchor_date: date | None = None
     interval_days: int | None = Field(default=None, ge=1, le=365)

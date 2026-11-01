@@ -10,6 +10,7 @@ import createClient from 'openapi-fetch';
 
 import { session } from '#lib/auth/session.svelte.js';
 import { isReauthRequired, stepUp } from '#lib/auth/stepup.svelte.js';
+import type { paths as AssistantPaths } from '#lib/generated/assistant.js';
 import type { paths as BillingPaths } from '#lib/generated/billing.js';
 import type { paths as EntitlementsPaths } from '#lib/generated/entitlements.js';
 import type { paths as FleetPaths } from '#lib/generated/fleet.js';
@@ -138,6 +139,15 @@ export const SLOW_REQUEST_TIMEOUT_MS = 90_000;
 
 /** Fleet with the longer deadline, only for the linked account calls that log in to the cloud. */
 export const fleetSlowApi = createClient<FleetPaths>({
+  fetch: authFetch(
+    session,
+    (input, init) => globalThis.fetch(input, init),
+    SLOW_REQUEST_TIMEOUT_MS,
+  ),
+});
+
+/** The optional assistant add-on (ADR 0075); a proposal may wait for the AI model up to a minute. */
+export const assistantApi = createClient<AssistantPaths>({
   fetch: authFetch(
     session,
     (input, init) => globalThis.fetch(input, init),

@@ -9,6 +9,10 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
 {{- if .Values.services.matterServer.enabled }}
 {{- $modules = append $modules (printf "http://%s:%s" (include "mowdeck.serviceName" (dict "ctx" . "component" "matter-server")) (toString $c.MATTER_HTTP_PORT)) }}
 {{- end }}
+{{- /* The optional assistant (chat control, ADR 0075) when enabled. */ -}}
+{{- if .Values.services.assistant.enabled }}
+{{- $modules = append $modules (include "mowdeck.serviceUrl" (dict "ctx" $ "component" "assistant")) }}
+{{- end }}
 {{- with $c.IDENTITY_EXTRA_MODULE_URLS }}
 {{- $modules = append $modules . }}
 {{- end }}

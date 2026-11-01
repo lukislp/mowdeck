@@ -21,7 +21,8 @@ model (off by default), its key is secrets.VISION_DEFAULT_API_KEY. Automatic ana
   "MOWDECK_VISION_AUTO_DAILY_PER_MOWER" (toString $c.VISION_AUTO_DAILY_PER_MOWER)
   "MOWDECK_VISION_AUTO_PHOTO_ATTEMPTS" (toString $c.VISION_AUTO_PHOTO_ATTEMPTS)
   "MOWDECK_VISION_AUTO_PHOTO_RETRY_SECONDS" (toString $c.VISION_AUTO_PHOTO_RETRY_SECONDS)
-  "MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS" (toString $c.VISION_PHOTO_TIMEOUT_SECONDS)) }}
+  "MOWDECK_VISION_PHOTO_TIMEOUT_SECONDS" (toString $c.VISION_PHOTO_TIMEOUT_SECONDS)
+  "MOWDECK_VISION_STRUCTURED_PER_HOUR" (toString $c.VISION_STRUCTURED_PER_HOUR)) }}
 {{- include "mowdeck.migrationJob" (dict "ctx" . "component" "vision" "key" "vision" "image" "vision" "module" "vision.adapters.db.migrate" "weight" 9) }}
 {{- include "mowdeck.workload" (dict "ctx" . "component" "vision" "key" "vision" "image" "vision"
   "env" $env "db" "vision" "migrateModule" "vision.adapters.db.migrate" "authz" true

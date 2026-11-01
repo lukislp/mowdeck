@@ -897,7 +897,7 @@
       },
       "ScheduleIn": {
         "additionalProperties": false,
-        "description": "``POST /schedules``.\n\n``kind=weekly`` needs ``days_of_week``; ``kind=every_n_days`` needs ``anchor_date`` (the first\nday it fires) and ``interval_days``. ``start_time`` is wall-clock time in the schedule's time\nzone (the target's site, or ``timezone``). ``area_ids`` empty means every area of the\nmower's map; a group target always mows every area of each mower.",
+        "description": "``POST /schedules``.\n\n``kind=weekly`` needs ``days_of_week``; ``kind=every_n_days`` needs ``anchor_date`` (the first\nday it fires) and ``interval_days``; ``kind=once`` needs ``anchor_date`` (the day of its one\nrun, which must lie in the future with ``start_time``). ``start_time`` is wall-clock time in\nthe schedule's time zone (the target's site, or ``timezone``). ``area_ids`` empty means\nevery area of the mower's map; a group target always mows every area of each mower.",
         "properties": {
           "anchor_date": {
             "anyOf": [
@@ -979,7 +979,8 @@
           "kind": {
             "enum": [
               "weekly",
-              "every_n_days"
+              "every_n_days",
+              "once"
             ],
             "title": "Kind",
             "type": "string"
@@ -1482,7 +1483,8 @@
               {
                 "enum": [
                   "weekly",
-                  "every_n_days"
+                  "every_n_days",
+                  "once"
                 ],
                 "type": "string"
               },

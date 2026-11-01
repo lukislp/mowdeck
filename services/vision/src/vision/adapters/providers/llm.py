@@ -21,17 +21,18 @@ usual environment variable (``ANTHROPIC_API_KEY``, ``OPENAI_API_KEY``, ``GEMINI_
 
 import asyncio
 import importlib
+import json
 import logging
 import os
 import sys
 import threading
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Final
 
 from mowdeck_contracts.v1 import VisionTask
 from mowdeck_service_kit import get_logger
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, RootModel, ValidationError
 
 from vision.adapters.providers.prompt import (
     RESPONSE_FORMAT,
@@ -41,9 +42,21 @@ from vision.adapters.providers.prompt import (
 )
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
-from vision.domain.models import Assessment, AssessmentOut, Image, ProviderConfig, Usage
+from vision.domain.models import (
+    Assessment,
+    AssessmentOut,
+    Image,
+    ProviderConfig,
+    StructuredAnswer,
+    Usage,
+)
 
 _log = get_logger("vision.llm")
+
+
+class JsonObject(RootModel[dict[str, Any]]):
+    """Any JSON object: the shape of a structured answer before its caller validates it."""
+
 
 Completion = Callable[..., Awaitable[Any]]
 
@@ -150,6 +163,32 @@ class LiteLlmProvider:
             RESPONSE_FORMAT,
         )
         return Assessment(answer, self.config.model, self.config.family, usage)
+
+    async def structured(
+        self, system: str, text: str, schema: Mapping[str, Any], name: str
+    ) -> StructuredAnswer:
+        """A text-only question with ``schema`` for the answer (ADR 0075). The answer must be
+        one JSON object; its content is validated by the caller, never here."""
+        schema_text = json.dumps(schema, separators=(",", ":"))
+
+        def system_text(prompt_mode: bool) -> str:
+            if not prompt_mode:
+                return system
+            return (
+                system
+                + "\n\nReturn exactly one JSON object (no Markdown, no prose) that matches this "
+                + "JSON schema:\n"
+                + schema_text
+            )
+
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {"name": name, "schema": dict(schema), "strict": True},
+        }
+        answer, usage = await self._ask(
+            system_text, [{"type": "text", "text": text}], JsonObject, response_format
+        )
+        return StructuredAnswer(answer.root, self.config.model, self.config.family, usage)
 
     async def _ask[T: BaseModel](
         self,

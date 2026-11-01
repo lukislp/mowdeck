@@ -408,7 +408,7 @@ One run of a schedule for one mower.
 
 `POST /schedules`.
 
-`kind=weekly` needs `days_of_week`; `kind=every_n_days` needs `anchor_date` (the first day it fires) and `interval_days`. `start_time` is wall-clock time in the schedule's time zone (the target's site, or `timezone`). `area_ids` empty means every area of the mower's map; a group target always mows every area of each mower.
+`kind=weekly` needs `days_of_week`; `kind=every_n_days` needs `anchor_date` (the first day it fires) and `interval_days`; `kind=once` needs `anchor_date` (the day of its one run, which must lie in the future with `start_time`). `start_time` is wall-clock time in the schedule's time zone (the target's site, or `timezone`). `area_ids` empty means every area of the mower's map; a group target always mows every area of each mower.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -419,7 +419,7 @@ One run of a schedule for one mower.
 | `duration_minutes` | integer | no | The window: no start after it closed.; min 1.0; max 1440.0; default `120` |
 | `enabled` | boolean | no | default `true` |
 | `interval_days` | integer or null | no |  |
-| `kind` | `"weekly"` \| `"every_n_days"` | yes |  |
+| `kind` | `"weekly"` \| `"every_n_days"` \| `"once"` | yes |  |
 | `name` | string | yes | min length 1; max length 100 |
 | `pattern` | [SchedulePatternIn](#schedulepatternin) or null | no | Start settings of every run (`SchedulePattern`), laid over the mower's mow defaults. Settings beyond the angle and the border laps must be offered by every mower of the target (422 otherwise). |
 | `pause_running_jobs_on_rain` | boolean | no | Send a running scheduled job back to the dock when it rains.; default `true` |
@@ -492,7 +492,7 @@ A schedule.
 | `duration_minutes` | integer or null | no |  |
 | `enabled` | boolean or null | no |  |
 | `interval_days` | integer or null | no |  |
-| `kind` | `"weekly"` \| `"every_n_days"` or null | no |  |
+| `kind` | `"weekly"` \| `"every_n_days"` \| `"once"` or null | no |  |
 | `name` | string or null | no |  |
 | `pattern` | [SchedulePatternIn](#schedulepatternin) or null | no | null: none |
 | `pause_running_jobs_on_rain` | boolean or null | no |  |

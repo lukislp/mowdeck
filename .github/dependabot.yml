@@ -58,6 +58,7 @@ updates:
       # tools/repo-checks/tests/test_dependabot.py keeps this list equal to the members.
       - dependency-name: "mowdeck-*"
       - dependency-name: "agora-bridge"
+      - dependency-name: "assistant"
       - dependency-name: "billing"
       - dependency-name: "camera-relay"
       - dependency-name: "device-gateway"
