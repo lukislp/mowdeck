@@ -261,7 +261,7 @@
   onfocusincapture={focusin}
 />
 
-<p class="md-visually-hidden" aria-live="polite" data-testid="tour-live">
+<p class="live" aria-live="polite" data-testid="tour-live">
   {tour.running ? announcement : ''}
 </p>
 
@@ -354,6 +354,20 @@
 {/if}
 
 <style>
+  /* Visually hidden, but fixed: an absolutely placed one outside the shell's positioned main
+     would make the document taller than the viewport (one scroller per page). */
+  .live {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .tour {
     position: fixed;
     inset: 0;

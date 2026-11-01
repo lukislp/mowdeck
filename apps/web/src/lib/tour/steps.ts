@@ -28,8 +28,8 @@ export interface TourCapabilities {
 
 /** What the tour knows about the user, the first mower and the installation. */
 export interface TourContext {
-  /** Mowers the user sees. */
-  mowers: number;
+  /** Mowers the user sees; null when the list could not be read (never taken for "none"). */
+  mowers: number | null;
   /** The mower the mower page steps show (the first of the list). */
   mowerId: string | null;
   /** Its capabilities; null when unknown (steps that need one are left out). */
@@ -58,7 +58,7 @@ export interface TourStep {
   target: string | null;
 }
 
-const hasMower = (c: TourContext): boolean => c.mowers > 0 && c.mowerId !== null;
+const hasMower = (c: TourContext): boolean => (c.mowers ?? 0) > 0 && c.mowerId !== null;
 const mowerPage = (c: TourContext): string | null =>
   c.mowerId ? `/mowers/${encodeURIComponent(c.mowerId)}` : null;
 

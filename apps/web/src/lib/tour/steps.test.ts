@@ -49,6 +49,11 @@ describe('tourSteps', () => {
     expect(steps.at(-1)).toBe('add-mower');
   });
 
+  it('never takes a mower list it could not read for "no mowers"', () => {
+    const steps = ids({ ...FULL, mowers: null, mowerId: null, capabilities: null });
+    expect(steps).toEqual(['welcome', 'restart']);
+  });
+
   it('leaves out spot mowing when the mower cannot drive (or its capabilities are unknown)', () => {
     expect(ids({ ...FULL, capabilities: { manual_drive: false } })).not.toContain('spot');
     expect(ids({ ...FULL, capabilities: null })).not.toContain('spot');

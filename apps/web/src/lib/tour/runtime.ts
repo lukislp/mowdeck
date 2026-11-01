@@ -59,15 +59,24 @@ function write(kind: 'local' | 'session', key: string, value: string | null): vo
   }
 }
 
-async function readContext(): Promise<TourContext> {
-  let ids: string[];
-  try {
-    const list = await unwrap(fleetApi.GET('/api/v1/fleet/mowers'));
-    ids = list.items.map((mower) => mower.id);
-  } catch {
-    ids = [];
+/** The ids of the user's mowers; null when the list cannot be read (one retry). */
+async function mowerIds(): Promise<string[] | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const list = await unwrap(fleetApi.GET('/api/v1/fleet/mowers'));
+      return list.items.map((mower) => mower.id);
+    } catch {
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
   }
-  const mowerId = ids[0] ?? null;
+  return null;
+}
+
+async function readContext(): Promise<TourContext> {
+  // A list that cannot be read is unknown, never "no mowers": that would make a set-up
+  // account look new and start the tour over it.
+  const ids = await mowerIds();
+  const mowerId = ids?.[0] ?? null;
   let capabilities: TourCapabilities | null = null;
   if (mowerId) {
     try {
@@ -90,7 +99,7 @@ async function readContext(): Promise<TourContext> {
     ).map((module) => module.id),
   );
   return {
-    mowers: ids.length,
+    mowers: ids?.length ?? null,
     mowerId,
     capabilities,
     canManage: session.has('fleet.manage'),

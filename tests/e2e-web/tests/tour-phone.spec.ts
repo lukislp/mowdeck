@@ -48,6 +48,7 @@ test('docks the card away from the framed element on the mower screens', async (
   await loginByUi(page, owner);
 
   await page.goto('/settings#setup');
+  await expect(page.getByTestId('tour-status')).toContainText('Noch nicht gesehen');
   await page.getByTestId('tour-start').click();
   await expectStep(page, 'welcome', false);
   await page.getByTestId('tour-next').click();

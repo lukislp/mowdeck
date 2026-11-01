@@ -188,6 +188,12 @@ describe('Tour', () => {
 
   it('does not start by itself for a set-up account, a seen tour, another page or an opt-out', async () => {
     expect(await new Tour(fake().deps).maybeAutoStart('/mowers', false)).toBe(false); // has a mower
+    // The mower list could not be read: unknown, not "new".
+    expect(
+      await new Tour(
+        fake({ context: { ...WITH_MOWER, mowers: null, mowerId: null } }).deps,
+      ).maybeAutoStart('/mowers', false),
+    ).toBe(false);
     expect(
       await new Tour(fake({ outcome: 'skipped', setup: 'active' }).deps).maybeAutoStart(
         '/mowers',

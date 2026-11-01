@@ -25,15 +25,14 @@
 <Panel label={m.tour_section_label()} testid="tour-panel">
   <div class="stack">
     <p class="text">{m.tour_section_text()}</p>
-    {#if tour.outcome}
-      <Readout
-        label={m.onboarding_section_status()}
-        value={outcomeLabel(tour.outcome)}
-        size="inline"
-        emptyText={m.no_data()}
-        testid="tour-status"
-      />
-    {/if}
+    <!-- Always there (a dash until the outcome is loaded), so the button below never moves. -->
+    <Readout
+      label={m.onboarding_section_status()}
+      value={tour.outcome ? outcomeLabel(tour.outcome) : null}
+      size="inline"
+      emptyText={m.no_data()}
+      testid="tour-status"
+    />
     <div class="tour-start" data-tour="tour-restart">
       <Button
         variant={tour.outcome === 'new' ? 'primary' : 'secondary'}
