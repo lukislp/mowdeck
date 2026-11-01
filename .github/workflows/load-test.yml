@@ -1,0 +1,88 @@
+name: load-test
+
+# Load test of the demo stack (tests/load, docs/ops/load-testing.md): builds the images, starts a
+# throwaway Compose stack shaped like the public demo's host (two CPU cores, about 7 GB) on the
+# runner and runs the k6 scenarios against it. By hand only (gh workflow run load-test.yml); never
+# on pull requests and never against a real server. The k6 summaries, docker stats samples and
+# tables are uploaded as the artifact load-test-results.
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Scenarios, comma separated (rate-limits, demo-visitor, rest-mix, command-burst, sweep)"
+        default: rate-limits,demo-visitor,rest-mix,command-burst
+        type: string
+      targets:
+        description: "demo-visitor: concurrent visitors per ramp stage"
+        default: "25,50,100"
+        type: string
+      levels:
+        description: "sweep: concurrent visitors per level"
+        default: "50,100,200,300"
+        type: string
+
+concurrency:
+  group: load-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Read access to the GHCR image mirror (see ci.yml); nothing is pushed here.
+  packages: read
+
+env:
+  MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
+
+jobs:
+  load:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Log in to the GHCR image mirror
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh > "$RUNNER_TEMP/mirror.env"
+      # The runner has four cores: the stack gets two (like the demo host), k6 the other two.
+      - name: Run the load test
+        env:
+          MOWDECK_LOAD_ENV_FILE: ${{ runner.temp }}/mirror.env
+          LOAD_STACK_CPUSET: "0,1"
+          LOAD_K6_CPUSET: "2,3"
+          LOAD_SCENARIOS: ${{ inputs.scenarios }}
+          LOAD_TARGETS: ${{ inputs.targets }}
+          LOAD_LEVELS: ${{ inputs.levels }}
+        run: node tests/load/load.mjs run
+      - name: Tables in the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          for file in tests/load/results/*/stats.md tests/load/results/*/sweep.md; do
+            [ -f "$file" ] || continue
+            printf '### %s\n\n' "$(basename "$(dirname "$file")")" >> "$GITHUB_STEP_SUMMARY"
+            cat "$file" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: load-test-results
+          path: tests/load/results
+          retention-days: 30
+      - name: Stop the stack
+        if: always()
+        run: node tests/load/load.mjs down

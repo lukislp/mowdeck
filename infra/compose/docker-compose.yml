@@ -378,12 +378,17 @@ services:
       - traefik.http.routers.identity-jwks.entrypoints=web
       - traefik.http.routers.identity-jwks.service=identity
       - traefik.http.services.identity.loadbalancer.server.port=8000
+    # The Python services are checked every 2 s while starting (start_interval within
+    # start_period, so `up --wait` stays fast) and every 30 s after that: each check starts a
+    # Python interpreter, which at a 5 s interval cost an idle demo host about a third of its two
+    # cores (docs/ops/load-testing.md). Retries keep about the same time to "unhealthy".
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -462,10 +467,11 @@ services:
       - traefik.http.services.fleet.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -537,10 +543,11 @@ services:
       - traefik.http.services.device-gateway.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 10
-      start_period: 5s
+      retries: 2
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -628,10 +635,11 @@ services:
       - traefik.http.services.telemetry.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -690,10 +698,11 @@ services:
       - traefik.http.services.realtime.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -791,10 +800,11 @@ services:
       - traefik.http.services.notifications.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -871,10 +881,11 @@ services:
       - traefik.http.services.scheduler.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -949,10 +960,11 @@ services:
       - traefik.http.services.entitlements.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -1043,10 +1055,11 @@ services:
       - traefik.http.services.vision.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 30
-      start_period: 20s
+      retries: 5
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -1102,10 +1115,11 @@ services:
       MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 10
-      start_period: 5s
+      retries: 2
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -1271,10 +1285,11 @@ services:
       - traefik.http.services.billing.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:
@@ -1349,10 +1364,11 @@ services:
       - traefik.http.services.planner.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
+      interval: 30s
       timeout: 3s
-      retries: 20
-      start_period: 10s
+      retries: 4
+      start_period: 60s
+      start_interval: 2s
     stop_grace_period: 20s
     depends_on:
       nats:

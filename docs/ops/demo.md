@@ -195,3 +195,7 @@ curl -s -X POST http://127.0.0.1:8580/api/v1/identity/register \
 ```
 
 The Playwright specs of the demo run against a test stack with the demo override: `MOWDECK_E2E_DEMO=1 pnpm e2e:stack up`, then `pnpm e2e:stack demo` (CI job `e2e-demo`).
+
+## Capacity
+
+How many visitors the demo's host holds, where it breaks first and how to measure it again without touching the live demo: [Load testing](load-testing.md).
