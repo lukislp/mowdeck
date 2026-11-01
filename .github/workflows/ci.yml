@@ -235,6 +235,17 @@ jobs:
       - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml --env-file infra/compose/.env.example config -q
       - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.demo.yml --env-file infra/compose/.env.example --env-file tests/e2e-web/demo.env config -q
       - run: bash -n infra/compose/demo/reset.sh
+      # The load test (tests/load, docs/ops/load-testing.md; it runs in load-test.yml by hand):
+      # its stack configuration, the report script and that every k6 scenario loads.
+      - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.demo.yml -f tests/load/docker-compose.load.yml --env-file infra/compose/.env.example --env-file tests/load/load.env config -q
+      - run: node --test tests/load/report.test.mjs
+      - name: k6 scenarios load
+        run: |
+          for scenario in tests/load/scenarios/*.js; do
+            docker run --rm -v "$PWD/tests/load:/load:ro" -w /load \
+              grafana/k6:1.3.0@sha256:3ddc8b1a33a2c3d8edc6e99b6a762ae36cba08788463458f5e6a7703e14eb77d \
+              inspect "scenarios/$(basename "$scenario")" > /dev/null
+          done
 
   # apps/mobile/android keeps the standard committed Gradle wrapper (gradle-wrapper.jar); this
   # job checks the jar against the checksums Gradle publishes for its releases, so a modified

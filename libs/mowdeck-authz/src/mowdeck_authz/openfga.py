@@ -11,9 +11,15 @@
   ``(subject, relation, object, context)``. The automatically added ``current_time`` is not part
   of the key, so a support grant may outlive its expiry by at most one TTL. The administrative
   relations in ``UNCACHED_RELATIONS`` are always asked fresh.
+* **One question in flight.** A cacheable check whose key is already being asked by another
+  request of the process waits for that answer instead of asking OpenFGA again (a page load fires
+  a dozen requests that all check the same mower; in the public demo every visitor is the same
+  subject). The waiters get exactly what the cache would have given them a moment later; if the
+  asking request fails they are denied too (fail closed), if it is cancelled they ask themselves.
 """
 
 import asyncio
+import enum
 import logging
 import time
 from collections.abc import Callable, Sequence
@@ -30,6 +36,7 @@ from prometheus_client import CollectorRegistry, Counter
 
 from mowdeck_authz._client import ClientFactory, FgaClient, create_client
 from mowdeck_authz.authorizer import (
+    CacheKey,
     CheckItem,
     CheckLike,
     Context,
@@ -50,6 +57,16 @@ UNCACHED_RELATIONS: frozenset[str] = frozenset(
     {Relation.CAN_MANAGE_USERS, Relation.CAN_MANAGE_BILLING, Relation.CAN_MANAGE_ACCOUNT}
 )
 """Rare, security sensitive relations that are never served from the cache."""
+
+
+class _Abandoned(enum.Enum):
+    """The request that asked was cancelled before OpenFGA answered: waiters ask themselves."""
+
+    TOKEN = enum.auto()
+
+
+Answer = bool | None | _Abandoned
+"""What an in-flight question resolves to: the decision, None (failed: deny) or abandoned."""
 
 
 class FgaConnection:
@@ -164,6 +181,11 @@ class _Metrics:
             ["operation"],
             registry=registry,
         )
+        self.coalesced = Counter(
+            "mowdeck_authz_coalesced_total",
+            "Checks answered by a question another request already had in flight.",
+            registry=registry,
+        )
 
     def decision(self, outcome: str, count: int = 1) -> None:
         if self.enabled and count:
@@ -176,6 +198,10 @@ class _Metrics:
     def error(self, operation: str) -> None:
         if self.enabled:
             self.errors.labels(operation).inc()
+
+    def coalesce(self, count: int) -> None:
+        if self.enabled and count:
+            self.coalesced.inc(count)
 
 
 class OpenFgaAuthorizer:
@@ -200,6 +226,7 @@ class OpenFgaAuthorizer:
         self._now = now
         self._uncached = uncached_relations
         self._metrics = _Metrics(registry)
+        self._inflight: dict[CacheKey, asyncio.Future[Answer]] = {}
 
     @classmethod
     def from_env(cls, *, registry: CollectorRegistry | None = None) -> "OpenFgaAuthorizer":
@@ -229,12 +256,17 @@ class OpenFgaAuthorizer:
         return await self.connection.ping()
 
     def invalidate(self) -> None:
-        """Drop all cached decisions."""
+        """Drop all cached decisions; later checks also stop joining questions in flight."""
         self.cache.invalidate()
+        self._inflight.clear()
 
     def invalidate_subject(self, subject: Subject | str) -> None:
-        """Drop the cached decisions of one subject."""
+        """Drop the cached decisions of one subject (and its questions in flight)."""
         self.cache.invalidate_subject(subject)
+        name = str(subject)
+        prefix = f"{name}#"
+        for key in [k for k in self._inflight if k[0] == name or k[0].startswith(prefix)]:
+            del self._inflight[key]
 
     def _context(self, context: Context | None) -> dict[str, Any]:
         return {"current_time": rfc3339(self._now()), **(context or {})}
@@ -267,16 +299,69 @@ class OpenFgaAuthorizer:
         self._metrics.cache_hit(hits)
         pending = [i for i, result in enumerate(results) if result is None]
         if pending:
-            answers = await self._ask(checks, pending)
-            for index, answer in answers.items():
+            for index, answer in (await self._ask_once(checks, pending)).items():
                 results[index] = answer
-                if self._cacheable(checks[index]):
-                    self.cache.put(cache_key(checks[index]), answer)
         final = [result is True for result in results]
         allowed = sum(final)
         self._metrics.decision("allowed", allowed)
         self._metrics.decision("denied", len(final) - allowed)
         return final
+
+    async def _ask_once(self, checks: list[CheckItem], pending: list[int]) -> dict[int, bool]:
+        """Ask OpenFGA for ``pending``, joining questions already in flight (see module doc).
+
+        Successful answers by index (also cached); failed items are missing (deny).
+        """
+        own: list[int] = []
+        owned: dict[CacheKey, asyncio.Future[Answer]] = {}
+        joined: dict[int, asyncio.Future[Answer]] = {}
+        loop = asyncio.get_running_loop()
+        for index in pending:
+            item = checks[index]
+            if not self._cacheable(item):
+                own.append(index)
+                continue
+            key = cache_key(item)
+            future = owned.get(key) or self._inflight.get(key)
+            if future is not None:
+                joined[index] = future
+                continue
+            future = loop.create_future()
+            owned[key] = self._inflight[key] = future
+            own.append(index)
+        self._metrics.coalesce(len(joined))
+
+        answers: dict[int, bool] = {}
+        abandoned = False
+        try:
+            if own:
+                answers = await self._ask(checks, own)
+        except asyncio.CancelledError:
+            abandoned = True
+            raise
+        finally:
+            # Resolve every question this request owns, also when it failed or was cancelled.
+            for index in own:
+                key = cache_key(checks[index])
+                future = owned.pop(key, None)
+                if future is None:
+                    continue  # not cacheable: nobody waits for it
+                if self._inflight.get(key) is future:
+                    del self._inflight[key]
+                answer = answers.get(index)
+                if answer is not None:
+                    self.cache.put(key, answer)
+                future.set_result(_Abandoned.TOKEN if abandoned else answer)
+
+        for index, future in joined.items():
+            outcome = await asyncio.shield(future)
+            if isinstance(outcome, _Abandoned):
+                outcome = (await self._ask(checks, [index])).get(index)
+                if outcome is not None:
+                    self.cache.put(cache_key(checks[index]), outcome)
+            if outcome is not None:
+                answers[index] = outcome
+        return answers
 
     async def _ask(self, checks: list[CheckItem], pending: list[int]) -> dict[int, bool]:
         """Successful answers by index; failed items are missing (and count as deny)."""
