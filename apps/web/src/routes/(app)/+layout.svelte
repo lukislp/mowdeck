@@ -7,6 +7,7 @@
 
   import { session } from '#lib/auth/session.svelte.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
+  import { demo } from '#lib/demo/state.svelte.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { navigatePath } from '#lib/navigate.js';
   import { onboarding } from '#lib/onboarding/runtime.js';
@@ -15,6 +16,8 @@
   import { m } from '#lib/paraglide/messages.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
   import { builtIn, navModules, registry, visibleModules } from '#lib/shell/registry.svelte.js';
+  import { tour } from '#lib/tour/runtime.js';
+  import TourOverlay from '#lib/tour/TourOverlay.svelte';
   import { whatsNew } from '#lib/whats-new/whats-new.svelte.js';
   import WhatsNewSheet from '#lib/whats-new/WhatsNewSheet.svelte';
 
@@ -65,7 +68,19 @@
       operatorAccess.reset();
       accountPlan.reset();
       onboarding.reset();
+      tour.reset();
     }
+  });
+
+  // The guided tour (ADR 0073): a reload continues a running tour; otherwise it starts by itself
+  // once, on the mower list, for a new user (in the demo: a new browser). Not over "What's new".
+  $effect(() => {
+    if (session.status !== 'authenticated' || !demo.loaded || whatsNew.open) return;
+    const path = page.url.pathname;
+    const inDemo = demo.active;
+    void tour.resume().then((resumed) => {
+      if (!resumed) void tour.maybeAutoStart(path, inDemo);
+    });
   });
 
   // Inside the app shell: APNs registration, local notifications from the inbox, icon badge.
@@ -106,6 +121,7 @@
     {@render children()}
   </AppShell>
   <WhatsNewSheet />
+  <TourOverlay />
 {:else}
   <div class="boot" role="status" aria-live="polite">
     <span class="mark">{m.brand_mark()}</span>

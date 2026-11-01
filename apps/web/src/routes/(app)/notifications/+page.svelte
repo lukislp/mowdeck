@@ -126,14 +126,14 @@
 {:else if !inbox.loaded}
   <p class="pad quiet" role="status"><SlowLoading /></p>
 {:else if inbox.items.length === 0}
-  <div class="empty" data-testid="inbox-empty">
+  <div class="empty" data-testid="inbox-empty" data-tour="inbox">
     <Icon name="inbox" size={32} />
     <h2>{m.notif_empty_title()}</h2>
     <p>{m.notif_empty_body()}</p>
     <Button href="/settings#notifications" icon="settings">{m.notif_settings_title()}</Button>
   </div>
 {:else}
-  <div class="log" data-testid="inbox">
+  <div class="log" data-testid="inbox" data-tour="inbox">
     {#each days as day (day.key)}
       <h2 class="day">{day.label}</h2>
       <ul>
