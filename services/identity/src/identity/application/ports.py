@@ -23,6 +23,7 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    DemoSandbox,
     ExternalIdentity,
     KnownDevice,
     LoginAttempt,
@@ -212,6 +213,16 @@ class Tx(Protocol):
         """The devices users signed in from (ADR 0065)."""
         ...
 
+    @property
+    def sandboxes(self) -> Table[DemoSandbox]:
+        """The demo sandboxes of the public demo (ADR 0076)."""
+        ...
+
+    async def purge_audit(self, account_id: UUID) -> int:
+        """Delete the audit rows of one demo sandbox account (ADR 0076), past the append-only
+        rule that holds for every other delete; returns how many."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""
@@ -274,6 +285,34 @@ class ModuleSource(Protocol):
 
     async def fetch(self) -> list[FetchedDescriptor]:
         """One entry per configured module URL."""
+        ...
+
+
+class SandboxProvisioner(Protocol):
+    """Fills and empties a demo sandbox in the other services (ADR 0076).
+
+    ``provision`` registers the sandbox's simulated mowers, schedules, notification preferences
+    and (with ``history``) the past days, acting as the sandbox's user with ``access_token`` and
+    with the demo seed secret where the demo policy refuses visitors. ``purge`` deletes
+    everything ``service`` holds of the account (its demo purge endpoint); it is idempotent and
+    raises on any failure, so the caller retries.
+    """
+
+    @property
+    def services(self) -> tuple[str, ...]:
+        """The services ``purge`` must clean, in order."""
+        ...
+
+    async def ready(self) -> bool:
+        """Whether every service a sandbox needs answers its readiness check."""
+        ...
+
+    async def provision(self, account_id: UUID, access_token: str, *, history: bool) -> None:
+        """Fill the sandbox; raises when a service refused or did not answer."""
+        ...
+
+    async def purge(self, service: str, account_id: UUID) -> None:
+        """Delete everything ``service`` holds of the account; raises on failure."""
         ...
 
 

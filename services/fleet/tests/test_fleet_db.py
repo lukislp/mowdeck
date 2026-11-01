@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -624,3 +624,91 @@ async def test_fleet_db_audit_event_id_is_unique(
             assert await tx.audit.count(account_id=acc, event_id=None) == 2
             (found,) = await tx.audit.find(event_id=event_id)
             assert found.event_id == event_id
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_fleet_db_purge_audit_of_one_account(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migration 0014 (ADR 0076): only ``purge_audit`` deletes audit rows, of one account; the
+    log stays append-only for every other statement in the same transaction."""
+    acc, other = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            for owner in (acc, acc, other):
+                await tx.audit.add(AuditEntry(NOW, "site.created", owner, "site", "s"))
+        async with store.transaction() as tx:
+            assert await tx.purge_audit(acc) == 2
+            assert await tx.purge_audit(acc) == 0
+        async with store.transaction() as tx:
+            assert await tx.audit.count(account_id=acc) == 0
+            assert await tx.audit.count(account_id=other) == 1
+        if kind == "postgres":
+            assert isinstance(store, SqlStore)
+            with pytest.raises(DBAPIError, match="append-only"):
+                async with store.transaction() as sql:
+                    await sql.purge_audit(acc)
+                    await sql.audit.delete(account_id=other)  # the switch is off again
+
+
+@needs_db
+async def test_fleet_db_demo_purge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0076: the purge endpoint on PostgreSQL leaves no row of the account in any table
+    (foreign keys and the audit trigger included) and keeps the other account's rows."""
+    seed = "demo-seed-secret"
+    async with (
+        store_of("postgres", monkeypatch) as store,
+        harness(store=store, demo_mode=True, demo_seed_token=seed) as h,
+    ):
+        owners = [await h.owner(), await h.owner()]
+        for owner in owners:
+            seeded = {**owner.headers, "X-MowDeck-Demo-Seed": seed}
+            home = await h.create(owner, "sites", name="Home")
+            north = await h.create(owner, "groups", name="North", site_id=home["id"])
+            mower = await h.client.post(
+                f"{API}/mowers",
+                headers=seeded,
+                json={"name": "M", "connection_kind": "simulated", "group_ids": [north["id"]]},
+            )
+            assert mower.status_code == 201, mower.text
+            mower_id = mower.json()["id"]
+            await h.client.post(
+                f"{API}/mowers/{mower_id}/commands",
+                headers=owner.headers,
+                json={"command": {"kind": "pause_mow"}},
+            )
+            async with store.transaction() as tx:
+                linked = LinkedAccount(uuid4(), owner.account_id, "acme", "a@x.t", b"x", NOW, NOW)
+                await tx.linked_accounts.add(linked)
+                await tx.base_stations.add(
+                    BaseStation(uuid4(), owner.account_id, "RTK", "cloud", NOW, NOW, linked.id)
+                )
+                await tx.area_names.add(
+                    MowerAreaName(UUID(mower_id), "front", owner.account_id, "Front", NOW)
+                )
+        alice, bob = owners
+        before = await rows_per_table(store, bob.account_id)
+        purged = await h.client.delete(
+            f"{API}/demo/accounts/{alice.account_id}", headers={"X-MowDeck-Demo-Seed": seed}
+        )
+        again = await h.client.delete(
+            f"{API}/demo/accounts/{alice.account_id}", headers={"X-MowDeck-Demo-Seed": seed}
+        )
+        assert purged.status_code == 200 and purged.json()["deleted"] > 0, purged.text
+        assert again.json() == {"deleted": 0}
+        assert set((await rows_per_table(store, alice.account_id)).values()) == {0}
+        assert await rows_per_table(store, bob.account_id) == before
+
+
+async def rows_per_table(store: Store, account_id: Any) -> dict[str, int]:
+    """Rows of the account in every table of the metadata."""
+    assert isinstance(store, SqlStore)
+    counts: dict[str, int] = {}
+    async with store.engine.connect() as conn:
+        for name in metadata.tables:
+            result = await conn.execute(
+                text(f"SELECT count(*) FROM {name} WHERE account_id = :acc"),  # noqa: S608
+                {"acc": account_id},
+            )
+            counts[name] = int(result.scalar_one())
+    return counts

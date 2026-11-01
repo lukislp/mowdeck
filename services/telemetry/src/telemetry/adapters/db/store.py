@@ -168,6 +168,20 @@ _THIN_SLICE = sa.text(
 """One slice of the position thinning; mirrors :func:`telemetry.domain.thinning.keep_set`."""
 
 
+_ACCOUNT_TABLES = (
+    tables.mower_history,
+    tables.mower_positions,
+    tables.command_timeline,
+    tables.mower_snapshots,
+    tables.mower_health_daily,
+    tables.mower_health,
+    tables.blade_changes,
+    tables.mower_latest,
+    tables.mower_directory,
+)
+"""The tables of :class:`SqlStore` with an ``account_id`` column (the demo purge)."""
+
+
 def _latest(row: Any) -> LatestRow:
     return LatestRow(**dict(row._mapping))
 
@@ -664,6 +678,38 @@ class SqlStore:
                 .limit(limit)
             )
             return [BladeChange(**dict(row._mapping)) for row in result.all()]
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """One transaction, one set based ``DELETE`` per table. The thinning watermark has no
+        account column: it goes for the account's mowers (directory, latest row, positions)
+        unless the directory gives the mower to another account."""
+        directory = tables.mower_directory.c
+        mine = sa.union(
+            sa.select(directory.mower_id).where(directory.account_id == account_id),
+            sa.select(tables.mower_latest.c.mower_id).where(
+                tables.mower_latest.c.account_id == account_id
+            ),
+            sa.select(tables.mower_positions.c.mower_id).where(
+                tables.mower_positions.c.account_id == account_id
+            ),
+        ).subquery()
+        elsewhere = sa.select(directory.mower_id).where(directory.account_id != account_id)
+        mark = tables.mower_positions_thinning.c
+        removed = 0
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sa.delete(tables.mower_positions_thinning).where(
+                    mark.mower_id.in_(sa.select(mine.c.mower_id)),
+                    mark.mower_id.not_in(elsewhere),
+                )
+            )
+            removed += result.rowcount
+            for table in _ACCOUNT_TABLES:
+                result = await conn.execute(
+                    sa.delete(table).where(table.c.account_id == account_id)
+                )
+                removed += result.rowcount
+        return removed
 
     @asynccontextmanager
     async def retention(self) -> AsyncIterator[RetentionScope | None]:

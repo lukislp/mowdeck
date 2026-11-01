@@ -9,6 +9,7 @@ import itertools
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
+from uuid import UUID
 
 from identity.application.ports import Ge, Gt, In, Lt
 from identity.domain.errors import ConflictError
@@ -19,6 +20,7 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    DemoSandbox,
     ExternalIdentity,
     KnownDevice,
     LoginAttempt,
@@ -157,6 +159,11 @@ class MemoryTx:
     oauth_states: MemoryTable[OAuthState]
     onboarding: MemoryTable[OnboardingProgress]
     known_devices: MemoryTable[KnownDevice]
+    sandboxes: MemoryTable[DemoSandbox]
+
+    async def purge_audit(self, account_id: UUID) -> int:
+        """Delete one demo sandbox account's audit rows (ADR 0076)."""
+        return await self.audit.delete(account_id=account_id)
 
 
 class MemoryStore:
@@ -188,6 +195,7 @@ class MemoryStore:
             oauth_states=MemoryTable("id", [("state_hash",)]),
             onboarding=MemoryTable("user_id"),
             known_devices=MemoryTable("id", [("user_id", "token_hash")]),
+            sandboxes=MemoryTable("account_id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

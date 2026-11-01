@@ -36,6 +36,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | PUT | `/api/v1/scheduler/mowers/{mower_id}/angles/settings` | `can_control` on the mower | `{manual_step_deg: 1..179 or null}`: the step the start sheet offers |
 | POST | `/api/v1/scheduler/mowers/{mower_id}/angles` | `can_control` on the mower | `{area_ids, angle_deg}`: a manual start with rotation chosen reports the angle it sent |
 | PUT | `/api/v1/scheduler/dev/weather` | any principal | development only (`MOWDECK_SCHEDULER_DEV_ENDPOINTS`, static provider): `{mode: dry, rain, unknown}`; 404 otherwise |
+| DELETE | `/api/v1/scheduler/demo/accounts/{account_id}` | demo seed secret (`X-MowDeck-Demo-Seed`); 404 outside demo mode | demo sandbox purge (ADR 0076), hidden from OpenAPI: every row of the account in every table (schedules, runs, mower status, places, capabilities, angles, rotation); 200 `{deleted}`, 0 on a repeat |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | none | readiness covers the database, NATS and OpenFGA |
 
 Request bodies refuse unknown fields (422). Days are `mon` to `sun`; `start_time` is `HH:MM`.

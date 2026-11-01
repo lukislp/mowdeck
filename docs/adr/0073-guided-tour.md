@@ -59,7 +59,7 @@ In the demo every new **browser** is a new visitor (below).
 | What | Where | Why |
 | --- | --- | --- |
 | Outcome: `tour-seen` (opened, not finished), `tour-done`, `tour-skipped` | Identity, the user's `dismissed_hints` (ADR 0062) | Per user, follows them to every device and the app shells; existing table and endpoint, no server change. The web app replaces only its own keys and keeps unknown ones. |
-| Outcome in the demo | `localStorage` `mowdeck.tour.demo` | Every visitor shares the demo user: a server-side outcome would let the first visitor end the tour for everyone. |
+| Outcome in the demo | `localStorage` `mowdeck.tour.demo` | Every visitor shares the demo user: a server-side outcome would let the first visitor end the tour for everyone. With demo sandboxes ([ADR 0076](0076-demo-sandboxes.md)) the outcome is stored per user again and in the browser as well; the browser's wins, so a returning visitor with a fresh sandbox does not get the tour again. |
 | The running step | `sessionStorage` `mowdeck.tour.run` (with the user's subject) | A reload in the middle continues the tour in that tab; nothing to keep beyond it. |
 | Device switch | `localStorage` `mowdeck.tour.autostart` = `off` | Never start by itself on this device: wall displays, kiosks and the e2e suite. Starting it from Settings still works. |
 

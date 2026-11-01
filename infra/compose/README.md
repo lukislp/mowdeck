@@ -24,7 +24,7 @@ docker compose --profile whoami up -d --wait
 curl http://localhost/api/v1/whoami
 ```
 
-A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md). It publishes only the gateway's HTTP port (no HTTPS port, no host port of NATS, Postgres or OpenFGA), and `demo/reset.sh` accepts a host override `demo/demo.override.yml` only for networks, resource limits and logging (an allow-list checked by `demo/override_guard.py`).
+A public demo with simulated mowers (one-click "Try the demo", reset every few hours) is a separate stack with the override `docker-compose.demo.yml`; see [docs/ops/demo.md](../../docs/ops/demo.md). By default every visitor gets an own sandbox account with its own simulated mowers ([ADR 0076](../../docs/adr/0076-demo-sandboxes.md)); `DEMO_SANDBOX_MAX`, `DEMO_SANDBOX_POOL`, `DEMO_SANDBOX_IDLE_MINUTES` and `DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` have defaults in the override and need no line in `demo/demo.env`, and `DEMO_SANDBOXES=false` brings back the one shared demo user. It publishes only the gateway's HTTP port (no HTTPS port, no host port of NATS, Postgres or OpenFGA), and `demo/reset.sh` accepts a host override `demo/demo.override.yml` only for networks, resource limits and logging (an allow-list checked by `demo/override_guard.py`).
 
 ## What runs
 

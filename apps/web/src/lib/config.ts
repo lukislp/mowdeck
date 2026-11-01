@@ -43,7 +43,8 @@ export interface RuntimeConfig {
   source: SourceInfo;
   /**
    * A public demo installation (ADR 0068, `MOWDECK_WEB_DEMO_MODE`): the banner, "Demo" in the
-   * title and "Try the demo" on the sign-in page. Absent on every other installation.
+   * title and "Try the demo" on the sign-in page; with `sandbox`, an own sandbox per visitor
+   * (ADR 0076, `MOWDECK_WEB_DEMO_SANDBOX`). Absent on every other installation.
    */
   demo?: DemoConfig;
 }
@@ -51,6 +52,17 @@ export interface RuntimeConfig {
 export interface DemoConfig {
   /** Hours between two resets of the demo (shown in the banner). */
   resetHours: number;
+  /**
+   * Demo sandboxes (ADR 0076, `MOWDECK_WEB_DEMO_SANDBOX`): every visitor gets an own account
+   * with own simulated mowers, deleted `idleMinutes` after the last visit. Absent: the shared
+   * demo user of ADR 0068.
+   */
+  sandbox?: DemoSandboxConfig;
+}
+
+export interface DemoSandboxConfig {
+  /** Minutes after the last session refresh until the sandbox is deleted (5 to 1440). */
+  idleMinutes: number;
 }
 
 export const DEFAULT_CONFIG: RuntimeConfig = Object.freeze({
@@ -104,15 +116,33 @@ export function parseConfig(raw: unknown): RuntimeConfig {
   };
 }
 
-/** The demo block: an object with whole reset hours from 1 to 168 (anything else: 6). */
+/**
+ * The demo block: an object with whole reset hours from 1 to 168 (anything else: 6), and
+ * optionally the sandbox block.
+ */
 function parseDemo(demo: unknown): DemoConfig | null {
   if (!demo || typeof demo !== 'object') return null;
-  const { resetHours } = demo as { resetHours?: unknown };
+  const { resetHours, sandbox } = demo as { resetHours?: unknown; sandbox?: unknown };
   const hours =
     typeof resetHours === 'number' && Number.isInteger(resetHours) && resetHours >= 1
       ? Math.min(resetHours, 168)
       : 6;
-  return { resetHours: hours };
+  const own = parseSandbox(sandbox);
+  return own ? { resetHours: hours, sandbox: own } : { resetHours: hours };
+}
+
+/** The sandbox block: an object with whole idle minutes from 5 to 1440 (anything else: 30). */
+function parseSandbox(sandbox: unknown): DemoSandboxConfig | null {
+  if (!sandbox || typeof sandbox !== 'object') return null;
+  const { idleMinutes } = sandbox as { idleMinutes?: unknown };
+  const minutes =
+    typeof idleMinutes === 'number' &&
+    Number.isInteger(idleMinutes) &&
+    idleMinutes >= 5 &&
+    idleMinutes <= 1440
+      ? idleMinutes
+      : 30;
+  return { idleMinutes: minutes };
 }
 
 function parseMapTiles(tiles: unknown): MapTilesConfig | null {

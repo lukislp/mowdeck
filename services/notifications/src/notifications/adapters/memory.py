@@ -9,10 +9,10 @@ from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
-from notifications.application.ports import Tx
+from notifications.application.ports import AccountPurge, Tx
 from notifications.domain.geofence import MowerFence
 from notifications.domain.live_activity import ActivityDevice, LiveActivity
 from notifications.domain.models import (
@@ -31,6 +31,13 @@ from notifications.domain.models import (
     PushSubscription,
     TargetKind,
 )
+
+
+class _Owned(Protocol):
+    """A row that carries its account."""
+
+    @property
+    def account_id(self) -> UUID: ...
 
 
 @dataclass
@@ -538,6 +545,52 @@ class MemoryStore:
         self, user_id: UUID, installation_id: UUID, mower_id: UUID
     ) -> bool:
         return self.data.live_activities.pop((user_id, installation_id, mower_id), None) is not None
+
+    async def purge_account(self, account_id: UUID) -> AccountPurge:
+        async with self._lock:
+            data = self.data
+            mowers = frozenset(
+                {
+                    *(m for m, e in data.directory.items() if e.account_id == account_id),
+                    *(m for m, w in data.watches.items() if w.account_id == account_id),
+                    *(m for m, f in data.geofences.items() if f.account_id == account_id),
+                    *(i.mower_id for i in data.images.values() if i.account_id == account_id),
+                    *(
+                        a.mower_id
+                        for a in data.live_activities.values()
+                        if a.account_id == account_id
+                    ),
+                }
+            )
+            removed = 0
+
+            def drop[K, V: _Owned](rows: dict[K, V]) -> dict[K, V]:
+                nonlocal removed
+                kept = {k: v for k, v in rows.items() if v.account_id != account_id}
+                removed += len(rows) - len(kept)
+                return kept
+
+            def drop_keyed[K: tuple[Any, ...], V](rows: dict[K, V]) -> dict[K, V]:
+                nonlocal removed
+                kept = {k: v for k, v in rows.items() if k[1] != account_id}
+                removed += len(rows) - len(kept)
+                return kept
+
+            data.directory = drop(data.directory)
+            data.watches = drop(data.watches)
+            data.geofences = drop(data.geofences)
+            data.preferences = drop(data.preferences)
+            data.tests = drop_keyed(data.tests)
+            data.push = drop(data.push)
+            data.apns = drop(data.apns)
+            data.ntfy = drop(data.ntfy)
+            data.inbox = drop(data.inbox)
+            data.images = drop(data.images)
+            data.deliveries = drop(data.deliveries)
+            data.silences = drop_keyed(data.silences)
+            data.activity_devices = drop(data.activity_devices)
+            data.live_activities = drop(data.live_activities)
+            return AccountPurge(deleted=removed, mower_ids=mowers)
 
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         def match(user: UUID, account: UUID) -> bool:

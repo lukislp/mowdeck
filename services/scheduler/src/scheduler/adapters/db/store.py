@@ -25,6 +25,16 @@ from scheduler.domain.rotation import AreaAngle, MowerRotation
 
 _SCHEDULE_FIELDS = [f.name for f in dataclasses.fields(Schedule)]
 _RUN_FIELDS = [f.name for f in dataclasses.fields(ScheduleRun)]
+_ACCOUNT_TABLES = (
+    tables.schedule_runs,
+    tables.schedules,
+    tables.mower_status,
+    tables.mower_places,
+    tables.mower_capabilities,
+    tables.mow_angles,
+    tables.mower_rotation,
+)
+"""Every table, in deletion order (all carry ``account_id``)."""
 
 
 def _schedule(row: Any) -> Schedule:
@@ -248,6 +258,15 @@ class SqlTx:
             )
         )
         return int(result.rowcount)
+
+    async def purge_account(self, account_id: UUID) -> int:
+        deleted = 0
+        for table in _ACCOUNT_TABLES:  # runs before their schedules, so they are counted
+            result = await self._conn.execute(
+                sa.delete(table).where(table.c.account_id == account_id)
+            )
+            deleted += int(result.rowcount)
+        return deleted
 
     async def try_lock(self, key: int) -> bool:
         result = await self._conn.execute(

@@ -46,6 +46,7 @@ import asyncio
 import base64
 import binascii
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -157,6 +158,15 @@ class CameraService:
         self.snapshot_min_interval = timedelta(seconds=snapshot_min_interval_seconds)
         self._snapshots: dict[UUID, Snapshot] = {}
         self._snapshot_locks: dict[UUID, asyncio.Lock] = {}
+
+    def forget(self, mower_ids: Iterable[UUID]) -> int:
+        """Drop the cached still images of these mowers (demo purge); returns how many."""
+        dropped = 0
+        for mower_id in mower_ids:
+            self._snapshot_locks.pop(mower_id, None)
+            if self._snapshots.pop(mower_id, None) is not None:
+                dropped += 1
+        return dropped
 
     async def _mower(self, actor: Actor, account_id: UUID, mower_id: UUID) -> Mower:
         if actor.principal is None:

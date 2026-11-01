@@ -193,3 +193,15 @@ class SqlZoneStore:
                 .order_by(_D.zone_id, _D.day)
             )
             return [ZoneDay(**r._mapping) for r in result]
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """Day totals first (the cascade would hide them from the count), then the presence
+        and the zones; one transaction."""
+        removed = 0
+        async with self.engine.begin() as conn:
+            for table in (tables.zone_days, tables.zone_presence, tables.virtual_zones):
+                result = await conn.execute(
+                    sa.delete(table).where(table.c.account_id == account_id)
+                )
+                removed += result.rowcount
+        return removed

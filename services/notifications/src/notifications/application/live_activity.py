@@ -25,6 +25,7 @@ worst sends one extra update); the rows in the store are what makes an activity 
 """
 
 import re
+from collections.abc import Collection
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Protocol
@@ -102,6 +103,16 @@ class LiveActivities:
         self._checked: set[UUID] = set()
         self._reloaded: dict[tuple[UUID, UUID], datetime] = {}
         self._areas: dict[UUID, dict[str, str]] = {}
+
+    def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
+        """Drop what is kept in memory about these mowers (demo sandbox purge)."""
+        gone = set(mower_ids)
+        for mower_id in gone:
+            self._last.pop(mower_id, None)
+            self._active.discard(mower_id)
+            self._checked.discard(mower_id)
+            self._areas.pop(mower_id, None)
+        self._reloaded = {k: v for k, v in self._reloaded.items() if k[0] not in gone}
 
     # --- registration (the routes) -------------------------------------------------------
 

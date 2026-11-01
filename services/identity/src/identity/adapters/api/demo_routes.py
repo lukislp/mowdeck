@@ -57,10 +57,16 @@ async def demo_session(
     ctx: PublicCtx,
     transport: RefreshTransport = None,
 ) -> TokenOut:
-    """ "Try the demo": a session of the prepared demo user without credentials (the same tokens
-    and cookie as ``POST /session``). 404 outside demo mode and while the demo is not seeded;
-    rate limited per address."""
-    pair = await services.sessions.login_demo(ctx)
+    """ "Try the demo": a session without credentials (the same tokens and cookie as
+    ``POST /session``). With demo sandboxes (ADR 0076) in a sandbox account of the visitor's own,
+    otherwise as the prepared shared demo user. 404 outside demo mode and while the shared demo is
+    not seeded; 429 when the address asked too often; 503 ``demo-full`` with ``Retry-After``
+    when every sandbox is taken."""
+    sandboxes = services.sandboxes
+    if sandboxes is not None:
+        pair = await sandboxes.enter(ctx)
+    else:
+        pair = await services.sessions.login_demo(ctx)
     set_refresh_cookie(request, response, pair)
     response.headers["Cache-Control"] = "no-store"
     return token_out(pair, transport)

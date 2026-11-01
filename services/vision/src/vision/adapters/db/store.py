@@ -565,3 +565,27 @@ class SqlStore:
             query = query.where(p.c.trigger == trigger.value)
         async with self.engine.connect() as conn:
             return int((await conn.execute(query)).scalar_one())
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """One transaction, one set based ``DELETE`` per table: the images and steps (no
+        account column) go by the account's proposals before the proposals themselves, so the
+        cascade does not hide them from the count."""
+        p = tables.proposals
+        mine = sa.select(p.c.id).where(p.c.account_id == account_id)
+        removed = 0
+        async with self.engine.begin() as conn:
+            for child in (tables.proposal_images, tables.proposal_steps):
+                result = await conn.execute(sa.delete(child).where(child.c.proposal_id.in_(mine)))
+                removed += int(result.rowcount or 0)
+            for table in (
+                tables.proposals,
+                tables.provider_requests,
+                tables.user_providers,
+                tables.user_preferences,
+                tables.auto_watch,
+            ):
+                result = await conn.execute(
+                    sa.delete(table).where(table.c.account_id == account_id)
+                )
+                removed += int(result.rowcount or 0)
+        return removed

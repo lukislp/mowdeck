@@ -38,6 +38,7 @@ class MemoryStore:
         self.preferences: dict[tuple[UUID, UUID], UserPreferences] = {}
         self.auto: dict[tuple[UUID, UUID], AutoSetting] = {}
         self.watch: dict[UUID, str | None] = {}
+        self.watch_accounts: dict[UUID, UUID] = {}
 
     def _open_conflict(self, mower_id: UUID, exclude: UUID | None = None) -> bool:
         return any(
@@ -201,7 +202,38 @@ class MemoryStore:
     ) -> str | None:
         previous = self.watch.get(mower_id)
         self.watch[mower_id] = error_code
+        if mower_id not in self.watch_accounts or previous != error_code:
+            self.watch_accounts[mower_id] = account_id  # as the SQL store writes the column
         return previous
+
+    async def purge_account(self, account_id: UUID) -> int:
+        gone = {k for k, p in self.proposals.items() if p.account_id == account_id}
+        watched = {m for m, a in self.watch_accounts.items() if a == account_id}
+        before = self._rows()
+        self.proposals = {k: v for k, v in self.proposals.items() if k not in gone}
+        self.images = {k: v for k, v in self.images.items() if k[0] not in gone}
+        self.step_rows = {k: v for k, v in self.step_rows.items() if k[0] not in gone}
+        self.requests = [r for r in self.requests if r.account_id != account_id]
+        self.providers = {k: v for k, v in self.providers.items() if k[1] != account_id}
+        self.preferences = {k: v for k, v in self.preferences.items() if k[1] != account_id}
+        self.auto = {k: v for k, v in self.auto.items() if k[1] != account_id}
+        self.watch = {k: v for k, v in self.watch.items() if k not in watched}
+        self.watch_accounts = {k: v for k, v in self.watch_accounts.items() if k not in watched}
+        return before - self._rows()
+
+    def _rows(self) -> int:
+        """Rows as the SQL store counts them (``user_preferences`` holds both preferences and
+        opt-ins: one row per user and account)."""
+        settings = set(self.preferences) | set(self.auto)
+        return (
+            len(self.proposals)
+            + len(self.images)
+            + len(self.step_rows)
+            + len(self.requests)
+            + len(self.providers)
+            + len(settings)
+            + len(self.watch)
+        )
 
     async def count_proposals(
         self, mower_id: UUID, *, since: datetime, trigger: VisionTrigger | None = None

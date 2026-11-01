@@ -564,6 +564,43 @@ class OnboardingProgress:
         self.status = OnboardingStatus(self.status)
 
 
+class SandboxState(StrEnum):
+    """Lifecycle of a demo sandbox (ADR 0076)."""
+
+    PROVISIONING = "provisioning"
+    """Being filled (mowers, schedules, history); nobody may use it yet."""
+    READY = "ready"
+    """Filled and waiting in the pool for a visitor."""
+    ACTIVE = "active"
+    """A visitor's sandbox."""
+    PURGING = "purging"
+    """Being deleted in every service (retried until done)."""
+
+
+@dataclass(slots=True)
+class DemoSandbox:
+    """One demo account of one visitor (public demo, ADR 0076).
+
+    The row outlives the account it names while the purge runs, so it has no foreign key: the
+    services are cleaned first, Identity's own rows next, the row last. ``purged`` lists the
+    services that confirmed their purge, so a retry skips them.
+    """
+
+    account_id: UUID
+    user_id: UUID
+    state: SandboxState
+    created_at: datetime
+    claimed_at: datetime | None = None
+    purge_reason: str | None = None
+    purged: list[str] = field(default_factory=list)
+    attempts: int = 0
+    next_attempt_at: datetime | None = None
+    last_error: str | None = None
+
+    def __post_init__(self) -> None:
+        self.state = SandboxState(self.state)
+
+
 @dataclass(frozen=True, slots=True)
 class RelyingParty:
     """The WebAuthn relying party of this installation (from the public URL).

@@ -33,3 +33,7 @@ class RealtimeConfig:
     """A drive session ends after this many seconds."""
     drive_request_timeout_seconds: float = 2.0
     """Timeout of the ``fleet.drive.start`` and ``fleet.drive.stop`` requests."""
+    presence_seconds: float = 0.0
+    """Announce the watched accounts (``presence.accounts``) on every first and last socket of
+    an account and as a keep-alive this often; 0 announces nothing (demo sandboxes only,
+    ADR 0076)."""

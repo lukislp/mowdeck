@@ -78,6 +78,11 @@ class Settings(ServiceSettings):
     realtime_drive_request_timeout_seconds: float = Field(default=2, gt=0, le=30)
     """Timeout of the ``fleet.drive.start`` and ``fleet.drive.stop`` requests to Fleet."""
 
+    realtime_presence_seconds: float = Field(default=30, gt=0, le=600)
+    """Demo mode only (``MOWDECK_DEMO_MODE``, ADR 0076): interval of the keep-alive on
+    ``presence.accounts``, which lets the Device-Gateway pause the simulated mowers of a demo
+    sandbox nobody watches. Outside demo mode nothing is announced."""
+
     realtime_allowed_origins: str = ""
     """Comma separated ``Origin`` values allowed to open a socket; empty allows every origin
     (authentication is a token in a message, never a cookie)."""
@@ -100,6 +105,7 @@ class Settings(ServiceSettings):
             drive_ttl_ms=self.realtime_drive_ttl_ms,
             drive_max_seconds=self.realtime_drive_max_seconds,
             drive_request_timeout_seconds=self.realtime_drive_request_timeout_seconds,
+            presence_seconds=self.realtime_presence_seconds if self.demo_mode else 0.0,
         )
 
     @property

@@ -176,6 +176,15 @@ class SqlTx:
             statement.on_conflict_do_update(index_elements=["key"], set_=update)
         )
 
+    async def purge_account(self, account_id: UUID) -> int:
+        removed = 0
+        for table in (tables.plan_history, tables.account_plans):
+            result = await self._conn.execute(
+                sa.delete(table).where(table.c.account_id == account_id)
+            )
+            removed += int(result.rowcount or 0)
+        return removed
+
 
 class SqlStore:
     """Implements ``Store`` on PostgreSQL."""

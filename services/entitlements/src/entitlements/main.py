@@ -28,6 +28,7 @@ from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.db import create_engine, readiness_check_db
 
 from entitlements.adapters.api.demo import DEMO_POLICY
+from entitlements.adapters.api.demo import router as demo_router
 from entitlements.adapters.api.deps import install_error_mapping
 from entitlements.adapters.api.routes import router
 from entitlements.adapters.bus.publisher import BusEventPublisher
@@ -143,7 +144,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router],
+        routers=[router, demo_router],
         readiness_checks=[readiness_check_db(engine)] if engine is not None else [],
         on_startup=[startup],
         on_shutdown=[shutdown],

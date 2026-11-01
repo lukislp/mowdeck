@@ -121,6 +121,15 @@ class EventPublisher(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class AccountPurge:
+    """What :meth:`Store.purge_account` removed: the number of rows and the mowers they named
+    (so the use cases can drop what they keep per mower in memory)."""
+
+    deleted: int
+    mower_ids: frozenset[UUID]
+
+
 class Tx(Protocol):
     """Writes of one transaction (rules and directory)."""
 
@@ -404,4 +413,11 @@ class Store(ActivityStore, Protocol):
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         """Delete everything of a user (in one account, or in all when ``account_id`` is None),
         silences included."""
+        ...
+
+    async def purge_account(self, account_id: UUID) -> AccountPurge:
+        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0076):
+        directory, watches, geofences, preferences, test throttles, push subscriptions, APNs
+        devices, ntfy targets, inbox, camera images, deliveries, silences and Live Activity
+        registrations. The maintenance window belongs to the installation and stays."""
         ...

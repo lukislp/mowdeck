@@ -75,6 +75,15 @@ class MemoryTx:
     async def delete_template(self, account_id: UUID, name: str) -> bool:
         return self._data.templates.pop((account_id, name), None) is not None
 
+    async def purge_account(self, account_id: UUID) -> int:
+        templates = [key for key in self._data.templates if key[0] == account_id]
+        mowers = [m for m, facts in self._data.facts.items() if facts.account_id == account_id]
+        for key in templates:
+            del self._data.templates[key]
+        for mower_id in mowers:
+            del self._data.facts[mower_id]
+        return len(templates) + len(mowers)
+
 
 class MemoryStore:
     """``Store`` in memory."""
