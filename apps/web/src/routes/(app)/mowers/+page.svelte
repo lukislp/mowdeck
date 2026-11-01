@@ -195,7 +195,7 @@
 {:else if list === null}
   <p class="quiet pad" role="status"><SlowLoading /></p>
 {:else if list.length === 0}
-  <section class="empty" data-testid="mowers-empty">
+  <section class="empty" data-testid="mowers-empty" data-tour="add-mower">
     <h2>{m.mowers_empty_title()}</h2>
     <p>{canManage ? m.mowers_empty_owner() : m.mowers_empty_viewer()}</p>
     {#if canManage}
@@ -249,7 +249,7 @@
       error={st?.error_code ? `${st.error_code} ${st.error_message ?? ''}`.trim() : null}
     />
   {/snippet}
-  <div data-testid="mower-list">
+  <div data-testid="mower-list" data-tour="overview">
     {#if grouped}
       {#each sections as section (section.id)}
         {@const open = !collapsed[section.id]}

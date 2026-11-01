@@ -1474,6 +1474,7 @@
       class="plan"
       class:expanded={mapExpanded || (phone && spotFlow.active)}
       aria-label={m.detail_areas()}
+      data-tour="map"
     >
       {#if mowerMap && hasMap && !mapFailed}
         <div class="map-box">
@@ -1616,7 +1617,12 @@
             onfail={() => (mapFailed = true)}
             testid="mower-zone-map"
           />
-          <a class="zone-edit" href="/mowers/{id}/zones" data-testid="map-zones-link">
+          <a
+            class="zone-edit"
+            href="/mowers/{id}/zones"
+            data-testid="map-zones-link"
+            data-tour="zones"
+          >
             <Icon name="pin" size={16} />
             {zonesOverview?.zones.length ? m.zones_open() : m.zones_draw()}
           </a>
@@ -1676,7 +1682,7 @@
           <JobCard {job} />
         {/if}
         {#if canSpot}
-          <div class="spot-entry" data-testid="spot-entry">
+          <div class="spot-entry" data-testid="spot-entry" data-tour="spot">
             <Button
               icon="crosshair"
               disabled={spotFlow.active || spotFlow.running}
@@ -2025,7 +2031,7 @@
 
         {#if mowerMap && hasMap}
           <Panel label={m.detail_areas()}>
-            <ul class="areas">
+            <ul class="areas" data-tour="zones">
               {#each mowerMap.areas ?? [] as area (area.id)}
                 {@const order = sheet.picked.indexOf(area.id)}
                 <li>
@@ -2101,7 +2107,7 @@
       </div>
     </div>
 
-    <div class="bar" bind:clientHeight={barHeight}>
+    <div class="bar" bind:clientHeight={barHeight} data-tour="commands">
       {#if !spotFocus && (spotFlow.running || spotFlow.launching || spotFlow.ended)}
         {@render spotRunBar(false)}
       {/if}

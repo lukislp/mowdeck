@@ -9,6 +9,22 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL =
   process.env.MOWDECK_E2E_BASE_URL ?? `http://localhost:${process.env.MOWDECK_E2E_PORT ?? '8480'}`;
 
+/**
+ * Every browser of the suite starts with the guided tour's device switch off (ADR 0073), so the
+ * tour never starts by itself over the pages a spec drives with fresh accounts. Playwright gives
+ * this storage state to every context, `browser.newContext()` included; the tour specs
+ * (`tour-*.spec.ts`) start without it.
+ */
+const TOUR_OFF = {
+  cookies: [],
+  origins: [
+    {
+      origin: new URL(baseURL).origin,
+      localStorage: [{ name: 'mowdeck.tour.autostart', value: 'off' }],
+    },
+  ],
+};
+
 export default defineConfig({
   testDir: './tests',
   globalSetup: './global-setup.ts',
@@ -26,12 +42,13 @@ export default defineConfig({
     timezoneId: 'Europe/Berlin',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    storageState: TOUR_OFF,
   },
   projects: [
     {
       name: 'phone',
       testMatch:
-        /(gate|spot-phone|layout-phone|aerial-desktop|api-tokens-phone|source|scroll)\.spec\.ts/,
+        /(gate|spot-phone|layout-phone|aerial-desktop|api-tokens-phone|tour-phone|source|scroll)\.spec\.ts/,
       use: {
         ...devices['Pixel 7'],
         browserName: 'chromium',

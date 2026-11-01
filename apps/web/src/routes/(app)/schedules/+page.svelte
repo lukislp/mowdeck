@@ -205,7 +205,7 @@
 {:else if !schedules}
   <p class="pad quiet" role="status"><SlowLoading /></p>
 {:else if schedules.length === 0}
-  <div class="empty" data-testid="schedules-empty">
+  <div class="empty" data-testid="schedules-empty" data-tour="schedules">
     <Icon name="calendar" size={32} />
     <h2>{m.sched_empty_title()}</h2>
     <p>{canCreate ? m.sched_empty_body() : m.sched_empty_viewer()}</p>
@@ -214,7 +214,7 @@
     {/if}
   </div>
 {:else}
-  <ul class="list" data-testid="schedules">
+  <ul class="list" data-testid="schedules" data-tour="schedules">
     {#each schedules as schedule (schedule.id)}
       {@const view = parsePreview(previews[schedule.id])}
       {@const right = rightsOf(rights, schedule)}
