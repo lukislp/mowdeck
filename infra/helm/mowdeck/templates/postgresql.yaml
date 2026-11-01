@@ -47,7 +47,8 @@ spec:
     "storage" (dict "size" $pg.storage.size)
     "resources" $pg.resources
     "enableSuperuserAccess" false
-    "monitoring" (dict "enablePodMonitor" $pg.enablePodMonitor) }}
+    "monitoring" (dict "enablePodMonitor" $pg.enablePodMonitor)
+    "postgresql" (dict "parameters" (dict "max_connections" (toString (int $pg.maxConnections)))) }}
   {{- with $pg.storage.storageClass }}{{ $_ := set $spec.storage "storageClass" . }}{{ end }}
   {{- with $pg.imageName }}{{ $_ := set $spec "imageName" . }}{{ end }}
   {{- $managed := list }}

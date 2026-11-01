@@ -251,3 +251,65 @@ def test_rendered_containers_get_the_compose_settings(repo_root: Path) -> None:
             assert var in rendered or f"{var}_FILE" in rendered, (
                 f"{name}: Compose sets {var}, the chart does not"
             )
+
+
+# --- Health model (ADR 0077) -----------------------------------------------------------------
+
+
+def test_probes_separate_started_alive_and_ready(repo_root: Path) -> None:
+    """Startup waits for the first ready evaluation, liveness never touches a dependency, and
+    readiness may take a pod out of its Service but does not flap under mere load."""
+    probes = _values(repo_root)["probes"]
+    assert probes["startup"]["httpGet"]["path"] == "/startupz"
+    assert probes["liveness"]["httpGet"]["path"] == "/healthz"
+    assert probes["readiness"]["httpGet"]["path"] == "/readyz"
+    startup = probes["startup"]
+    assert startup["periodSeconds"] * startup["failureThreshold"] >= 120, "dependencies may lag"
+    for name in ("startup", "liveness", "readiness"):
+        # Above the readiness checks' own timeout (2 s), so a slow answer is not a failure.
+        assert probes[name]["timeoutSeconds"] > 2, name
+    liveness, readiness = probes["liveness"], probes["readiness"]
+    assert liveness["periodSeconds"] * liveness["failureThreshold"] >= 60
+    assert readiness["periodSeconds"] * readiness["failureThreshold"] >= 30
+
+
+def test_postgres_max_connections_matches_compose(repo_root: Path) -> None:
+    compose = _compose(repo_root)
+    command = compose["postgres"]["command"]
+    compose_max = next(int(a.split("=", 1)[1]) for a in command if a.startswith("max_connections="))
+    values = _values(repo_root)["postgresql"]["cloudnativepg"]
+    assert values["maxConnections"] == compose_max
+    template = (_chart(repo_root) / "templates" / "postgresql.yaml").read_text("utf-8")
+    assert '"max_connections" (toString (int $pg.maxConnections))' in template
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm is not installed")
+def test_rendered_probes_follow_the_health_model(repo_root: Path) -> None:
+    if not list((_chart(repo_root) / "charts").glob("*.tgz")):
+        pytest.skip("chart dependencies missing (helm dependency build infra/helm/mowdeck)")
+    docs = _render(repo_root)
+    checked = 0
+    for doc in docs:
+        if doc["kind"] not in {"Deployment", "StatefulSet"}:
+            continue
+        labels = doc["metadata"].get("labels", {})
+        if labels.get("app.kubernetes.io/name") != "mowdeck":
+            continue  # subcharts (NATS, OpenFGA) bring their own probes
+        container = doc["spec"]["template"]["spec"]["containers"][0]
+        if "startupProbe" not in container or "httpGet" not in container["startupProbe"]:
+            continue  # TCP probed third-party containers (MediaMTX)
+        name = doc["metadata"]["name"]
+        paths = {
+            kind: container[f"{kind}Probe"]["httpGet"]["path"]
+            for kind in ("startup", "liveness", "readiness")
+        }
+        if name.endswith("-web"):
+            assert paths == {"startup": "/healthz", "liveness": "/healthz", "readiness": "/healthz"}
+        else:
+            assert paths == {
+                "startup": "/startupz",
+                "liveness": "/healthz",
+                "readiness": "/readyz",
+            }, name
+        checked += 1
+    assert checked >= 10

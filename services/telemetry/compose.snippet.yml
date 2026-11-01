@@ -43,6 +43,8 @@ services:
       MOWDECK_NATS_USER: telemetry
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
+      # The busiest pool of the stack: most of a mower page (docs/ops/compose.md, budget).
+      MOWDECK_DATABASE_POOL_SIZE: "10"
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
@@ -58,10 +60,10 @@ services:
       - traefik.http.routers.telemetry.entrypoints=web
       - traefik.http.services.telemetry.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s

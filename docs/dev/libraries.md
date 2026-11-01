@@ -109,7 +109,7 @@ What every service gets from it:
 | Logging | structlog JSON lines on stdout (console in `dev`) with service, level, timestamp, correlation id |
 | Correlation | `X-Correlation-ID` (or `X-Request-ID`) read, generated if missing, echoed, logged, sent on bus messages |
 | Errors | `ServiceError` hierarchy and handlers rendering `application/problem+json`; generic 500 without internals |
-| Operations | `/healthz`, `/readyz` (registered checks, 503 on failure or while draining), `/metrics`, `/.well-known/mowdeck-module` |
+| Operations | `/healthz` (liveness), `/startupz` (ready once since the start; the container healthcheck), `/readyz` (registered checks, 503 on failure or while draining), `/metrics`, `/.well-known/mowdeck-module` ([ADR 0077](../adr/0077-liveness-readiness-and-routing.md)) |
 | API | routers mounted under `/api/v1` (HTTP and WebSocket routes; the middlewares pass WebSocket scopes through), OpenAPI at `/api/v1/openapi.json` |
 | Event bus | `JetStreamBus` (streams ensured on connect, `Nats-Msg-Id` de-duplication, ack/nak/term), `InMemoryBus` for tests |
 | Tenancy | `CurrentPrincipal`, `CurrentAccountId`, `require_permission(...)` (delegates to a `PermissionChecker` on `app.state` when `mowdeck-authz` installs one); account id only from the verified principal |

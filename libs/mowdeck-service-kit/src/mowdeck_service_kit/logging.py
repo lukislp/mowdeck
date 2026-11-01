@@ -3,8 +3,8 @@
 All logs, including those of the standard library (uvicorn, nats), go to stdout through one
 handler: JSON lines in production, a coloured console renderer in development. Every line
 carries ``service``, ``level``, ``timestamp`` (UTC, ISO 8601) and ``correlation_id`` when one
-is set. Secret values (passwords, tokens, pre-shared keys, ...) are masked by
-``redact_secrets`` before rendering.
+is set. Standard library records keep their ``extra={...}`` fields. Secret values (passwords,
+tokens, pre-shared keys, ...) are masked by ``redact_secrets`` before rendering.
 """
 
 import logging
@@ -103,6 +103,16 @@ def _add_service(service: str) -> Processor:
     return processor
 
 
+_DROPPED_EXTRAS = frozenset({"color_message"})
+"""``extra`` fields of standard library records that only repeat the message (uvicorn's)."""
+
+
+def _drop_noise_extras(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
+    for key in _DROPPED_EXTRAS:
+        event_dict.pop(key, None)
+    return event_dict
+
+
 def configure_logging(settings: ServiceSettings, *, stream: TextIO | None = None) -> None:
     """Configure structlog and the standard library root logger for ``settings``.
 
@@ -134,8 +144,16 @@ def configure_logging(settings: ServiceSettings, *, stream: TextIO | None = None
         cache_logger_on_first_use=False,
     )
 
+    # Standard library records (libraries such as mowdeck-authz log with ``extra={...}``) keep
+    # their extra fields, e.g. the operation and error type of a failed authorization check;
+    # they pass the same secret masking as every other field.
+    foreign: list[Processor] = [
+        structlog.stdlib.ExtraAdder(),
+        _drop_noise_extras,
+        *shared,
+    ]
     formatter = structlog.stdlib.ProcessorFormatter(
-        foreign_pre_chain=shared,
+        foreign_pre_chain=foreign,
         processors=[structlog.stdlib.ProcessorFormatter.remove_processors_meta, renderer],
     )
     handler = logging.StreamHandler(stream or sys.stdout)

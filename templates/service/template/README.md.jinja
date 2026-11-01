@@ -16,6 +16,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | --- | --- | --- | --- |
 | GET | `/api/v1/{{ service_name }}/ping` | `{{ first_permission }}` | Example endpoint: returns the service name, the time and the caller's account |
 | GET | `/healthz` | none | Liveness |
+| GET | `/startupz` | none | Ready once since the start; the container healthcheck (ADR 0077) |
 | GET | `/readyz` | none | Readiness (bus{% if needs_db %}, database{% endif %}); 503 while shutting down |
 | GET | `/metrics` | none | Prometheus metrics |
 | GET | `/.well-known/mowdeck-module` | none | Module descriptor (permissions, events, UI areas) |
