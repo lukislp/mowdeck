@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from telemetry.adapters.db import tables
+from telemetry.adapters.db.reads import read_connection
 from telemetry.domain.zones import LatLon, Presence, VirtualZone, ZoneDay, ZoneTime
 
 _Z = tables.virtual_zones.c
@@ -106,7 +107,7 @@ class SqlZoneStore:
         self.engine = engine
 
     async def zones_of(self, account_id: UUID, mower_id: UUID) -> list[VirtualZone]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.virtual_zones)
                 .where(_Z.account_id == account_id, _Z.mower_id == mower_id)
@@ -115,7 +116,7 @@ class SqlZoneStore:
             return [_zone(r) for r in result]
 
     async def zones_for(self, mower_id: UUID) -> list[VirtualZone]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.virtual_zones)
                 .where(_Z.mower_id == mower_id)
@@ -168,7 +169,7 @@ class SqlZoneStore:
             yield _SqlPresenceTx(conn, mower_id)
 
     async def presence_of(self, account_id: UUID, mower_id: UUID) -> Presence | None:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             row = (
                 await conn.execute(
                     sa.select(tables.zone_presence).where(
@@ -181,7 +182,7 @@ class SqlZoneStore:
     async def days_of(
         self, account_id: UUID, mower_id: UUID, first: date, last: date
     ) -> list[ZoneDay]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.zone_days)
                 .where(

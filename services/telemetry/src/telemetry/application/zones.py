@@ -29,6 +29,7 @@ from mowdeck_service_kit import get_logger
 from telemetry.application.ports import Clock, Store
 from telemetry.application.zone_ports import ZoneStore
 from telemetry.domain.errors import InvalidZoneError, NoZoneError, ZonesUnavailableError
+from telemetry.domain.models import LatestRow, SnapshotRow
 from telemetry.domain.rules import blades_on
 from telemetry.domain.zones import (
     MAX_ANCHOR_DISTANCE_M,
@@ -107,6 +108,23 @@ class ZoneStats:
     items: list[ZoneTotals]
 
 
+def _anchor_of(
+    snapshot: SnapshotRow | None, latest: LatestRow | None, zones: list[VirtualZone]
+) -> LatLon | None:
+    """The map's origin, else the last position, else the first zone's first corner."""
+    reference = snapshot.body.get("reference") if snapshot is not None else None
+    if isinstance(reference, dict):
+        lat, lon = reference.get("origin_lat"), reference.get("origin_lon")
+        if isinstance(lat, int | float) and isinstance(lon, int | float) and (lat or lon):
+            return float(lat), float(lon)
+    position = latest.state.get("position") if latest is not None else None
+    if isinstance(position, dict):
+        return float(position["lat"]), float(position["lon"])
+    if zones:
+        return zones[0].ring[0]
+    return None
+
+
 def observation_of(state: MowerState) -> Observation:
     """What a state tells the zone evaluation."""
     seen = state.observed_at
@@ -147,9 +165,18 @@ class Zones:
     async def availability(self, account_id: UUID, mower_id: UUID) -> Availability:
         """Whether the editor is offered for the mower (see the module documentation)."""
         snapshot = await self._store.snapshot_of(account_id, mower_id, "map")
+        latest = await self._store.latest_of(account_id, mower_id)
+        return await self._availability(account_id, mower_id, snapshot, latest)
+
+    async def _availability(
+        self,
+        account_id: UUID,
+        mower_id: UUID,
+        snapshot: SnapshotRow | None,
+        latest: LatestRow | None,
+    ) -> Availability:
         if snapshot is not None and snapshot.body.get("areas"):
             return Availability.VENDOR_MAP
-        latest = await self._store.latest_of(account_id, mower_id)
         if latest is not None and latest.state.get("position"):
             return Availability.AVAILABLE
         now = self._clock()
@@ -159,18 +186,23 @@ class Zones:
         return Availability.AVAILABLE if recent else Availability.NO_POSITION
 
     async def overview(self, account_id: UUID, mower_id: UUID) -> ZoneOverview:
-        """Availability, zones, the current zone, the vendor zone plans and the map anchor."""
+        """Availability, zones, the current zone, the vendor zone plans and the map anchor.
+
+        The map snapshot and the latest state are read once for all of it (the view is part of
+        every mower page, docs/ops/load-testing.md)."""
         zones = await self._zones.zones_of(account_id, mower_id)
         presence = await self._zones.presence_of(account_id, mower_id)
         known = {z.id for z in zones}
         if presence is not None and presence.zone_id is not None and presence.zone_id not in known:
             presence = replace(presence, zone_id=None)
+        snapshot = await self._store.snapshot_of(account_id, mower_id, "map")
+        latest = await self._store.latest_of(account_id, mower_id)
         return ZoneOverview(
-            availability=await self.availability(account_id, mower_id),
+            availability=await self._availability(account_id, mower_id, snapshot, latest),
             zones=zones,
             presence=presence,
             plans=await self._plans(account_id, mower_id),
-            anchor=await self._anchor(account_id, mower_id, zones),
+            anchor=_anchor_of(snapshot, latest, zones),
         )
 
     async def zone_points(self, account_id: UUID, mower_id: UUID) -> list[LatLon]:
@@ -190,18 +222,8 @@ class Zones:
         self, account_id: UUID, mower_id: UUID, zones: list[VirtualZone]
     ) -> LatLon | None:
         snapshot = await self._store.snapshot_of(account_id, mower_id, "map")
-        reference = snapshot.body.get("reference") if snapshot is not None else None
-        if isinstance(reference, dict):
-            lat, lon = reference.get("origin_lat"), reference.get("origin_lon")
-            if isinstance(lat, int | float) and isinstance(lon, int | float) and (lat or lon):
-                return float(lat), float(lon)
         latest = await self._store.latest_of(account_id, mower_id)
-        position = latest.state.get("position") if latest is not None else None
-        if isinstance(position, dict):
-            return float(position["lat"]), float(position["lon"])
-        if zones:
-            return zones[0].ring[0]
-        return None
+        return _anchor_of(snapshot, latest, zones)
 
     async def stats(self, account_id: UUID, mower_id: UUID, days: int) -> ZoneStats:
         """Time per zone over the last ``days`` UTC days (today included)."""

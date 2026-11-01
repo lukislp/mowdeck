@@ -173,7 +173,7 @@ watches. One level per run: 30 s ramp, 2 minutes hold (200: 4 minutes).
   queue.
 - At 200 users the requests did not just get slower: **Telemetry's healthcheck failed, Docker
   marked it unhealthy and Traefik stopped routing to it, so every Telemetry request got 404**
-  for about 40 s at a time (recommendation 1).
+  for about 40 s at a time (fixed since, see [Overload without an outage](#overload-without-an-outage)).
 - The slowest requests are all Telemetry's: at 50 users `zones` (p95 3.2 s, about six queries
   one after the other), `tracking`, `capabilities`, `battery`, `map`, `positions`,
   `health/daily`, `state`, then the Scheduler's schedule preview.
@@ -202,7 +202,80 @@ So a load test from one address (or many visitors behind one NAT) gets 20 demo s
 address through the trusted proxy header, exactly as the demo's TLS proxy does, instead of
 loosening any limit.
 
-## Fixed in this change
+### Overload without an outage
+
+Measured on 2026-11-01 as an A/B on the same host and in the same hour: `main` at 48c7e43 and
+then the change of [ADR 0077](../adr/0077-liveness-readiness-and-routing.md) with the Telemetry
+work below, each on a fresh stack (`LOAD_STACK_CPUSET=20,21`, `LOAD_K6_CPUSET=22-25`). Other
+containers shared the workstation during both runs, so the absolute numbers are higher than in the
+tables above; compare the two columns.
+
+Signed-in users clicking (`rest-mix`, 200 users, 30 s ramp, 4 minutes hold), the level that used to
+take Telemetry out of routing:
+
+| | Before | After |
+| --- | ---: | ---: |
+| Failed requests | **8.7 %** (3 174, mostly 404 from the gateway) | **0 %** |
+| Checks passed (`map 200`, `report 200`, ...) | 94.4 % | 100 % |
+| Telemetry container unhealthy | 30 s (6 samples, routes gone) | never |
+| Requests per s | 129 | 161 |
+| API p95 / p99 | 9.7 s / 15.8 s | 5.7 s / 8.9 s |
+| `zones` p95 | 21.5 s | 7.1 s |
+| `state` p95 | 11.5 s | 7.9 s |
+| Postgres connections, peak | 91 of 100 | 82 of 200 |
+
+Two cores are still saturated at 200 clicking users (requests queue, the API p95 stays above the
+threshold), but the stack degrades by getting slower, no longer by failing, and serves a quarter
+more requests.
+
+Demo visitors (`sweep` at 300, all arriving within 60 s):
+
+| | Before | After |
+| --- | ---: | ---: |
+| API p95 | 3 320 ms | 1 252 ms |
+| HTTP errors | 4.1 % | 0 % |
+| Live views ready / with states | 100 % / **65 %** | 99.5 % / 99.5 % |
+| Telemetry requests p95 (slowest) | 7.6 s (`zones`) | 3.0 s (`tracking`) |
+| State messages per s | 64 | 97 |
+
+At 60 clicking users (2 minutes, below saturation) the API p95 went from 279 to 146 ms, `zones`
+from 773 to 309 ms, `tracking` from 502 to 253 ms, the 7-day positions from 323 to 282 ms, at the
+same throughput (72 and 71 requests a second; the "before" run had a profiler attached to
+Telemetry).
+
+What changed:
+
+- **Health model** ([ADR 0077](../adr/0077-liveness-readiness-and-routing.md)). The Compose
+  healthcheck asks `/startupz`: it passes once every readiness check passed once (so `up --wait`
+  and `deploy.sh` still wait for a ready service), then only asks whether the process answers.
+  Load or a later dependency failure never makes a container unhealthy; Traefik additionally keeps
+  the routes of an unhealthy container (503 instead of 404). Dependencies are still evaluated every
+  30 s: log line on change and the metric `mowdeck_readiness_check_up`. The database check uses a
+  connection of its own, never the request pool. Kubernetes: startup `/startupz`, liveness
+  `/healthz`, readiness `/readyz` with thresholds that do not flap under load.
+- **Telemetry: one pooled connection per request.** Profiling Telemetry under load (py-spy) showed
+  the position tracks as the largest CPU cost (a dict and a validated model per row, two tracks of
+  up to 5 000 points per mower page) and the zone view as the slowest request: six queries, each
+  checking a connection out of the pool again (with a ping), so under load it waited in the pool's
+  queue six times. Now the GET routes that read several times share one connection, checked out on
+  the first read and returned when the route returns; the zone view reads the map snapshot and the
+  latest state once; position tracks select only their columns and are built without per-row
+  validation. The answers are unchanged.
+- **Connection budget.** Pools are 5 + 5 per service (Telemetry 10 + 5) instead of 5 + 10, so
+  connections are kept rather than opened and closed under load, and PostgreSQL runs with
+  `max_connections=200`; the budget per service is in [Compose: Database
+  connections](compose.md#database-connections) and checked in CI.
+- **Logs of failed authorization checks name the cause.** Standard library records keep their
+  `extra` fields in the JSON log (secrets masked), so `mowdeck_authz` shows
+  `"operation": "check", "error": "TimeoutError"`.
+
+Not changed: a second Uvicorn worker for Telemetry. With the stack's two cores already saturated a
+second process would only compete with Postgres and the other services for the same CPU; the cost
+per request was the lever. The 7-day RTK positions are still loaded with every mower page (the RTK
+panel's shares need them); asking for them only when the panel is opened would be a web app
+change.
+
+## Fixed in the first load test change
 
 - **One question in flight per check** (`libs/mowdeck-authz`, `OpenFgaAuthorizer`): a cacheable
   check joins an identical check another request of the process is already asking instead of
@@ -216,35 +289,23 @@ loosening any limit.
 
 ## Recommendations
 
-Bigger changes, not made here:
+From the first run; 1, 4 and 7 are done, 2 in part:
 
-1. **Overload turns into an outage through the healthcheck.** When a service is saturated for a
-   while (Telemetry with 200 clicking users), its `/readyz` answers 503: the database and
-   OpenFGA checks wait behind the requests for a pooled connection and run into their 2 s
-   timeout. After four failed checks Docker marks the container unhealthy, and Traefik's Docker
-   provider drops the routes of unhealthy containers, so every Telemetry request gets **404 from
-   the gateway** until the next successful check (observed: 40 s, then the same again). The
-   service was slow, not broken; with one replica, taking it out of routing only makes it worse.
-   Options: let the Docker healthcheck test liveness plus a cached readiness result instead of
-   live database and OpenFGA round trips, give the readiness checks their own connection instead
-   of the request pool, or route without Docker health (a file provider for the demo). Until
-   then, a longer `timeout` on small hosts lowers the risk. Since the healthchecks of this change
-   run every 30 s, a service also needs up to 30 s (instead of 5 s) to come back after such a
-   flap; the idle CPU it saves was the bigger cost.
-2. **Telemetry is the next limit.** Profile the mower page's requests (zones, tracking, state,
-   map, capabilities, positions): cache what changes rarely per mower (map, zones, capabilities,
-   aerial availability) with ETags and `Cache-Control: private, max-age`, return the 7-day RTK
-   positions in a compact form (or let the client ask for them only when the RTK layer is
-   opened), and consider a second Uvicorn worker for Telemetry only. Fewer, combined requests per
-   page would help every service.
+1. **Overload turns into an outage through the healthcheck.** Done
+   ([Overload without an outage](#overload-without-an-outage), ADR 0077): the healthcheck asks
+   `/startupz`, readiness has its own database connection, Traefik keeps the routes of an
+   unhealthy container.
+2. **Telemetry is the next limit.** Partly done (one connection per request, the zone view's
+   queries, lean position tracks). Still open: cache what changes rarely per mower (map, zones,
+   capabilities, aerial availability) with ETags and `Cache-Control: private, max-age`, and let
+   the web app ask for the 7-day RTK positions only when the RTK panel is opened, or in a compact
+   form. Fewer, combined requests per page would help every service.
 3. **Smooth arrivals at the edge.** Most of the cost is in the first seconds of a visit. A
    Cloudflare rule that caches `/_app/immutable/*` and a short queue or rate rule on "Try the
    demo" (already suggested in [Public demo](demo.md)) would keep a burst of new visitors (a
    link on a busy page) from slowing everybody down.
-4. **Postgres connections.** Every database service may open 5 + 10 connections and OpenFGA 30:
-   up to 150 against `max_connections` 100. The tests peaked at 77 (90 with 200 clicking users).
-   Either raise `max_connections` (for example `-c max_connections=200`, cheap on a 7.8 GB host)
-   or lower `max_overflow` of the services, before a burst runs into "too many clients".
+4. **Postgres connections.** Done: pools of 5 + 5 (Telemetry 10 + 5) instead of 5 + 10,
+   `max_connections=200`, the budget in [Compose: Database connections](compose.md#database-connections).
 5. **OpenFGA cost per check.** About 20 datastore reads per `can_view` check, and the
    `current_time` context at microsecond resolution means OpenFGA's own check cache cannot hit.
    Rounding `current_time` to the minute (support grants expire at most a minute late) and
@@ -253,10 +314,9 @@ Bigger changes, not made here:
 6. **Fleet has no command limit per user or session.** In the demo only the per-address gateway
    limit (1200 requests a minute) bounds how fast one visitor can command the shared mowers.
    A per-session limit of a few commands a second would not hurt anybody.
-7. **Logs of failed authorization checks lose their cause.** `mowdeck_authz` logs the operation
-   and error type as `extra`, which the service kit's JSON log drops; the cause of the denials
-   above (`TimeoutError`) was only visible by reproducing them. Keeping selected `extra` fields in
-   the JSON log would make such incidents visible.
+7. **Logs of failed authorization checks lose their cause.** Done: the JSON log keeps the
+   `extra` fields of standard library records (secrets masked), so a denial names its
+   `operation` and `error` (`TimeoutError`).
 8. **Traefik's memory** grew with the open sockets and the per-address buckets to about 250 MB at
    400 visitors. If the host limits containers, give the gateway at least 512 MB.
 9. **OpenFGA logs every request at INFO** (`grpc_req_complete` with the request body).
