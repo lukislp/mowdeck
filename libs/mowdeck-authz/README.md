@@ -64,11 +64,13 @@ Settings (`AuthzSettings.from_env()`):
 
 Every error (no connection, timeout, HTTP error, a per-item error in a batch, unknown store or model) answers **`False`**, logs a warning on the `mowdeck_authz` logger and increments `mowdeck_authz_errors_total{operation}`. A check never raises, so there is no exception that a caller could mistake for "allowed". Errors are never cached. Readiness (`ping()`, the `authz` readiness check) reports the outage.
 
-Metrics when a registry is passed: `mowdeck_authz_decisions_total{outcome="allowed|denied"}`, `mowdeck_authz_cache_hits_total`, `mowdeck_authz_errors_total{operation}`.
+Metrics when a registry is passed: `mowdeck_authz_decisions_total{outcome="allowed|denied"}`, `mowdeck_authz_cache_hits_total`, `mowdeck_authz_coalesced_total`, `mowdeck_authz_errors_total{operation}`.
 
 ### Cache
 
 Decisions (positive and negative) are cached in-process for `cache_ttl_seconds` (default 5 s), keyed by subject, relation, object and the caller's context, LRU bounded (10 000 entries). `invalidate()` drops everything, `invalidate_subject(subject)` drops one subject. `TupleWriter` calls them for its own process; other processes see a change after at most one TTL. The automatic `current_time` is not part of the key, so an expired support grant may live on for one TTL. `can_manage_users`, `can_manage_billing` and `can_manage_account` are never cached. `list_objects` is never cached.
+
+**One question in flight.** A cacheable check whose key another request of the process is already asking waits for that answer instead of asking OpenFGA again (`mowdeck_authz_coalesced_total` counts them). A page load fires a dozen requests that all check the same mower, and in the public demo every visitor is the same subject: without this, a burst of identical checks queued up in OpenFGA (each one is about 20 datastore reads with this model) until they ran into the 2 s timeout and were denied (docs/ops/load-testing.md). Waiters get what the cache would have given them a moment later. If the asking request fails, its waiters are denied too (fail closed, nothing cached); if it is cancelled, each waiter asks itself. Sensitive relations and a TTL of 0 never join, and `invalidate()`/`invalidate_subject()` also stop later checks from joining a question asked before the change.
 
 ### Batch
 
