@@ -1,5 +1,6 @@
 """A scriptable stand-in for ``openfga_sdk.OpenFgaClient`` (shared by the authz unit tests)."""
 
+import asyncio
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -44,10 +45,16 @@ class FakeFgaClient:
         self.read_pages: list[SimpleNamespace] = []
         self.closed = False
         self.page_size_stores = 100
+        # When set, check and batch_check wait for it (to hold questions in flight).
+        self.gate: asyncio.Event | None = None
 
     def _maybe_fail(self, name: str) -> None:
         if name in self.fail:
             raise self.fail[name]
+
+    async def _wait_gate(self) -> None:
+        if self.gate is not None:
+            await self.gate.wait()
 
     def set_store_id(self, value: str) -> None:
         self.store_id = value
@@ -104,6 +111,7 @@ class FakeFgaClient:
 
     async def check(self, body: Any, options: dict[str, Any] | None = None) -> Any:
         self.calls.append(("check", body))
+        await self._wait_gate()
         self._maybe_fail("check")
         return SimpleNamespace(
             allowed=self.allowed(body.user, body.relation, body.object, body.context)
@@ -111,6 +119,7 @@ class FakeFgaClient:
 
     async def batch_check(self, body: Any, options: dict[str, Any] | None = None) -> Any:
         self.calls.append(("batch_check", body))
+        await self._wait_gate()
         self._maybe_fail("batch_check")
         results = []
         for item in reversed(body.checks):  # order must not matter
