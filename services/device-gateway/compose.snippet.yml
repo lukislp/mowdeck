@@ -17,6 +17,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: device-gateway
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_DEVICE_GATEWAY:?set NATS_PASSWORD_DEVICE_GATEWAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_SHARD_INDEX: "0"
       MOWDECK_SHARD_COUNT: "1"
       # Development only: seeds the registry until Fleet exists (see .env.example).
@@ -43,4 +45,6 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
     networks: [mowdeck]

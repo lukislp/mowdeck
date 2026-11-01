@@ -6,6 +6,19 @@ secrets:
   OPENFGA_AUTHN_PRESHARED_KEYS: kind-placeholder-openfga-key
   IDENTITY_KEY_ENCRYPTION_KEY: a2luZC1wbGFjZWhvbGRlci1rZXktbm90LXNlY3JldDA=
   SERVICE_DB_PASSWORD: kind-placeholder-db-password
+  NATS_PASSWORD_BILLING: kind-placeholder-nats-billing-password
+  NATS_PASSWORD_CAMERA_RELAY: kind-placeholder-nats-camera-relay-password
+  NATS_PASSWORD_DEVICE_GATEWAY: kind-placeholder-nats-device-gateway-password
+  NATS_PASSWORD_ENTITLEMENTS: kind-placeholder-nats-entitlements-password
+  NATS_PASSWORD_FLEET: kind-placeholder-nats-fleet-password
+  NATS_PASSWORD_IDENTITY: kind-placeholder-nats-identity-password
+  NATS_PASSWORD_NOTIFICATIONS: kind-placeholder-nats-notifications-password
+  NATS_PASSWORD_PLANNER: kind-placeholder-nats-planner-password
+  NATS_PASSWORD_REALTIME: kind-placeholder-nats-realtime-password
+  NATS_PASSWORD_SCHEDULER: kind-placeholder-nats-scheduler-password
+  NATS_PASSWORD_STREAMS: kind-placeholder-nats-streams-password
+  NATS_PASSWORD_TELEMETRY: kind-placeholder-nats-telemetry-password
+  NATS_PASSWORD_VISION: kind-placeholder-nats-vision-password
 config:
   MOWDECK_ENVIRONMENT: dev
   IDENTITY_REFRESH_COOKIE_SECURE: "false"

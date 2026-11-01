@@ -10,6 +10,7 @@ reads the configuration).
 import importlib.util
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -80,6 +81,12 @@ def _bin(tmp_path: Path, *, fake_docker: bool) -> Path:
     return bin_dir
 
 
+def _nats_passwords(compose: Path) -> list[str]:
+    """The NATS_PASSWORD_* variables of nats/auth.conf (ADR 0074)."""
+    text = (compose / "nats" / "auth.conf").read_text("utf-8")
+    return sorted(set(re.findall(r"\$(NATS_PASSWORD_[A-Z0-9_]+)", text)))
+
+
 def _demo_env(compose: Path, *extra: str) -> None:
     lines = [
         "COMPOSE_PROJECT_NAME=mowdeck-demo",
@@ -87,6 +94,8 @@ def _demo_env(compose: Path, *extra: str) -> None:
         "MOWDECK_TRAEFIK_PROJECT=mowdeck-demo",
         "COMPOSE_PROFILES=",
         *(f"{name}={SECRET_VALUE}" for name in SECRETS),
+        # A NATS password starts with a letter (the server parses it as a config value).
+        *(f"{name}=n{SECRET_VALUE}" for name in _nats_passwords(compose)),
         *extra,
     ]
     (compose / "demo" / "demo.env").write_text("\n".join(lines) + "\n", "utf-8", newline="\n")
@@ -94,11 +103,15 @@ def _demo_env(compose: Path, *extra: str) -> None:
 
 @pytest.fixture
 def stack(repo_root: Path, tmp_path: Path) -> Path:
-    """A copy of reset.sh and the guard with a filled demo.env and the stand-in docker."""
+    """A copy of reset.sh, the guard and the NATS password check with a filled demo.env and the
+    stand-in docker."""
     compose = tmp_path / "compose"
     (compose / "demo").mkdir(parents=True)
+    (compose / "nats").mkdir()
     for name in ("reset.sh", "override_guard.py"):
         shutil.copy(repo_root / "infra" / "compose" / "demo" / name, compose / "demo")
+    shutil.copy(repo_root / "infra" / "compose" / "nats-passwords.sh", compose)
+    shutil.copy(repo_root / "infra" / "compose" / "nats" / "auth.conf", compose / "nats")
     _demo_env(compose)
     _bin(tmp_path, fake_docker=True)
     return compose
@@ -173,6 +186,9 @@ def test_override_cannot_weaken_the_demo(stack: Path, variable: str, path: str) 
         ("COMPOSE_PROJECT_NAME", "mowdeck", "must not be mowdeck"),
         ("COMPOSE_PROFILES", "billing", "COMPOSE_PROFILES must stay empty"),
         ("DEMO_SEED_TOKEN", "change-me", "set DEMO_SEED_TOKEN"),
+        ("NATS_PASSWORD_FLEET", "change-me", "set the NATS passwords"),
+        ("NATS_PASSWORD_STREAMS", "", "set the NATS passwords"),
+        ("NATS_PASSWORD_VISION", "1digit-first-password-0123456789", "set the NATS passwords"),
     ],
 )
 def test_the_safety_checks_hold_with_an_override(
@@ -454,6 +470,9 @@ REFUSED = {
     "seed-history": 'services:\n  demo-seed:\n    environment:\n      DEMO_HISTORY_DAYS: "31"\n',
     "replicas": "services:\n  realtime:\n    deploy:\n      replicas: 3\n",
     "own-network": "services:\n  nats:\n    networks: [open]\nnetworks:\n  open: {}\n",
+    "nats-without-authentication": (
+        'services:\n  nats:\n    command: ["-js", "-m", "8222", "-sd", "/data"]\n'
+    ),
     "nats-on-edge": (
         "services:\n  nats:\n    networks:\n      mowdeck: {}\n      mowdeck-demo-edge: {}\n"
         "networks:\n  mowdeck-demo-edge:\n    external: true\n"

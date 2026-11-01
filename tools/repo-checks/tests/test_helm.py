@@ -33,6 +33,12 @@ REPLACED = {
     "agora-bridge": "a second container of the camera-relay pod (cameraRelay.agoraBridge)",
 }
 
+# One-shot Compose jobs the chart runs as a Job per release revision (templates/<name>.yaml).
+JOBS = {
+    "authz-bootstrap": "the OpenFGA store and model",
+    "nats-streams": "the JetStream streams (ADR 0074)",
+}
+
 # Compose services the chart runs with a template of their own instead of mowdeck.workload.
 THIRD_PARTY = {
     "mediamtx": "MediaMTX, a third-party image with its own config (files/mediamtx.yml)",
@@ -80,7 +86,9 @@ def test_every_compose_service_has_a_template(repo_root: Path) -> None:
         text = path.read_text("utf-8")
         if name in THIRD_PARTY:
             assert "kind: Deployment" in text, f"{name}: no Deployment"
-        elif name != "authz-bootstrap":
+        elif name in JOBS:
+            assert "kind: Job" in text, f"{name}: no Job"
+        else:
             assert "mowdeck.workload" in text, f"{name}: no workload"
 
 
@@ -219,19 +227,21 @@ def test_rendered_containers_get_the_compose_settings(repo_root: Path) -> None:
     workloads = {
         d["metadata"]["name"]: d for d in docs if d["kind"] in {"Deployment", "StatefulSet"}
     }
-    jobs = [d["metadata"]["name"] for d in docs if d["kind"] == "Job"]
+    jobs = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Job"}
     for name, service in _compose(repo_root).items():
         if name in REPLACED:
             continue
-        if name.endswith("-migrate"):
+        if name.endswith("-migrate") or name == "authz-bootstrap":
             assert any(job.startswith(f"mowdeck-{name}") for job in jobs), f"no Job for {name}"
             continue
-        if name == "authz-bootstrap":
-            assert any(job.startswith("mowdeck-authz-bootstrap") for job in jobs)
-            continue
-        workload = workloads.get(f"mowdeck-{name}")
-        assert workload, f"Compose service {name} has no Deployment or StatefulSet"
-        container = workload["spec"]["template"]["spec"]["containers"][0]
+        if name in JOBS:
+            job = next((d for j, d in jobs.items() if j.startswith(f"mowdeck-{name}")), None)
+            assert job, f"no Job for {name}"
+            container = job["spec"]["template"]["spec"]["containers"][0]
+        else:
+            workload = workloads.get(f"mowdeck-{name}")
+            assert workload, f"Compose service {name} has no Deployment or StatefulSet"
+            container = workload["spec"]["template"]["spec"]["containers"][0]
         rendered = set(config_maps.get(f"mowdeck-{name}", {}))
         rendered |= {e["name"] for e in container.get("env", [])}
         prefix = "MTX_" if name in THIRD_PARTY else "MOWDECK_"

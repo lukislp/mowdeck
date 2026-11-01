@@ -219,6 +219,10 @@ capability-matrix-check = "python tools/repo-checks/scripts/capability_matrix.py
 # OpenAPI documents: docs/architecture/generated.md.
 arch-diagrams = "python tools/repo-checks/scripts/arch_diagrams.py"
 arch-diagrams-check = "python tools/repo-checks/scripts/arch_diagrams.py --check"
+# NATS users and permissions (ADR 0074) rendered from the subject map in the script:
+# infra/compose/nats/auth.conf and the Helm chart's files/nats-auth.conf.
+nats-auth = "python tools/repo-checks/scripts/nats_auth.py"
+nats-auth-check = "python tools/repo-checks/scripts/nats_auth.py --check"
 compose-check ="docker compose -f infra/compose/docker-compose.yml --env-file infra/compose/.env.example config -q"
 # OpenFGA model tests with the pinned CLI image (same as the openfga-model CI job).
 fga-test = "docker run --rm -v ${POE_ROOT}/infra/openfga:/w -w /w openfga/cli:v0.8.1 model test --tests model.fga.yaml"

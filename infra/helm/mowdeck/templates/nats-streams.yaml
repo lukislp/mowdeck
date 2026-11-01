@@ -1,0 +1,61 @@
+{{- /*
+JetStream streams (ADR 0074; Compose service nats-streams): creates the streams and updates them
+to the contract settings as the NATS user "streams", the only user allowed to. One Job per
+release revision (Jobs are immutable); the services wait for the streams on connect.
+*/ -}}
+{{- $j := .Values.natsStreams }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-nats-streams-r%d" (include "mowdeck.fullname" .) (int .Release.Revision) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "nats-streams") | nindent 4 }}
+spec:
+  backoffLimit: {{ $j.backoffLimit }}
+  ttlSecondsAfterFinished: {{ $j.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "mowdeck.selectorLabels" (dict "ctx" . "component" "nats-streams") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "mowdeck.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- include "mowdeck.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "mowdeck.scheduling" (dict "ctx" . "values" dict "component" "nats-streams") | nindent 6 }}
+      containers:
+        - name: nats-streams
+          image: {{ include "mowdeck.image" (dict "ctx" . "image" "identity") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "mowdeck_service_kit.bus.streams"]
+          env:
+            - name: MOWDECK_NATS_URL
+              value: {{ include "mowdeck.natsUrl" . | quote }}
+            - name: MOWDECK_NATS_USER
+              value: streams
+            - name: MOWDECK_NATS_PASSWORD_FILE
+              value: /run/secrets/nats/password
+            - name: MOWDECK_LOG_FORMAT
+              value: json
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml $j.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+            - {name: nats-auth, mountPath: /run/secrets/nats, readOnly: true}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
+        - name: nats-auth
+          secret:
+            secretName: {{ .Values.natsAuth.secretName }}
+            defaultMode: 0440
+            items:
+              - key: streams
+                path: password

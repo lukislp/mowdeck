@@ -1,5 +1,9 @@
 # Compose block for {{ service_name }}: paste the entries below "services:" into
 # infra/compose/docker-compose.yml. Build context is the repository root.
+# NATS (ADR 0074): add the user {{ service_name }} with the subjects it uses to USERS in
+# tools/repo-checks/scripts/nats_auth.py, run `uv run poe nats-auth`, and add
+# NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }} to the nats service, .env.example,
+# demo/demo.env.example and secrets of the Helm chart's values.yaml.
 services:
 {%- if needs_db %}
   {{ service_name }}-migrate:
@@ -37,6 +41,8 @@ services:
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: {{ service_name }}
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }}:?set NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }} in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
 {%- if needs_db %}
       MOWDECK_DATABASE_URL: postgresql://{{ package_name }}:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/{{ package_name }}
 {%- endif %}
@@ -54,6 +60,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
 {%- if needs_db %}
       {{ service_name }}-migrate:
         condition: service_completed_successfully

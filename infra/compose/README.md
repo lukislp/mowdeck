@@ -31,7 +31,8 @@ A public demo with simulated mowers (one-click "Try the demo", reset every few h
 | Service | Image (pinned) | Host port | Purpose |
 | --- | --- | --- | --- |
 | traefik | `public.ecr.aws/docker/library/traefik:v3.7.14` | 80, 443 | Gateway; docker provider, dashboard disabled, `/api/v1/<service>` routing by labels |
-| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222, 127.0.0.1:8222 | Event bus with JetStream; monitoring and `/healthz` on 8222 |
+| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222, 127.0.0.1:8222 | Event bus with JetStream; monitoring and `/healthz` on 8222. One user per service with least-privilege permissions (`nats/auth.conf`, generated; passwords `NATS_PASSWORD_*` from `./nats-passwords.sh .env`; [ADR 0074](../../docs/adr/0074-nats-authentication-and-subject-permissions.md)) |
+| nats-streams | identity image | none | One-shot: creates and updates the JetStream streams as the user `streams`; the services start after it |
 | postgres | `public.ecr.aws/docker/library/postgres:17.11-alpine` | 127.0.0.1:5432 | One database and one role per service (see `init/01-databases.sql`) |
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | none | One-shot schema migration for OpenFGA |
 | openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) | Authorization; playground off, pre-shared key auth |

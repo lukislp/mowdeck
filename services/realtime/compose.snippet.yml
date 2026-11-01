@@ -18,6 +18,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: realtime
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_REALTIME:?set NATS_PASSWORD_REALTIME in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
@@ -41,6 +43,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       authz-bootstrap:

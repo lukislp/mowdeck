@@ -144,3 +144,66 @@ def test_field_docstrings_become_descriptions() -> None:
     description = ServiceSettings.model_fields["shutdown_grace_seconds"].description
     assert description is not None
     assert "grace" in description.lower() or "budget" in description.lower()
+
+
+def test_nats_credentials_default_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MOWDECK_SERVICE_NAME", "fleet")
+    settings = ServiceSettings.from_env()
+    assert settings.nats_user is None
+    assert settings.nats_password is None
+    assert settings.nats_inbox_prefix == "_INBOX"
+    assert settings.nats_streams_managed is True
+
+
+def test_nats_credentials_from_env_and_secret_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret = tmp_path / "nats_password"
+    secret.write_text("n0t-a-real-password-0123456789\n", encoding="utf-8")
+    monkeypatch.setenv("MOWDECK_SERVICE_NAME", "device-gateway")
+    monkeypatch.setenv("MOWDECK_NATS_USER", "device-gateway")
+    monkeypatch.setenv("MOWDECK_NATS_PASSWORD_FILE", str(secret))
+    settings = ServiceSettings.from_env()
+    assert settings.nats_user == "device-gateway"
+    assert settings.nats_password is not None
+    assert settings.nats_password.get_secret_value() == "n0t-a-real-password-0123456789"
+    assert "n0t-a-real" not in repr(settings)
+    assert settings.nats_inbox_prefix == "_INBOX.device-gateway"
+    # With per-service credentials the nats-streams job manages the streams (ADR 0074).
+    assert settings.nats_streams_managed is False
+
+
+def test_nats_manage_streams_can_be_set_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MOWDECK_SERVICE_NAME", "nats-streams")
+    monkeypatch.setenv("MOWDECK_NATS_USER", "streams")
+    monkeypatch.setenv("MOWDECK_NATS_PASSWORD", "streams-password-0123456789")
+    monkeypatch.setenv("MOWDECK_NATS_MANAGE_STREAMS", "true")
+    assert ServiceSettings.from_env().nats_streams_managed is True
+    monkeypatch.setenv("MOWDECK_NATS_MANAGE_STREAMS", "")
+    assert ServiceSettings.from_env().nats_streams_managed is False
+
+
+@pytest.mark.parametrize(
+    ("user", "password"),
+    [("fleet", ""), ("", "only-a-password-0123456789")],
+)
+def test_nats_user_and_password_come_together(
+    monkeypatch: pytest.MonkeyPatch, user: str, password: str
+) -> None:
+    monkeypatch.setenv("MOWDECK_SERVICE_NAME", "fleet")
+    monkeypatch.setenv("MOWDECK_NATS_USER", user)
+    monkeypatch.setenv("MOWDECK_NATS_PASSWORD", password)
+    with pytest.raises(
+        ValidationError, match="MOWDECK_NATS_USER and MOWDECK_NATS_PASSWORD"
+    ) as info:
+        ServiceSettings.from_env()
+    assert "only-a-password" not in str(info.value)
+
+
+@pytest.mark.parametrize("user", ["Fleet", "fleet.x", "_INBOX", "a b"])
+def test_nats_user_must_be_one_subject_token(monkeypatch: pytest.MonkeyPatch, user: str) -> None:
+    monkeypatch.setenv("MOWDECK_SERVICE_NAME", "fleet")
+    monkeypatch.setenv("MOWDECK_NATS_USER", user)
+    monkeypatch.setenv("MOWDECK_NATS_PASSWORD", "password-0123456789")
+    with pytest.raises(ValidationError, match="nats_user"):
+        ServiceSettings.from_env()

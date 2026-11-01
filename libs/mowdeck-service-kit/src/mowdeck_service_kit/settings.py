@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
@@ -24,6 +24,8 @@ from mowdeck_service_kit.source import source_code_url
 
 ENV_PREFIX = "MOWDECK_"
 FILE_SUFFIX = "_FILE"
+NATS_INBOX = "_INBOX"
+"""Default inbox prefix of NATS clients; a service with credentials uses ``_INBOX.<user>``."""
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -97,6 +99,23 @@ class ServiceSettings(BaseSettings):
     nats_enabled: bool = True
     """Connect to NATS on startup. Disable for services without bus traffic and in tests."""
 
+    nats_user: str | None = Field(default=None, max_length=64, pattern=r"^[a-z][a-z0-9\-]*$")
+    """User name of this service on NATS (``MOWDECK_NATS_USER``, ADR 0074); empty: connect
+    without credentials (development, tests). It also names the service's reply inbox
+    ``_INBOX.<user>``, the only inbox its permissions let it subscribe to."""
+
+    nats_password: SecretStr | None = None
+    """Password of ``nats_user`` (``MOWDECK_NATS_PASSWORD`` or, better, ``_FILE``). Never logged."""
+
+    nats_manage_streams: bool | None = None
+    """Create and update the JetStream streams on connect. Empty: only without ``nats_user``
+    (development, tests); with per-service credentials the one-shot job ``nats-streams``
+    (``python -m mowdeck_service_kit.bus.streams``) does it and the services wait for the
+    streams instead (ADR 0074)."""
+
+    nats_stream_wait_seconds: float = Field(default=120.0, ge=0, le=3600)
+    """How long a service that does not manage the streams waits for them on connect."""
+
     database_url: SecretStr | None = None
     """PostgreSQL URL, e.g. ``postgresql://user:pass@host/db``. Usually given as ``_FILE``."""
 
@@ -150,10 +169,19 @@ class ServiceSettings(BaseSettings):
     address is the entry this many places left of the gateway's own (see
     :mod:`mowdeck_service_kit.client_address`). Empty: the leftmost entry, as before."""
 
-    @field_validator("client_ip_depth", mode="before")
+    @field_validator(
+        "client_ip_depth", "nats_user", "nats_password", "nats_manage_streams", mode="before"
+    )
     @classmethod
-    def _empty_depth_is_unset(cls, value: Any) -> Any:
+    def _empty_is_unset(cls, value: Any) -> Any:
         return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _nats_credentials_come_in_pairs(self) -> Self:
+        if (self.nats_user is None) != (self.nats_password is None):
+            msg = "set both MOWDECK_NATS_USER and MOWDECK_NATS_PASSWORD (or neither)"
+            raise ValueError(msg)
+        return self
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -176,6 +204,18 @@ class ServiceSettings(BaseSettings):
     def nats_servers(self) -> list[str]:
         """``nats_url`` split into a list of server URLs."""
         return [url.strip() for url in self.nats_url.split(",") if url.strip()]
+
+    @property
+    def nats_inbox_prefix(self) -> str:
+        """Prefix of the reply and delivery inboxes: ``_INBOX.<nats_user>``, else ``_INBOX``."""
+        return f"{NATS_INBOX}.{self.nats_user}" if self.nats_user else NATS_INBOX
+
+    @property
+    def nats_streams_managed(self) -> bool:
+        """Whether this process creates and updates the streams (see ``nats_manage_streams``)."""
+        if self.nats_manage_streams is not None:
+            return self.nats_manage_streams
+        return self.nats_user is None
 
     @classmethod
     def from_env(cls) -> Self:

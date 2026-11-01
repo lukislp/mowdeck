@@ -9,7 +9,8 @@
 #   2. backup into ${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}: a copy of .env and a gzip'd
 #      pg_dumpall, whose last lines must say "PostgreSQL database cluster dump complete"
 #   3. git checkout --detach v<version>  (refuses a checkout with local changes)
-#   4. ./verify-release.sh <version>      (fails closed: nothing is pulled when it fails)
+#   4. ./verify-release.sh <version>      (fails closed: nothing is pulled when it fails), then
+#      ./nats-passwords.sh --check .env   (the release's NATS passwords, ADR 0074)
 #   5. MOWDECK_VERSION=<version> in .env
 #   6. docker compose pull
 #   7. open the maintenance window in Notifications, so the restart of the Device-Gateway sends
@@ -113,8 +114,14 @@ main() {
   fi
   run git checkout --detach "v$version"
 
-  step "4/9 verify the release images"
+  step "4/9 verify the release images and the secrets it needs"
   run ./verify-release.sh "$version"
+  # A release may need secrets an older one did not (ADR 0074: one NATS password per service).
+  # Checked before .env or a container changes; the script names what is missing, never a value.
+  if [ -f ./nats-passwords.sh ]; then
+    run bash ./nats-passwords.sh --check .env ||
+      die "the NATS passwords are missing in .env: run ./nats-passwords.sh .env, then deploy again"
+  fi
 
   step "5/9 set MOWDECK_VERSION=$version in .env"
   if [ "$dry_run" -eq 1 ]; then

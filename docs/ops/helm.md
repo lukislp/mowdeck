@@ -73,6 +73,7 @@ Error: execution error at (mowdeck/templates/secrets.yaml): secrets.IDENTITY_KEY
 | `secrets.IDENTITY_KEY_ENCRYPTION_KEY` | yes | `python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"` |
 | `secrets.SERVICE_DB_PASSWORD` or `secrets.databasePasswords.<role>` | yes, unless every database URL comes from `existingSecret` | `openssl rand -hex 24` (one per role in production) |
 | `secrets.NOTIFICATIONS_VAPID_PRIVATE_KEY` | for more than one Notifications replica (the chart refuses otherwise) | `python -m notifications.cli generate-vapid-keys`; put the public key into `config.NOTIFICATIONS_VAPID_PUBLIC_KEY` |
+| `secrets.NATS_PASSWORD_<USER>`, one per NATS user: `BILLING`, `CAMERA_RELAY`, `DEVICE_GATEWAY`, `ENTITLEMENTS`, `FLEET`, `IDENTITY`, `NOTIFICATIONS`, `PLANNER`, `REALTIME`, `SCHEDULER`, `STREAMS`, `TELEMETRY`, `VISION` | yes, all of them (also of disabled services), unless `natsAuth.createSecret: false` | `printf 'n%s\n' "$(openssl rand -hex 24)"` each (24 to 128 letters, digits, `-`, `_`, starting with a letter; the render refuses others) |
 
 Keep them in a values file outside the repository (or encrypted with [SOPS](https://github.com/getsops/sops)) and pass it with `-f`. Alternatively create the Secrets yourself (for example with External Secrets or Sealed Secrets) and reference them:
 
@@ -83,6 +84,11 @@ secrets:
                                        #   notifications-vapid-private-key
 openfgaSecret:
   create: false                        # Secret "mowdeck-openfga" with the keys "keys" and "uri"
+natsAuth:
+  createSecret: false                  # Secret "mowdeck-nats-auth", one key per NATS user:
+                                       #   billing, camera-relay, device-gateway, entitlements, fleet,
+                                       #   identity, notifications, planner, realtime, scheduler,
+                                       #   streams, telemetry, vision
 postgresql:
   cloudnativepg:
     createRoleSecrets: false           # basic-auth Secrets mowdeck-db-<role> (username, password)
@@ -120,6 +126,10 @@ Create the databases and roles first, like `infra/compose/init/01-databases.sql`
 ## NATS and OpenFGA
 
 NATS runs as a StatefulSet with JetStream on a PVC (`nats.config.jetstream.fileStore.pvc.size`); `values-cloud.yaml` enables a three node cluster (`nats.config.cluster`), which JetStream needs for replicated streams. The config reloader and nats-box are disabled. To use an existing NATS cluster with JetStream set `nats.enabled: false` and `natsUrl`.
+
+**Users and permissions** ([ADR 0074](../adr/0074-nats-authentication-and-subject-permissions.md)). Every service connects as its own user (`MOWDECK_NATS_USER`, its password as the file `/run/secrets/nats/password` from the Secret `natsAuth.secretName`, only its own key) and may use only the subjects its code uses. The users and permissions are `files/nats-auth.conf` (generated, identical to the Compose stack's `infra/compose/nats/auth.conf`); the chart puts it into the ConfigMap `natsAuth.configMapName`, which the NATS server includes (`nats.config.merge`, `nats.podTemplate.patch`), and gives the server every password from the Secret (`nats.container.env`). The names in those `nats.*` values are fixed: change `natsAuth.secretName` or `natsAuth.configMapName` only together with them. The Job `mowdeck-nats-streams-r<revision>` (identity image) creates and updates the JetStream streams as the user `streams`; the services wait for the streams on start (up to two minutes, then they restart). With an external NATS, configure the users of `files/nats-auth.conf` there (the passwords as the environment variables `NATS_PASSWORD_<USER>` of the server).
+
+Rotating a password: change `secrets.NATS_PASSWORD_<USER>` (or your Secret), `helm upgrade` (the service pods restart through their secrets checksum), then restart NATS so it reads the new value: `kubectl -n mowdeck rollout restart statefulset mowdeck-nats`.
 
 OpenFGA uses the postgres datastore in the `openfga` database; its migration runs as an init container of the OpenFGA pods (`openfga.datastore.migrationType: initContainer`), which retries until the database exists and needs neither the chart's default `k8s-wait-for` image nor extra RBAC. The playground is off and the pods run read-only as uid 65532. For an external OpenFGA set `openfga.enabled: false` and `config.OPENFGA_API_URL`.
 
@@ -270,6 +280,8 @@ Migrations never run inside a service process. How they run depends on where the
 
 - **External PostgreSQL (hook mode):** every service's migration Job is a `pre-install,pre-upgrade` hook ordered by `helm.sh/hook-weight` (identity 1, fleet 2, telemetry 3, notifications 4, scheduler 5, entitlements 6, billing 7, planner 8, vision 9; their database URLs come from a hook Secret with weight -10). Helm waits for all of them before it changes any Deployment, and a failed migration stops the upgrade.
 - **In-cluster CloudNativePG (job mode):** the database is created by the release itself and does not exist yet when `pre-install` hooks run, so the migrations are ordinary Jobs named per revision (`mowdeck-<service>-migrate-r<revision>`; Helm removes them with the next upgrade, Kubernetes after `migrations.ttlSecondsAfterFinished`). Each Job first waits in its init container `wait-for-database` (at most `migrations.waitTimeoutSeconds`) until the operator has started PostgreSQL and created the service's role and database, so on a fresh install the migration runs once instead of failing and being retried until the database exists. The new pods wait in `wait-for-schema` until their Job has migrated the database, the old pods keep serving meanwhile.
+
+**Upgrading from a release before ADR 0074** (NATS without authentication): the render fails until every `secrets.NATS_PASSWORD_*` is given (or `natsAuth.createSecret: false` with your own Secret); add them to your secrets values file first. During the rolling update the old pods lose their NATS connection once the server restarts with the users (they have no credentials) until they are replaced; the new pods move their durable JetStream consumers to their own inbox without losing their position.
 
 Migrations are backward compatible (the template's rule), so old pods run against a migrated database during the rolling update, and `wait-for-schema` lets an older image start against a newer schema. Configuration changes roll the pods (checksum annotations). The authorization model follows the same pattern: the bootstrap Job of the new revision writes the model, and the new pods start only once the latest model equals the one in their release (`wait-for-model`), so no pod pins an older model. Rolling back: [Releases](release.md#rolling-back).
 

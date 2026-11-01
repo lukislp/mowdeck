@@ -361,6 +361,24 @@ secrets:
   # than one replica without it). Generate once:
   #   kubectl run vapid --rm -it --image=<registry>/notifications:<tag> -- python -m notifications.cli generate-vapid-keys
   NOTIFICATIONS_VAPID_PRIVATE_KEY: ""
+  # -- NATS passwords, one per user (ADR 0074): every service connects as its own user and may
+  # use only its own subjects (files/nats-auth.conf); "streams" is the nats-streams Job. All are
+  # required while natsAuth.createSecret, also of disabled services (the server's configuration
+  # names every user). 24 to 128 letters, digits, '-' and '_', starting with a letter:
+  #   printf 'n%s\n' "$(openssl rand -hex 24)"
+  NATS_PASSWORD_BILLING: ""
+  NATS_PASSWORD_CAMERA_RELAY: ""
+  NATS_PASSWORD_DEVICE_GATEWAY: ""
+  NATS_PASSWORD_ENTITLEMENTS: ""
+  NATS_PASSWORD_FLEET: ""
+  NATS_PASSWORD_IDENTITY: ""
+  NATS_PASSWORD_NOTIFICATIONS: ""
+  NATS_PASSWORD_PLANNER: ""
+  NATS_PASSWORD_REALTIME: ""
+  NATS_PASSWORD_SCHEDULER: ""
+  NATS_PASSWORD_STREAMS: ""
+  NATS_PASSWORD_TELEMETRY: ""
+  NATS_PASSWORD_VISION: ""
 # The PostgreSQL superuser (Compose: POSTGRES_USER, POSTGRES_PASSWORD) is managed by
 # CloudNativePG (secret <cluster>-superuser, disabled by default) or by your database provider;
 # the services never use it.
@@ -372,6 +390,28 @@ openfgaSecret:
   # false: create a Secret with the keys "keys" and "uri" yourself.
   create: true
   name: mowdeck-openfga
+
+# NATS users (ADR 0074). The Secret secretName holds one password per user (keys: the user names
+# billing, camera-relay, device-gateway, entitlements, fleet, identity, notifications, planner,
+# realtime, scheduler, streams, telemetry, vision); the NATS server reads all of them
+# (nats.container.env below), each service only its own, as a file. The ConfigMap
+# configMapName holds files/nats-auth.conf (users and permissions), which the NATS server of
+# the subchart includes (nats.config.merge below). Both names are fixed in the nats values.
+natsAuth:
+  # -- Create the Secret from secrets.NATS_PASSWORD_*. false: create it yourself.
+  createSecret: true
+  secretName: mowdeck-nats-auth
+  configMapName: mowdeck-nats-auth
+
+# Job (one per release revision) that creates the JetStream streams and updates them to the
+# contract settings, as the NATS user "streams" (identity image, python -m
+# mowdeck_service_kit.bus.streams). The services wait for the streams; no service may change one.
+natsStreams:
+  backoffLimit: 20
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {memory: 256Mi}
 
 # --- PostgreSQL ---
 # One database and one role per service, like the Compose stack. Two options:
@@ -862,7 +902,36 @@ nats:
     resources:
       requests: {cpu: 50m, memory: 64Mi}
       limits: {memory: 512Mi}
+    # The passwords of the users of files/nats-auth.conf (Secret natsAuth.secretName).
+    env:
+      NATS_PASSWORD_BILLING: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: billing}}}
+      NATS_PASSWORD_CAMERA_RELAY: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: camera-relay}}}
+      NATS_PASSWORD_DEVICE_GATEWAY: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: device-gateway}}}
+      NATS_PASSWORD_ENTITLEMENTS: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: entitlements}}}
+      NATS_PASSWORD_FLEET: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: fleet}}}
+      NATS_PASSWORD_IDENTITY: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: identity}}}
+      NATS_PASSWORD_NOTIFICATIONS: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: notifications}}}
+      NATS_PASSWORD_PLANNER: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: planner}}}
+      NATS_PASSWORD_REALTIME: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: realtime}}}
+      NATS_PASSWORD_SCHEDULER: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: scheduler}}}
+      NATS_PASSWORD_STREAMS: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: streams}}}
+      NATS_PASSWORD_TELEMETRY: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: telemetry}}}
+      NATS_PASSWORD_VISION: {valueFrom: {secretKeyRef: {name: mowdeck-nats-auth, key: vision}}}
+    # files/nats-auth.conf (ConfigMap natsAuth.configMapName), next to the chart's config.
+    patch:
+      - op: add
+        path: /volumeMounts/-
+        value: {name: mowdeck-nats-auth, mountPath: /etc/nats-mowdeck, readOnly: true}
+  podTemplate:
+    patch:
+      - op: add
+        path: /spec/volumes/-
+        value: {name: mowdeck-nats-auth, configMap: {name: mowdeck-nats-auth}}
   config:
+    # Users and permissions (ADR 0074): no client without credentials. The include path is
+    # relative to the chart's /etc/nats-config/nats.conf.
+    merge:
+      $include: ../nats-mowdeck/auth.conf
     cluster:
       # -- A three node cluster in the cloud (values-cloud.yaml); JetStream needs at least 2.
       enabled: false

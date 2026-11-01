@@ -43,6 +43,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: scheduler
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_SCHEDULER:?set NATS_PASSWORD_SCHEDULER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -68,6 +70,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       scheduler-migrate:

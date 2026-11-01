@@ -6,7 +6,9 @@
 #   3. helm template with the default values and both overlays, validated by kubeconform -strict
 #      against the Kubernetes schemas of KUBE_VERSION and the CloudNativePG / Prometheus Operator
 #      CRD schemas of the datreeio CRDs-catalog (pinned commit)
-#   4. negative checks: a render without the required secrets must fail with a clear message
+#   4. negative checks: a render without the required secrets must fail with a clear message,
+#      the NATS users (ADR 0074): every password required and well-formed, the server includes
+#      the generated permissions, every service gets its own user
 #   5. the drift test tools/repo-checks/tests/test_helm.py (Compose services <-> templates,
 #      .env.example <-> values.yaml), when uv is available and SKIP_DRIFT is not set
 #
@@ -71,11 +73,33 @@ expect_failure "GATEWAY_CLIENT_IP_DEPTH must be empty or a number" -f "$test_val
   --set-string config.GATEWAY_CLIENT_IP_DEPTH=-1
 expect_failure "createRoleSecrets=false" --set secrets.existingSecret=mowdeck-app \
   --set openfgaSecret.create=false
-# Existing Secrets (application, OpenFGA, CloudNativePG roles) replace every secret value.
+# Existing Secrets (application, OpenFGA, CloudNativePG roles, NATS users) replace every secret
+# value.
 helm template mowdeck "$chart" --set secrets.existingSecret=mowdeck-app \
   --set openfgaSecret.create=false --set postgresql.cloudnativepg.createRoleSecrets=false \
-  > /dev/null
+  --set natsAuth.createSecret=false > /dev/null
 echo "ok: secrets.existingSecret renders without secret values"
+
+step "NATS users and permissions (ADR 0074)"
+expect_failure "secrets.NATS_PASSWORD_BILLING is required" -f "$test_values" \
+  --set secrets.NATS_PASSWORD_BILLING=
+expect_failure "secrets.NATS_PASSWORD_FLEET must be 24 to 128" -f "$test_values" \
+  --set secrets.NATS_PASSWORD_FLEET=0starts-with-a-digit-0123456789
+expect_failure "secrets.NATS_PASSWORD_VISION must be 24 to 128" -f "$test_values" \
+  --set secrets.NATS_PASSWORD_VISION=too-short
+nats_out="$out/default.yaml"
+# The server includes the generated users (the chart's copy of infra/compose/nats/auth.conf) and
+# gets every password from the Secret; every service gets its user and only its own password.
+grep -q "include ../nats-mowdeck/auth.conf;" "$nats_out"
+grep -q "mountPath: /etc/nats-mowdeck" "$nats_out"
+grep -q "name: NATS_PASSWORD_STREAMS" "$nats_out"
+grep -q 'password: $NATS_PASSWORD_DEVICE_GATEWAY' "$nats_out"
+grep -q "MOWDECK_NATS_USER: device-gateway" "$nats_out"
+grep -q "value: /run/secrets/nats/password" "$nats_out"
+grep -q "name: mowdeck-nats-streams-r1" "$nats_out"
+cmp -s "$chart/files/nats-auth.conf" "$root/infra/compose/nats/auth.conf" ||
+  { echo "files/nats-auth.conf differs from infra/compose/nats/auth.conf: uv run poe nats-auth"; exit 1; }
+echo "ok: NATS authenticates every service with its own user"
 
 step "optional agora-bridge (ADR 0045 step 7)"
 # No image is published: enabling it without the operator's own image must fail.

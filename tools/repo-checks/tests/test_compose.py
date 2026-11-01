@@ -277,7 +277,8 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
         if str(svc.get("image", "")).startswith("${MOWDECK_IMAGE_REGISTRY:-mowdeck}/")
         and "profiles" not in svc
         and not name.endswith("-migrate")
-        and name not in {"web", "authz-bootstrap"}
+        # One-shot jobs without an HTTP API: the OpenFGA model and the JetStream streams.
+        and name not in {"web", "authz-bootstrap", "nats-streams"}
     }
     assert mowdeck_services, "no MowDeck services found in the base stack"
     for name in sorted(mowdeck_services):
