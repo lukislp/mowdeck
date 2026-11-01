@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import timedelta
 from uuid import uuid4
 
+import nats
 import pytest
 from mowdeck_contracts.v1 import (
     CommandEnvelope,
@@ -33,6 +34,8 @@ from mowdeck_service_kit.bus import (
     publish_event,
     stream_config,
 )
+from mowdeck_service_kit.bus.base import BusError
+from mowdeck_service_kit.bus.jetstream import _NatsSubscriptionHandle, durable_deliver_subject
 from mowdeck_service_kit.correlation import correlation_scope, get_correlation_id
 from mowdeck_service_kit.testing import lifespan_client, make_test_descriptor, make_test_settings
 
@@ -51,6 +54,44 @@ def test_stream_config_translation() -> None:
     assert config.name == "X"
     assert config.subjects == ["x.>"]
     assert config.duplicate_window == 120.0
+
+
+def test_credentials_come_from_the_settings_and_stay_hidden() -> None:
+    settings = make_test_settings(
+        service_name="camera-relay",
+        nats_url="nats://a:4222, nats://b:4222",
+        nats_user="camera-relay",
+        nats_password="hidden-relay-password-0123456789",  # noqa: S106 - a test value
+    )
+    bus = JetStreamBus.from_settings(settings)
+    assert bus.servers == ["nats://a:4222", "nats://b:4222"]
+    assert bus.user == "camera-relay"
+    assert bus.inbox_prefix == "_INBOX.camera-relay"
+    assert bus.manage_streams is False  # the nats-streams job does it (ADR 0073)
+    assert "hidden-relay-password" not in repr(bus)
+    assert "hidden-relay-password" not in str(vars(bus).get("user"))
+    assert JetStreamBus.from_settings(settings, manage_streams=True).manage_streams is True
+
+
+def test_without_credentials_the_bus_manages_the_streams() -> None:
+    bus = JetStreamBus.from_settings(make_test_settings(nats_url="nats://x:4222"))
+    assert bus.user is None
+    assert bus.inbox_prefix == "_INBOX"
+    assert bus.manage_streams is True
+
+
+def test_user_and_password_come_together() -> None:
+    with pytest.raises(ValueError, match="password"):
+        JetStreamBus("nats://x:4222", user="fleet")
+    with pytest.raises(ValueError, match="password"):
+        JetStreamBus("nats://x:4222", password="x")  # noqa: S106 - a test value
+
+
+def test_durable_deliver_subject_lives_in_the_inbox() -> None:
+    assert (
+        durable_deliver_subject("_INBOX.fleet", "EVENTS", "fleet-accounts")
+        == "_INBOX.fleet.durable.EVENTS.fleet-accounts"
+    )
 
 
 @pytest.fixture
@@ -250,6 +291,86 @@ async def test_closed_bus_raises(bus: JetStreamBus) -> None:
     assert not bus.is_connected
     with pytest.raises(BusNotConnectedError):
         await bus.publish("event.a.b", b"")
+
+
+@requires_nats
+async def test_a_durable_consumer_of_an_older_release_moves_into_the_inbox(
+    bus: JetStreamBus,
+) -> None:
+    """Before ADR 0073 nats-py chose a random _INBOX.<nuid>; the bus keeps the consumer (and
+    its position) and only delivers to its own inbox from then on."""
+    assert NATS_URL is not None
+    domain = f"t{uuid4().hex[:8]}"
+    durable = f"legacy-{domain}"
+    legacy = await nats.connect(NATS_URL)
+    try:
+        js = legacy.jetstream()
+        old = await js.subscribe(
+            f"event.{domain}.>", durable=durable, stream="EVENTS", manual_ack=True
+        )
+        before = await js.consumer_info("EVENTS", durable)
+        assert before.config.deliver_subject is not None
+        assert before.config.deliver_subject.count(".") == 1  # _INBOX.<nuid>
+        await old.unsubscribe()
+    finally:
+        await legacy.close()
+    received: list[str] = []
+
+    async def handler(message: BusMessage) -> None:
+        received.append(message.subject)
+
+    sub = await bus.subscribe(f"event.{domain}.>", handler, durable=durable)
+    after = await bus._jetstream().consumer_info("EVENTS", durable)
+    assert after.config.deliver_subject == f"_INBOX.durable.EVENTS.{durable}"
+    # The client listens on the new subject, not on the one the update's answer may name.
+    assert isinstance(sub, _NatsSubscriptionHandle)
+    assert sub.subscription.subject == f"_INBOX.durable.EVENTS.{durable}"
+    assert after.config.filter_subject == f"event.{domain}.>"
+    await bus.publish(f"event.{domain}.moved", b"{}")
+    await _wait_for(lambda: received == [f"event.{domain}.moved"])
+    await sub.unsubscribe()
+    # A second subscribe finds the consumer in place and binds to it unchanged.
+    again = await bus.subscribe(f"event.{domain}.>", handler, durable=durable)
+    await again.unsubscribe()
+    with pytest.raises(ValueError, match="queue"):
+        await bus.subscribe(f"event.{domain}.>", handler, durable="a", queue="b")
+
+
+@requires_nats
+async def test_without_managing_streams_the_bus_waits_for_them() -> None:
+    assert NATS_URL is not None
+    spec = StreamSpec(
+        name=f"WAIT{uuid4().hex[:8].upper()}",
+        subjects=(f"wait{uuid4().hex[:8]}.>",),
+        description="test",
+        storage="memory",
+    )
+    waiting = JetStreamBus(NATS_URL, streams=(spec,), manage_streams=False, stream_wait_seconds=1)
+    with pytest.raises(BusError, match="nats-streams"):
+        await waiting.connect()
+    await waiting.close()
+    manager = JetStreamBus(NATS_URL, streams=(spec,))
+    await manager.connect()
+    try:
+        late = JetStreamBus(NATS_URL, streams=(spec,), manage_streams=False, stream_wait_seconds=5)
+        await late.connect()  # the stream exists now
+        assert late.is_connected
+        await late.close()
+    finally:
+        await manager._jetstream().delete_stream(spec.name)
+        await manager.close()
+
+
+@requires_nats
+def test_the_streams_job_ensures_every_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mowdeck_service_kit.bus import streams as job
+
+    assert NATS_URL is not None
+    monkeypatch.setenv("MOWDECK_NATS_URL", NATS_URL)
+    monkeypatch.setenv("MOWDECK_LOG_FORMAT", "console")
+    assert job.main() == 0
+    monkeypatch.setenv("MOWDECK_NATS_USER", "streams")  # a user without a password
+    assert job.main() == 2
 
 
 @requires_nats

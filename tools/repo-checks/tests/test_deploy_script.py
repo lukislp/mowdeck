@@ -176,6 +176,32 @@ def test_deploy_refuses_when_verify_release_fails(stack: Stack) -> None:
     assert "MOWDECK_VERSION=0.1.0" in (stack.root / "stack" / ".env").read_text("utf-8")
 
 
+STUB_NATS_PASSWORDS = """#!/usr/bin/env bash
+echo "nats-passwords $*" >> "$FAKE_LOG"
+exit "${FAKE_NATS_EXIT:-0}"
+"""
+
+
+def test_deploy_checks_the_nats_passwords_of_the_release(stack: Stack) -> None:
+    """ADR 0073: after the checkout (the release's own check) and before anything changes."""
+    path = stack.root / "stack" / "nats-passwords.sh"
+    path.write_text(STUB_NATS_PASSWORDS, encoding="utf-8", newline="\n")
+    result = stack.run("0.2.0")
+    assert result.returncode == 0, result.stderr
+    checks = stack.calls("nats-passwords --check .env")
+    assert len(checks) == 1, stack.log
+    assert stack.calls("verify-release 0.2.0")[0] < checks[0] < stack.calls(" pull")[0]
+
+    (stack.root / "calls.log").unlink()
+    (stack.root / "stack" / ".env").write_text("MOWDECK_VERSION=0.1.0\n", encoding="utf-8")
+    result = stack.run("0.2.0", FAKE_NATS_EXIT="1")
+    assert result.returncode != 0
+    assert "./nats-passwords.sh .env" in result.stderr
+    assert not stack.calls(" pull")
+    assert not stack.calls("maintenance")
+    assert "MOWDECK_VERSION=0.1.0" in (stack.root / "stack" / ".env").read_text("utf-8")
+
+
 def test_deploy_refuses_an_incomplete_backup(stack: Stack) -> None:
     result = stack.run("0.2.0", FAKE_DUMP="truncated")
     assert result.returncode != 0

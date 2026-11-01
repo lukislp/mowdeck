@@ -41,6 +41,7 @@ cp demo/demo.env.example demo/demo.env     # PowerShell: Copy-Item demo/demo.env
 # fill in every change-me value with a fresh secret:
 #   openssl rand -hex 32        (POSTGRES_PASSWORD, SERVICE_DB_PASSWORD, OPENFGA_AUTHN_PRESHARED_KEYS, DEMO_SEED_TOKEN)
 #   openssl rand -base64 32     (IDENTITY_KEY_ENCRYPTION_KEY)
+./nats-passwords.sh demo/demo.env          # the NATS passwords, one per service (ADR 0073)
 demo/reset.sh                              # deletes any previous demo, builds, starts, seeds
 ```
 
@@ -50,7 +51,9 @@ The demo answers at `http://127.0.0.1:8580` (`GATEWAY_HTTP_PORT`). The seed job'
 
 `GATEWAY_HTTP_PORT` is the only port the demo publishes. `docker-compose.demo.yml` drops the gateway's HTTPS port (the TLS proxy in front talks plain HTTP to the gateway; no demo router listens on `websecure`) and the host ports of NATS (client and monitor), Postgres and OpenFGA, which the regular stack binds to `127.0.0.1` for local tools. Only the demo's own containers reach them. `GATEWAY_HTTPS_PORT`, `POSTGRES_PORT`, `NATS_*_PORT` and `OPENFGA_*_PORT` in `demo.env` have no effect; for a look inside use `docker compose -p mowdeck-demo exec postgres psql -U postgres` and the like.
 
-NATS has no authentication, in the demo and in the regular stack: any process that reaches it can publish commands and telemetry past every authorization check. That is why no stack publishes it beyond loopback and the demo not at all; never attach a NATS container to a network that other workloads share. Authenticating the services to NATS (one credential per service) is a planned follow-up with its own ADR.
+NATS authenticates every service with its own user and lets it use only its own subjects ([ADR 0073](../adr/0073-nats-authentication-and-subject-permissions.md); the passwords `NATS_PASSWORD_*` in `demo.env`, which `reset.sh` checks like the other secrets). The demo still publishes no NATS port, and a NATS container belongs on no network that other workloads share.
+
+**Updating a demo from a release before ADR 0073:** after pulling the new checkout, run `./nats-passwords.sh demo/demo.env` once (it adds the thirteen passwords and never prints them); `reset.sh` refuses to run until they are there. The reset recreates NATS with its volumes anyway, so nothing else changes.
 
 `reset.sh --dry-run` prints the commands without running them; `--no-build` reuses the images of the last build. The script refuses the project name `mowdeck`, any `COMPOSE_PROFILES` (relay, agora, matter and billing do not belong in a demo) and the placeholder secrets. A git-ignored `demo/demo.override.yml` adds host specific settings ([below](#host-specific-settings-demooverrideyml)).
 

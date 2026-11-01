@@ -87,7 +87,7 @@ flowchart LR
 | `web` | `/` | - | always |
 | `whoami` | `/api/v1/whoami` | - | whoami |
 
-Infrastructure containers: `mediamtx`, `nats`, `openfga`, `postgres`, `traefik`, `whoami`. One-shot jobs (migrations, bootstrap): `authz-bootstrap`, `billing-migrate`, `entitlements-migrate`, `fleet-migrate`, `identity-migrate`, `notifications-migrate`, `openfga-migrate`, `planner-migrate`, `scheduler-migrate`, `telemetry-migrate`, `vision-migrate`.
+Infrastructure containers: `mediamtx`, `nats`, `openfga`, `postgres`, `traefik`, `whoami`. One-shot jobs (migrations, bootstrap): `authz-bootstrap`, `billing-migrate`, `entitlements-migrate`, `fleet-migrate`, `identity-migrate`, `nats-streams`, `notifications-migrate`, `openfga-migrate`, `planner-migrate`, `scheduler-migrate`, `telemetry-migrate`, `vision-migrate`.
 
 ## Platform dependencies
 

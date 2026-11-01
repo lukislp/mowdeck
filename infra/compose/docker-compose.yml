@@ -99,21 +99,64 @@ services:
       - traefik.http.services.whoami.loadbalancer.server.port=80
     networks: [mowdeck]
 
+  # Every client authenticates with its own user and may use only the subjects its service needs
+  # (ADR 0073): nats/auth.conf, generated from the subject map in
+  # tools/repo-checks/scripts/nats_auth.py. The passwords are NATS_PASSWORD_<USER> in .env
+  # (./nats-passwords.sh .env generates them); each service gets only its own.
   nats:
     image: ${NATS_IMAGE:-public.ecr.aws/docker/library/nats:2.15.0-alpine}
     restart: unless-stopped
-    command: ["-js", "-m", "8222", "-sd", "/data"]
+    command: ["-c", "/etc/nats/mowdeck/auth.conf", "-js", "-m", "8222", "-sd", "/data"]
+    environment:
+      NATS_PASSWORD_BILLING: ${NATS_PASSWORD_BILLING:?set NATS_PASSWORD_BILLING in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_CAMERA_RELAY: ${NATS_PASSWORD_CAMERA_RELAY:?set NATS_PASSWORD_CAMERA_RELAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_DEVICE_GATEWAY: ${NATS_PASSWORD_DEVICE_GATEWAY:?set NATS_PASSWORD_DEVICE_GATEWAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_ENTITLEMENTS: ${NATS_PASSWORD_ENTITLEMENTS:?set NATS_PASSWORD_ENTITLEMENTS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_FLEET: ${NATS_PASSWORD_FLEET:?set NATS_PASSWORD_FLEET in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_IDENTITY: ${NATS_PASSWORD_IDENTITY:?set NATS_PASSWORD_IDENTITY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_NOTIFICATIONS: ${NATS_PASSWORD_NOTIFICATIONS:?set NATS_PASSWORD_NOTIFICATIONS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_PLANNER: ${NATS_PASSWORD_PLANNER:?set NATS_PASSWORD_PLANNER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_REALTIME: ${NATS_PASSWORD_REALTIME:?set NATS_PASSWORD_REALTIME in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_SCHEDULER: ${NATS_PASSWORD_SCHEDULER:?set NATS_PASSWORD_SCHEDULER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_STREAMS: ${NATS_PASSWORD_STREAMS:?set NATS_PASSWORD_STREAMS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_TELEMETRY: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+      NATS_PASSWORD_VISION: ${NATS_PASSWORD_VISION:?set NATS_PASSWORD_VISION in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
     ports:
       - "127.0.0.1:${NATS_CLIENT_PORT:-4222}:4222"
       - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - nats-data:/data
+      - ./nats:/etc/nats/mowdeck:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 3s
+    networks: [mowdeck]
+
+  # One-shot job: creates the JetStream streams and updates them to the contract settings
+  # (idempotent, safe on every `up`). It is the only NATS user allowed to change a stream; the
+  # services wait for it (ADR 0073). Runs in the identity image, which the stack builds anyway.
+  nats-streams:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/identity/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a}
+    command: ["python", "-m", "mowdeck_service_kit.bus.streams"]
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: streams
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_STREAMS:?set NATS_PASSWORD_STREAMS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: "no"
     networks: [mowdeck]
 
   postgres:
@@ -244,6 +287,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: identity
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_IDENTITY:?set NATS_PASSWORD_IDENTITY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://identity:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/identity
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -343,6 +388,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       identity-migrate:
@@ -391,6 +438,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: fleet
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_FLEET:?set NATS_PASSWORD_FLEET in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -421,6 +470,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       fleet-migrate:
@@ -448,6 +499,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: device-gateway
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_DEVICE_GATEWAY:?set NATS_PASSWORD_DEVICE_GATEWAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_SHARD_INDEX: "0"
       MOWDECK_SHARD_COUNT: "1"
       # The registry comes from Fleet (fleet.mowers.list on start, then the
@@ -492,6 +545,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
     networks: [mowdeck]
 
   telemetry-migrate:
@@ -533,6 +588,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: telemetry
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -579,6 +636,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       telemetry-migrate:
@@ -610,6 +669,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: realtime
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_REALTIME:?set NATS_PASSWORD_REALTIME in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
@@ -637,6 +698,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       authz-bootstrap:
@@ -693,6 +756,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: notifications
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_NOTIFICATIONS:?set NATS_PASSWORD_NOTIFICATIONS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -734,6 +799,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       notifications-migrate:
@@ -784,6 +851,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: scheduler
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_SCHEDULER:?set NATS_PASSWORD_SCHEDULER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -810,6 +879,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       scheduler-migrate:
@@ -860,6 +931,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: entitlements
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_ENTITLEMENTS:?set NATS_PASSWORD_ENTITLEMENTS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -884,6 +957,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       entitlements-migrate:
@@ -933,6 +1008,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: vision
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_VISION:?set NATS_PASSWORD_VISION in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -974,6 +1051,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       vision-migrate:
@@ -1011,6 +1090,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: camera-relay
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_CAMERA_RELAY:?set NATS_PASSWORD_CAMERA_RELAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_RELAY_MEDIAMTX_API_URL: http://mediamtx:9997
       MOWDECK_RELAY_MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
       # The optional agora-bridge (profile agora) on this container's loopback; while nothing
@@ -1029,6 +1110,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       mediamtx:
         condition: service_started
     networks: [mowdeck]
@@ -1151,6 +1234,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: billing
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_BILLING:?set NATS_PASSWORD_BILLING in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -1194,6 +1279,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       entitlements:
@@ -1244,6 +1331,8 @@ services:
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_USER: planner
+      MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_PLANNER:?set NATS_PASSWORD_PLANNER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
@@ -1268,6 +1357,8 @@ services:
     depends_on:
       nats:
         condition: service_healthy
+      nats-streams:
+        condition: service_completed_successfully
       openfga:
         condition: service_healthy
       planner-migrate:

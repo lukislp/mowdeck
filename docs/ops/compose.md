@@ -7,6 +7,7 @@ The stack lives in `infra/compose/` and runs the foundation infrastructure on on
 ```bash
 cd infra/compose
 cp .env.example .env            # set the passwords
+./nats-passwords.sh .env        # one NATS password per service (see "NATS users" below)
 docker compose up -d --build --wait   # build the MowDeck services, wait until all are healthy
 docker compose ps
 docker compose down -v          # reset, deletes all data
@@ -28,6 +29,7 @@ Each update, from `infra/compose` of the checkout (a stack under another [projec
 git fetch --tags && git checkout --detach v<x>      # the Compose files of that release
 docker compose exec -T postgres pg_dumpall -U postgres > ~/mowdeck-before-<x>.sql   # backup
 ./verify-release.sh <x>                             # writes docker-compose.release.yml
+./nats-passwords.sh --check .env                    # the release's NATS passwords (ADR 0073)
 sed -i 's/^MOWDECK_VERSION=.*/MOWDECK_VERSION=<x>/' .env
 docker compose -f docker-compose.yml -f docker-compose.release.yml pull
 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait
@@ -48,7 +50,7 @@ cd infra/compose                 # of the checkout on the server
 ./deploy.sh <x>                  # e.g. ./deploy.sh 0.9.0; --dry-run only prints the steps
 ```
 
-It runs, and stops at the first failure: `git fetch --tags`; a backup into `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}` (a copy of `.env` and a gzip'd `pg_dumpall`, refused unless the dump ends with "PostgreSQL database cluster dump complete"); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
+It runs, and stops at the first failure: `git fetch --tags`; a backup into `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}` (a copy of `.env` and a gzip'd `pg_dumpall`, refused unless the dump ends with "PostgreSQL database cluster dump complete"); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails) and `./nats-passwords.sh --check .env` (the NATS passwords of that release, see [NATS users](#nats-users-and-permissions)); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
 
 ```bash
 docker compose exec -T notifications python -m notifications.cli maintenance open --minutes 15
@@ -64,7 +66,8 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | Service | Image | Host port |
 | --- | --- | --- |
 | traefik | `public.ecr.aws/docker/library/traefik:v3.7.14` | 80, 443 |
-| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222 (client), 127.0.0.1:8222 (monitoring, `/healthz`) |
+| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222 (client, a user and password per service), 127.0.0.1:8222 (monitoring, `/healthz`) |
+| nats-streams | `mowdeck/identity:dev`, built from the repository | one-shot, no port (creates and updates the JetStream streams) |
 | postgres | `public.ecr.aws/docker/library/postgres:17.11-alpine` | 127.0.0.1:5432 |
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | one-shot, no port |
 | openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) |
@@ -106,6 +109,34 @@ All third-party images are pinned under "Image sources" in `.env.example` and ch
 To use another registry at home (a pull-through cache or a mirror on the NAS), copy the images there with the same tags and set the variables in `.env`, for example `POSTGRES_IMAGE=registry.example.org/postgres:17.11-alpine`, or all of them at once with `MOWDECK_IMAGE_MIRROR=registry.example.org/mowdeck sh infra/mirror-env.sh >> infra/compose/.env`; a later line in `.env` overrides an earlier one. Log in to that registry first if it needs credentials.
 
 CI pulls the same pinned images through the repository's GHCR mirror `ghcr.io/<owner>/mowdeck/mirror/<alias>:<tag>`, which the workflow `mirror-images.yml` fills from the same list, because anonymous pulls from the public registries are rate limited on the shared CI runners; the stack at home is not affected. Details: `infra/compose/README.md`, "Image sources".
+
+## NATS users and permissions
+
+Every service connects to NATS as its own user and may use only the subjects its code uses ([ADR 0073](../adr/0073-nats-authentication-and-subject-permissions.md)): a compromised container cannot command mowers, forge another service's events or read another service's replies. The users and their permissions are `nats/auth.conf`, generated from the subject map in `tools/repo-checks/scripts/nats_auth.py` (`uv run poe nats-auth`; never edit the file by hand). The one-shot job `nats-streams` creates and updates the JetStream streams as the user `streams` before the services start; no service may change a stream.
+
+Each user has a password in `.env`, `NATS_PASSWORD_<USER>` (`NATS_PASSWORD_FLEET`, `NATS_PASSWORD_DEVICE_GATEWAY`, ..., `NATS_PASSWORD_STREAMS`). NATS gets all of them, each service only its own. `.env.example` has development placeholders; for any real installation generate them:
+
+```bash
+cd infra/compose
+./nats-passwords.sh .env          # adds missing passwords, replaces placeholders, keeps good ones
+./nats-passwords.sh --check .env  # only checks (deploy.sh runs this before every update)
+docker compose up -d --wait       # after a change: recreates NATS and the services
+```
+
+The script never prints a value. A password is 24 to 128 letters, digits, `-` and `_` and starts with a letter (NATS reads it from its environment as a configuration value; one that starts with a digit could be taken for a number). Rotate a password by deleting its line and running the script again, then `docker compose up -d --wait`. NATS logs "Plaintext passwords detected" at start: the passwords are kept in its environment on purpose (ADR 0073, "Passwords").
+
+**Updating an installation from a release before ADR 0073.** The new release needs the passwords; without them `docker compose pull` (and so `deploy.sh`) stops with `required variable NATS_PASSWORD_... is missing a value` before any container changes. Add them first, then update as usual:
+
+```bash
+cd infra/compose
+git fetch --tags && git checkout --detach v<x>   # the release's nats/auth.conf and script
+./nats-passwords.sh .env
+./deploy.sh <x>
+```
+
+(If `deploy.sh` already stopped at `pull`, the checkout is done: run `./nats-passwords.sh .env` and `./deploy.sh <x>` again.) The services move their durable JetStream consumers to their own inbox on the first start, without losing their position.
+
+A permission violation shows in the NATS log; `sh nats-violations.sh` lists them (CI runs it after the end-to-end suites). A violation after a code change means the service's subjects are missing from the map: `uv run pytest tools/repo-checks/tests/test_nats_auth.py` names them.
 
 ## Authorization bootstrap
 

@@ -89,6 +89,21 @@ jobs:
           done
           docker logs nats
           exit 1
+      # A second NATS with the generated users and permissions (ADR 0073) and the development
+      # passwords of .env.example: tools/repo-checks/tests/test_nats_auth_server.py checks that
+      # a service user can do its work and nothing else.
+      - name: Start NATS with the MowDeck users
+        run: |
+          grep '^NATS_PASSWORD_' infra/compose/.env.example > "$RUNNER_TEMP/nats.env"
+          docker run -d --name nats-auth -p 4223:4222 -p 8223:8222 --env-file "$RUNNER_TEMP/nats.env" \
+            -v "$PWD/infra/compose/nats:/etc/nats/mowdeck:ro" \
+            "$NATS_IMAGE" -c /etc/nats/mowdeck/auth.conf -js -m 8222
+          for _ in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8223/healthz && exit 0
+            sleep 1
+          done
+          docker logs nats-auth
+          exit 1
       # In-memory OpenFGA for the mowdeck-authz integration tests (needs the "run" argument).
       - name: Start OpenFGA
         run: |
@@ -124,6 +139,7 @@ jobs:
           MOWDECK_TEST_STRIPE_MOCK_URL: http://127.0.0.1:12111
           MOWDECK_TEST_NTFY_URL: http://127.0.0.1:8091
           MOWDECK_TEST_NATS_URL: nats://127.0.0.1:4222
+          MOWDECK_TEST_NATS_AUTH_URL: nats://127.0.0.1:4223
           MOWDECK_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5433/postgres
           MOWDECK_TEST_OPENFGA_URL: http://127.0.0.1:18080
           MOWDECK_TEST_OPENFGA_TOKEN: ci-key
@@ -624,6 +640,9 @@ jobs:
         run: uv run poe e2e
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
+      # ADR 0073: every flow of the suite stays within the services' NATS permissions.
+      - name: No NATS permission violations
+        run: sh infra/compose/nats-violations.sh -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-logs.txt
@@ -798,6 +817,9 @@ jobs:
             -v "$(command -v docker):/usr/local/bin/docker:ro" \
             -e CI -e MOWDECK_E2E_BASE_URL -e MOZ_GMP_PATH \
             "$PLAYWRIGHT_IMAGE" npm test -- "--shard=$SHARD"
+      # ADR 0073: every flow of the shard stays within the services' NATS permissions.
+      - name: No NATS permission violations
+        run: sh infra/compose/nats-violations.sh -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml logs --no-color --timestamps > e2e-web-logs.txt
@@ -916,6 +938,9 @@ jobs:
             -v "$(command -v docker):/usr/local/bin/docker:ro" \
             -e MOWDECK_E2E_BASE_URL \
             "$PLAYWRIGHT_IMAGE" npm run demo
+      # ADR 0073: the seed job and the demo specs stay within the services' NATS permissions.
+      - name: No NATS permission violations
+        run: sh infra/compose/nats-violations.sh $COMPOSE_FILES
       - name: Collect logs on failure
         if: failure()
         run: docker compose $COMPOSE_FILES logs --no-color --timestamps > e2e-demo-logs.txt

@@ -89,6 +89,24 @@ app.kubernetes.io/component: {{ .component }}
 {{- end }}
 {{- end }}
 
+{{/* NATS user of a component (ADR 0073): the component name when secrets has its
+NATS_PASSWORD_<COMPONENT>, else empty (the web app, MediaMTX, the Matter server). */}}
+{{- define "mowdeck.natsUser" -}}
+{{- $key := printf "NATS_PASSWORD_%s" (.component | upper | replace "-" "_") }}
+{{- if hasKey .ctx.Values.secrets $key }}{{ .component }}{{ end }}
+{{- end }}
+
+{{/* The NATS users of secrets.NATS_PASSWORD_*, sorted (JSON list). */}}
+{{- define "mowdeck.natsUsers" -}}
+{{- $users := list }}
+{{- range $key, $_ := .Values.secrets }}
+{{- if hasPrefix "NATS_PASSWORD_" $key }}
+{{- $users = append $users ($key | trimPrefix "NATS_PASSWORD_" | lower | replace "_" "-") }}
+{{- end }}
+{{- end }}
+{{- sortAlpha $users | toJson }}
+{{- end }}
+
 {{/* OpenFGA URL: config.OPENFGA_API_URL, or the OpenFGA of this chart. */}}
 {{- define "mowdeck.openfgaUrl" -}}
 {{- if .Values.config.OPENFGA_API_URL }}

@@ -50,8 +50,9 @@ services:
     ports: !override
       - "${GATEWAY_HTTP_PORT:-80}:80"
 
-  # No host port for the backing services: only the containers of this project reach them.
-  # NATS has no authentication (docs/ops/demo.md, "Host ports").
+  # No host port for the backing services: only the containers of this project reach them
+  # (docs/ops/demo.md, "Host ports"). NATS authenticates every service (ADR 0073) with the
+  # passwords of demo/demo.env.
   nats:
     ports: !reset []
 

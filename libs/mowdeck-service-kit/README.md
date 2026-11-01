@@ -116,6 +116,10 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_HTTP_PORT` | `8000` | HTTP port |
 | `MOWDECK_NATS_URL` | `nats://localhost:4222` | NATS server URL(s), comma separated |
 | `MOWDECK_NATS_ENABLED` | `true` | Connect to NATS on startup |
+| `MOWDECK_NATS_USER` | unset | The service's NATS user ([ADR 0073](../../docs/adr/0073-nats-authentication-and-subject-permissions.md)); unset: no credentials (development, tests). Also the inbox prefix `_INBOX.<user>` |
+| `MOWDECK_NATS_PASSWORD` | unset | Its password (secret; usually `MOWDECK_NATS_PASSWORD_FILE`, never logged); together with the user or not at all |
+| `MOWDECK_NATS_MANAGE_STREAMS` | unset | Create and update the JetStream streams on connect; unset: only without a user (with credentials the `nats-streams` job does it) |
+| `MOWDECK_NATS_STREAM_WAIT_SECONDS` | `120` | How long a service that does not manage the streams waits for them on connect |
 | `MOWDECK_DATABASE_URL` | unset | PostgreSQL URL (secret; usually `MOWDECK_DATABASE_URL_FILE`) |
 | `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP/HTTP collector, e.g. `http://otel-collector:4318`; tracing is off when unset |
 | `MOWDECK_CLIENT_IP_DEPTH` | unset | Trusted proxies in front of the gateway that set or append `X-Forwarded-For`; `client_address.client_address()` takes the entry that many places left of the gateway's own (unset: the leftmost entry). Compose and Helm pass `GATEWAY_CLIENT_IP_DEPTH`. Rate limits key `client_address.limiter_key()` of that address (IPv6 per /64, IPv4 unchanged); audit logs keep the whole address |
@@ -167,8 +171,10 @@ await publish_command(bus, envelope)  # msg id = command_id, de-duplicated by Je
 
 `EventBus` is a Protocol with `publish`, `subscribe`, `request`, `close` and `is_connected`. Two implementations share the same semantics:
 
-- `JetStreamBus` (nats-py): ensures the streams `COMMANDS`, `TELEMETRY`, `EVENTS` from `mowdeck-contracts` on connect; subjects captured by a stream are published to JetStream with the `Nats-Msg-Id` header, all others (and `request`) use core NATS; reconnects forever; durable or queue consumers with explicit acks, `max_deliver` (default 5) and a short nak delay. Stream consumers start at new messages; `subscribe(..., last_per_subject=True)` makes a new consumer start with the newest stored message of every matching subject (JetStream `DeliverPolicy.LAST_PER_SUBJECT`), for last-value streams such as `DEVICE` (the in-memory bus replays them the same way).
+- `JetStreamBus` (nats-py): ensures the streams (`COMMANDS`, `TELEMETRY`, `EVENTS`, `DEVICE`, `CAMERA`) from `mowdeck-contracts` on connect, or, without `manage_streams`, waits for them; subjects captured by a stream are published to JetStream with the `Nats-Msg-Id` header, all others (and `request`) use core NATS; reconnects forever; durable or queue consumers with explicit acks, `max_deliver` (default 5) and a short nak delay. Stream consumers start at new messages; `subscribe(..., last_per_subject=True)` makes a new consumer start with the newest stored message of every matching subject (JetStream `DeliverPolicy.LAST_PER_SUBJECT`), for last-value streams such as `DEVICE` (the in-memory bus replays them the same way).
 - `InMemoryBus`: delivers synchronously inside `publish`, de-duplicates by msg id within each stream's duplicate window, supports queue groups, redelivery and request/reply; records `published` and `dropped` messages for assertions.
+
+**NATS credentials and least privilege** ([ADR 0073](../../docs/adr/0073-nats-authentication-and-subject-permissions.md)). `JetStreamBus.from_settings` connects as `MOWDECK_NATS_USER` with its password and the inbox prefix `_INBOX.<user>`, the only inbox the server lets the user read. Stream consumers are created through the subject based API (`$JS.API.CONSUMER.CREATE.<stream>.<name>.<filter>`, ephemeral ones named `eph-<random>`), so the server's permissions limit the filters a service may consume; a durable consumer delivers to `_INBOX.<user>.durable.<stream>.<name>` (the same for every replica of a queue group), and one created earlier with another delivery subject is moved there on subscribe, keeping its position. With a user the service does not change the streams: `python -m mowdeck_service_kit.bus.streams` (the `nats-streams` job, user `streams`) creates and updates them, and the services wait up to `MOWDECK_NATS_STREAM_WAIT_SECONDS`. The users and their subjects are generated from `tools/repo-checks/scripts/nats_auth.py`; a new bus subject of a service belongs there.
 
 Handler rules: return normally to acknowledge, raise to get a redelivery, raise `DropMessage` to discard. New subscriptions receive new messages only. The correlation id travels in the `X-Correlation-ID` header and is restored while a handler runs. Helpers: `publish_event` (subject `event.<domain>.<name>`, msg id = event id), `publish_command` (refuses expired commands, adds `Mowdeck-Priority`), `publish_command_result`.
 
@@ -260,5 +266,7 @@ docker run -d --name mowdeck-test-nats -p 4222:4222 public.ecr.aws/docker/librar
 MOWDECK_TEST_NATS_URL=nats://127.0.0.1:4222 uv run pytest libs/mowdeck-service-kit
 docker rm -f mowdeck-test-nats
 ```
+
+The generated NATS permissions are tested against a real server by `tools/repo-checks/tests/test_nats_auth_server.py` when `MOWDECK_TEST_NATS_AUTH_URL` points at a NATS that runs `infra/compose/nats/auth.conf` (the command is in that file's docstring).
 
 An optional PostgreSQL test runs when `MOWDECK_TEST_DATABASE_URL` is set (for example `postgresql://u:p@127.0.0.1:5433/db`).

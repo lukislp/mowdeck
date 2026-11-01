@@ -25,6 +25,10 @@ Call with a dict:
                  Recreate strategy, since two pods cannot hold the same node ports
   recreate       true: Deployment strategy Recreate (a ReadWriteOnce volume)
   sidecars       further containers of the pod (full container specs, after the main one)
+
+A component with a NATS user (secrets.NATS_PASSWORD_<COMPONENT>, ADR 0073) gets
+MOWDECK_NATS_USER=<component> and its own password, and only its own, as the file
+/run/secrets/nats/password (MOWDECK_NATS_PASSWORD_FILE) from the Secret natsAuth.secretName.
 */}}
 {{- define "mowdeck.workload" -}}
 {{- $ctx := .ctx }}
@@ -37,6 +41,8 @@ Call with a dict:
 {{- range $k, $val := ($v.extraEnv | default dict) }}{{ $_ := set $env $k (toString $val) }}{{ end }}
 {{- $configData := dict }}
 {{- range $k, $val := $env }}{{ $_ := set $configData $k (toString $val) }}{{ end }}
+{{- $natsUser := include "mowdeck.natsUser" (dict "ctx" $ctx "component" .component) }}
+{{- if $natsUser }}{{ $_ := set $configData "MOWDECK_NATS_USER" $natsUser }}{{ end }}
 {{- $secretFiles := .secretFiles | default list }}
 {{- $component := .component }}
 ---
@@ -203,11 +209,15 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ $name }}
-          {{- if or $secretFiles .podEnv }}
+          {{- if or $secretFiles .podEnv $natsUser }}
           env:
             {{- range $secretFiles }}
             - name: {{ .env }}
               value: /run/secrets/mowdeck/{{ .file }}
+            {{- end }}
+            {{- if $natsUser }}
+            - name: MOWDECK_NATS_PASSWORD_FILE
+              value: /run/secrets/nats/password
             {{- end }}
             {{- with .podEnv }}
             {{- toYaml . | nindent 12 }}
@@ -238,6 +248,9 @@ spec:
             - {name: tmp, mountPath: /tmp}
             {{- if $secretFiles }}
             - {name: secrets, mountPath: /run/secrets/mowdeck, readOnly: true}
+            {{- end }}
+            {{- if $natsUser }}
+            - {name: nats-auth, mountPath: /run/secrets/nats, readOnly: true}
             {{- end }}
             {{- range .writableDirs }}
             - {name: {{ .name }}, mountPath: {{ .mountPath }}}
@@ -278,6 +291,16 @@ spec:
               - key: {{ .key }}
                 path: {{ .file }}
               {{- end }}
+        {{- end }}
+        {{- if $natsUser }}
+        # Only this component's own NATS password (ADR 0073).
+        - name: nats-auth
+          secret:
+            secretName: {{ $ctx.Values.natsAuth.secretName }}
+            defaultMode: 0440
+            items:
+              - key: {{ $natsUser }}
+                path: password
         {{- end }}
         {{- with .volumes }}
         {{- toYaml . | nindent 8 }}
