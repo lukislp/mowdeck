@@ -30,6 +30,10 @@ updates:
       ci-workflows:
         patterns:
           - "lukislp/ci-workflows*"
+      # init, analyze and upload-sarif must run the same version - one PR for all.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
   # The fuzzing toolchain of the ClusterFuzzLite build image (Atheris, PyInstaller, coverage),
   # pinned with hashes in .clusterfuzzlite/requirements.txt (docs/dev/fuzzing.md).
   - package-ecosystem: pip
