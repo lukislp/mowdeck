@@ -168,6 +168,7 @@ In `infra/compose/demo/demo.env` (read after `../.env.example`):
 | `DEMO_HISTORY_DAYS` | `7` | Days of simulated history per mower (1 to 31); in a pool sandbox too |
 | `DEMO_SIM_TIME_SCALE` | `3` | Simulated seconds per real second of the live mowers |
 | `DEMO_SIM_STATE_PERIOD_SECONDS` | `0` | Seconds between two periodic state reports of a live mower; `0`: one a second (every simulation step). Changes (a command, an error) are still reported at once. Every report is processed by several services, so a larger value trades a smoother marker for CPU per watched sandbox ([Load testing](load-testing.md#ingestion-cost)) |
+| `OPENFGA_LOG_LEVEL` | `warn` | OpenFGA's log level; the base stack's default `info` logs every request, which costs CPU on two cores ([Load testing](load-testing.md)) |
 | `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `1200`, `600` | Requests per client address at the gateway; the web app's files count too, so the burst must hold a first visit with an empty cache (a few hundred requests) |
 | `DEMO_SANDBOXES` | `true` | A sandbox per visitor ([ADR 0076](../adr/0076-demo-sandboxes.md)); `false`: the one shared demo user |
 | `DEMO_SANDBOX_MAX` | `40` | Sandboxes visitors hold at once; one more visitor sees "the demo is full" with a countdown (see [Sandboxes](#sandboxes)) |

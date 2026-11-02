@@ -491,4 +491,6 @@ From the first run; 1, 4 and 7 are done, 2 in part:
 8. **Traefik's memory** grew with the open sockets and the per-address buckets to about 250 MB at
    400 visitors. If the host limits containers, give the gateway at least 512 MB.
 9. **OpenFGA logs every request at INFO** (`grpc_req_complete` with the request body).
-   `OPENFGA_LOG_LEVEL=warn` saves CPU and disk on a small host.
+   `OPENFGA_LOG_LEVEL=warn` saves CPU and disk on a small host. Done: Compose passes
+   `OPENFGA_LOG_LEVEL` (default `info`), the demo override sets `warn`, Helm has
+   `openfga.log.level`.

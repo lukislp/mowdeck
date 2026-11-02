@@ -66,6 +66,10 @@ services:
 
   openfga:
     ports: !reset []
+    environment:
+      # info logs every check (grpc_req_complete with its body): on two cores that cost CPU and
+      # disk (docs/ops/load-testing.md); warnings and errors still reach the log.
+      OPENFGA_LOG_LEVEL: ${OPENFGA_LOG_LEVEL:-warn}
 
   identity:
     environment:

@@ -346,6 +346,24 @@ def test_demo_publishes_only_the_gateway_http_port(repo_root: Path) -> None:
         assert not any(line.startswith(f"{variable}=") for line in example), variable
 
 
+def test_openfga_log_level_is_configurable_and_warn_in_the_demo(repo_root: Path) -> None:
+    """OpenFGA logs every request at info, which costs CPU on a small host
+    (docs/ops/load-testing.md): the base stack keeps info and lets OPENFGA_LOG_LEVEL change it,
+    the demo defaults to warn without a demo.env key, the Helm chart has the same value."""
+    compose_dir = _compose_dir(repo_root)
+    base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))["services"]
+    text = (compose_dir / "docker-compose.demo.yml").read_text("utf-8")
+    demo = yaml.load(text, Loader=_ComposeLoader)["services"]  # noqa: S506
+    assert base["openfga"]["environment"]["OPENFGA_LOG_LEVEL"] == "${OPENFGA_LOG_LEVEL:-info}"
+    assert demo["openfga"]["environment"]["OPENFGA_LOG_LEVEL"] == "${OPENFGA_LOG_LEVEL:-warn}"
+    example = (compose_dir / "demo" / "demo.env.example").read_text("utf-8").splitlines()
+    assert not any(line.startswith("OPENFGA_LOG_LEVEL=") for line in example)
+    values = yaml.safe_load(
+        (repo_root / "infra" / "helm" / "mowdeck" / "values.yaml").read_text("utf-8")
+    )
+    assert values["openfga"]["log"]["level"] == "info"
+
+
 def test_demo_simulator_state_period_is_off_unless_set(repo_root: Path) -> None:
     """The demo's simulated mowers report once a simulation step unless
     DEMO_SIM_STATE_PERIOD_SECONDS asks for fewer reports (docs/ops/load-testing.md)."""
