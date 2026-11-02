@@ -10,7 +10,8 @@ built images themselves (``scripts/licence_gate.py``, tested here too). Guarded:
   depends on an Agora package or Playwright (uv.lock); the web build runs the bundle guard
   (apps/web/build-tools); no Agora binary is committed;
 * every released image declares its licences (``org.opencontainers.image.licenses`` in its
-  Dockerfile, equal to the gate's expectation) and carries the MowDeck licence texts; the
+  Dockerfile, equal to the gate's expectation), carries the MowDeck licence texts and declares
+  its source address (AGPL-3.0 section 13; the same check runs on the service template); the
   GPL-3.0 adapter (mowdeck-control-mammotion) only ends up in device-gateway, whose label names
   GPL-3.0-only;
 * every third-party image the GHCR mirror republishes is open source and its licence allows
@@ -175,17 +176,16 @@ def test_released_dockerfiles_keep_agora_out(repo_root: Path) -> None:
 
 
 def test_released_images_declare_their_licences(repo_root: Path) -> None:
+    gate = _gate(repo_root)
     for entry in _matrix(repo_root, "licence-gate"):
         text = (repo_root / entry["file"]).read_text("utf-8")
-        label = f'LABEL org.opencontainers.image.licenses="{entry["licenses"]}"'
-        inline = f'org.opencontainers.image.licenses="{entry["licenses"]}"'
-        assert label in text or inline in text, f"{entry['file']}: licence label {label}"
-        if "--no-licence-files" in entry.get("flags", ""):
-            continue
-        assert "COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/" in text, entry["file"]
-        assert "COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/" in text, entry["file"]
-        ignore = (repo_root / f"{entry['file']}.dockerignore").read_text("utf-8").splitlines()
-        assert {"!LICENSE", "!LICENSING.md", "!LICENSES/"} <= set(ignore), entry["file"]
+        ignore_file = repo_root / f"{entry['file']}.dockerignore"
+        ignore = ignore_file.read_text("utf-8") if ignore_file.is_file() else None
+        licence_files = "--no-licence-files" not in entry.get("flags", "")
+        problems = gate.dockerfile_problems(
+            text, ignore, entry["licenses"], licence_files=licence_files
+        )
+        assert problems == [], f"{entry['file']}: {problems}"
 
 
 def test_python_images_contain_no_agora_and_gpl_only_where_declared(repo_root: Path) -> None:
@@ -324,6 +324,21 @@ def test_gate_checks_the_web_bundle(repo_root: Path) -> None:
     ]
     missing = gate.web_manifest_problems(None)
     assert missing == [f"{gate.WEB_MANIFEST} missing (apps/web/build-tools/release-licences.ts)"]
+
+
+def test_gate_dockerfile_problems_name_every_missing_piece(repo_root: Path) -> None:
+    gate = _gate(repo_root)
+    expected = "AGPL-3.0-only AND Apache-2.0"
+    problems = gate.dockerfile_problems("FROM python\n", "*\n!uv.lock\n", expected)
+    assert problems[0] == f'Dockerfile: no LABEL org.opencontainers.image.licenses="{expected}"'
+    missing = len(gate.DOCKERFILE_LICENCE_LINES) + len(gate.DOCKERFILE_SOURCE_LINES)
+    assert len(problems) == 1 + missing + len(gate.DOCKERIGNORE_LICENCE_LINES)
+    label_only = f'LABEL org.opencontainers.image.licenses="{expected}"\n'
+    assert gate.dockerfile_problems(label_only, None, expected, licence_files=False) == []
+    vision = repo_root / "services/vision/Dockerfile"
+    ignore = (repo_root / "services/vision/Dockerfile.dockerignore").read_text("utf-8")
+    assert gate.dockerfile_problems(vision.read_text("utf-8"), ignore, expected) == []
+    assert gate.dockerfile_problems(vision.read_text("utf-8"), ignore, "MIT") != []
 
 
 def test_gate_main_checks_label_and_licence_files(repo_root: Path, tmp_path: Path) -> None:
