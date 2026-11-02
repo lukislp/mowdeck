@@ -12,7 +12,9 @@ demo's host.
 
 **Only against the stack it starts.** Never point the scenarios at the public demo, a home
 installation or any other real server. The runner talks only to the stack it starts itself, over
-that stack's own Docker network; it has no option for another address.
+that stack's own Docker network; it has no option for another address. The one exception is
+[Measuring the real demo host](#measuring-the-real-demo-host): two scripts its operator runs on
+the demo host itself, in an announced window.
 
 ## What it measures
 
@@ -22,6 +24,7 @@ that stack's own Docker network; it has no option for another address.
 | `rest-mix` | A signed-in user clicking through the app: mower list, mower page, health page, schedules, notifications, reports, 5 s apart, with the web app's token refresh. |
 | `command-burst` | Start, pause, resume and dock against the simulated mowers at a rising rate (1, 5, 10, 20 commands a second), each followed to its final status (`GET /fleet/commands/{id}`, as the web app does when the socket is quiet). |
 | `rate-limits` | The per-address protection on its own: 30 "Try the demo", 900 requests and 25 live views from one address. |
+| `sandbox-visitor` | A visitor of the sandbox demo ([ADR 0076](../adr/0076-demo-sandboxes.md)) who stays: loads the app, "Try the demo" (claims an own sandbox), the mower list and a mower page, starts one of its mowers, then keeps the live view open (reconnecting every `LOAD_HOLD` seconds, a mower page in between) until the level ends, and logs out so that the demo deletes the sandbox. `LOAD_VUS` visitors arrive within `LOAD_RAMP` and stay `LOAD_DURATION`. Made for [the real demo host](#measuring-the-real-demo-host); not part of `run`. |
 
 The requests are the web app's (`apps/web`), traced from its pages; a real browser also loads a
 few more lazy chunks and repeats some polls, so treat the numbers as a slightly optimistic floor.
@@ -91,6 +94,101 @@ on pull requests. The runner has four cores: two for the stack, two for k6. The 
 artifact `load-test-results`, the tables also go to the job summary. The CI job `compose` only
 checks that the stack configuration renders, that the report script's tests pass and that every
 scenario loads.
+
+## Measuring the real demo host
+
+The stack under test answers how the software behaves on two cores. How many visitors the
+**public demo** carries also depends on its host: a VPS core is slower than a desktop core and
+may lose time to its neighbours (steal), the host runs other demos and a mail server, and since
+[ADR 0076](../adr/0076-demo-sandboxes.md) every visitor has a sandbox whose mowers only run while
+it is watched. `tests/load/vps` measures that host itself. Its operator runs both scripts **on the
+host**, in an announced, quiet window; nobody runs load against the public address.
+
+### How the load reaches the demo
+
+```
+k6 (grafana/k6, --network container:<proxy>) ── X-Forwarded-For: 198.18.x.y ──► MowDeck gateway
+visitor ── Cloudflare ── Caddy (the proxy, trusted address) ── X-Forwarded-For: <visitor> ──► MowDeck gateway
+```
+
+k6 runs in the **network namespace of the demo's TLS proxy** (`docker run --network
+container:lktec-web`). Its requests reach the gateway from the proxy's own address, the only one in
+`GATEWAY_TRUSTED_PROXIES`, so the gateway keeps the `X-Forwarded-For` that k6 sends and counts
+every virtual visitor on its own, exactly as it counts a real visitor whose address the proxy
+writes there. Every visitor gets an address from `198.18.0.0/15` (the benchmark range of RFC
+2544, never a real visitor's): its rate limits, its socket limit and its 6 sandboxes an hour are
+the demo's own, and **nothing of the demo's or the proxy's configuration changes**. k6 does not
+join any network (the edge network keeps its two members) and reaches nothing the proxy cannot
+reach.
+
+Not measured this way: Cloudflare and the proxy's own work (TLS ends at Cloudflare and at the
+proxy's origin certificate; the proxy only passes requests on). For the visitor's view through the
+whole chain, open the demo in a browser during a level and note the load time.
+
+Why not from outside, through Cloudflare: one source address meets the per-address limits at
+once (6 sandboxes an hour, 20 "Try the demo" in a burst, 20 live views), raising them would
+weaken the public demo for the window and needs a restart, and Cloudflare's bot protection and
+rate rules would block or slow a load generator, so the numbers would describe Cloudflare.
+
+**k6 on the same two cores.** k6 is capped (`LOAD_K6_CPUS`, default half a core, 1 GB memory)
+and its CPU is in the sampler's `containers.csv` (`mowdeck-loadtest-k6`): subtract it from the
+host's busy time. When it runs at its cap, k6 itself delays requests and the level's latency is
+too pessimistic; give it more (`LOAD_K6_CPUS=1`) and repeat that level.
+
+### The scripts
+
+| Script | What it does |
+| --- | --- |
+| `tests/load/vps/sample.sh [dir]` | Until Ctrl+C, every `SAMPLE_INTERVAL` seconds (10): `host.csv` (load average, CPU busy, iowait and steal of the whole host, memory, swap in use, swap-in and -out pages per second, the sandboxes per state from Identity's `demo_sandboxes`, whether k6 runs, one probe per demo through the host's proxy as `status:seconds`) and `containers.csv` (CPU in percent of one core and memory of every container on the host). Reads only. |
+| `tests/load/vps/ladder.sh [level ...]` | The scenario `sandbox-visitor` once per level (default `10 20 30 40` visitors), each a separate k6 run with its own summary, then `LOAD_PAUSE` seconds for the demo to delete the sandboxes. Holds the demo's reset lock (`/run/lock/mowdeck-demo.lock`), so the nightly reset waits for the test instead of falling into it (and the test refuses to start while a reset or update runs). Writes `levels.csv`, one row per level. |
+
+The ladder stops after a level with 1 % failed requests or more, fewer than 99 % of the live
+views ready, or an API p95 of 2 s or more (a level that only crosses the 500 ms threshold is the
+knee coming; the next level runs). Its watchdog stops k6 at once (SIGINT, the summary is still
+written) when swap in use grows by 256 MiB, the 1-minute load average passes 6, or another demo
+fails two probes in a row.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LOAD_RAMP`, `LOAD_DURATION`, `LOAD_HOLD`, `LOAD_PAUSE` | `60s`, `5m`, `120`, `120` | arrival time, stay, seconds per live view, pause between levels |
+| `LOAD_MOW` | `1` | every visitor starts one of its mowers (`0`: only watches) |
+| `LOAD_PROXY_CONTAINER`, `LOAD_BASE_URL`, `LOAD_ORIGIN` | `lktec-web`, `http://mowdeck-demo-gateway`, `https://mowdeck-demo.lktec.org` | the proxy whose network k6 uses, the gateway as the proxy reaches it (only a name or private address is accepted), the public origin for the socket's `Origin` |
+| `LOAD_K6_CPUS`, `LOAD_K6_MEMORY` | `0.5`, `1g` | k6's share of the host |
+| `LOAD_STOP_P95_MS`, `LOAD_STOP_FAILED_PCT` | `2000`, `1` | when the ladder stops after a level |
+| `LOAD_MAX_SWAP_GROWTH_MIB`, `LOAD_MAX_LOAD1` | `256`, `6` | when the watchdog stops k6 |
+| `LOAD_PROBES`, `SAMPLE_PROBES` | the other demos (the sampler adds MowDeck) | host names probed through `http://127.0.0.1/` |
+| `LOAD_DEMO_PROJECT`, `LOAD_DEMO_LOCK` | `mowdeck-demo`, `/run/lock/mowdeck-demo.lock` | the demo's Compose project and reset lock (empty: no lock) |
+
+**Cleanup.** Every visitor logs out when its level ends; the demo deletes its sandbox within about
+a minute (the ladder prints the counts after the pause). A visitor stopped early (the watchdog,
+Ctrl+C) cannot log out: its sandbox rests (no socket, no CPU) and is deleted after
+`DEMO_SANDBOX_IDLE_MINUTES` (30), because it never refreshes its session. Until then it holds a
+place below `DEMO_SANDBOX_MAX`; the nightly reset removes whatever is left.
+
+**The cap.** The demo lets at most `DEMO_SANDBOX_MAX` (40) sandboxes exist at once, real visitors
+included; a level near it meets "the demo is full" (`sandboxes_full` in `levels.csv`). To measure
+above it, raise it for the window on Identity alone, without editing `demo.env` (a variable in
+the shell wins over the env files), and set it back the same way afterwards:
+
+```bash
+cd /opt/mowdeck-demo/infra/compose
+compose() {
+  docker compose -p mowdeck-demo --project-directory . --env-file .env.example \
+    --env-file demo/demo.env -f docker-compose.yml -f docker-compose.demo.yml \
+    $( [ -f demo/demo.override.yml ] && echo -f demo/demo.override.yml ) "$@"
+}
+DEMO_SANDBOX_MAX=60 compose up -d --no-deps identity     # Identity restarts (about 20 s)
+docker exec mowdeck-demo-identity-1 printenv MOWDECK_IDENTITY_DEMO_SANDBOX_MAX   # 60
+compose up -d --no-deps identity                          # back to demo.env's value
+```
+
+The scenario also runs against the stack under test:
+`LOAD_VUS=10 node tests/load/load.mjs k6 sandbox-visitor`. To try the scripts themselves on a
+workstation, start a stack with `load.mjs up`, put a stand-in for the proxy on its network
+(`docker run -d --name fake-proxy --network mowdeck-load busybox:1.37 sleep 3600`; the load stack
+trusts its whole subnet) and run `ladder.sh` with `LOAD_PROXY_CONTAINER=fake-proxy
+LOAD_BASE_URL=http://traefik LOAD_ORIGIN=http://localhost:8590 LOAD_DEMO_PROJECT=mowdeck-load
+LOAD_DEMO_LOCK= LOAD_PROBES=`.
 
 ## Results
 
