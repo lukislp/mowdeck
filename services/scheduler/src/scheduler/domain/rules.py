@@ -73,8 +73,13 @@ def _check_recurrence(schedule: Schedule) -> None:
         if not 1 <= schedule.interval_days <= 365:
             raise InvalidInput("interval_days must be between 1 and 365")
         schedule.days_of_week = []
+    elif schedule.kind == "once":
+        if schedule.anchor_date is None:
+            raise InvalidInput("a once schedule needs anchor_date (the day it runs)")
+        schedule.days_of_week = []
+        schedule.interval_days = None
     else:
-        raise InvalidInput("kind must be weekly or every_n_days")
+        raise InvalidInput("kind must be weekly, every_n_days or once")
 
 
 def _check_rain(schedule: Schedule) -> None:

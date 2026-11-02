@@ -68,6 +68,22 @@ Delete the caller's provider (404 when there is none).
 | --- | --- | --- |
 | 204 | Successful Response | no body |
 
+#### POST /api/v1/vision/me/provider/structured
+
+**Structured Answer**
+
+A text-only question to the caller's effective provider (own, else the installation's) whose answer is one JSON object shaped by `schema` (ADR 0075): the interface other modules (the optional assistant) use to reuse the AI provider without seeing a key. Its own hourly limit per user (`MOWDECK_VISION_STRUCTURED_PER_HOUR`); recorded in the cost accounting as kind `structured`. The text and the answer are neither logged nor stored; the caller validates the answer.
+
+**Request body** (required): `application/json` [StructuredIn](#structuredin)
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [StructuredOut](#structuredout) |
+| 409 | `vision-provider-missing`: no own provider, no hosted default. | no body |
+| 422 | A field is out of its limits or the schema is not an object. | no body |
+| 429 | `vision-quota`: the hourly limit of structured answers. | no body |
+| 502 | `vision-provider-failed`: no JSON object came back. | no body |
+
 #### POST /api/v1/vision/me/provider/test
 
 **Test My Provider**
@@ -582,6 +598,33 @@ One drive step (blades are always off).
 What happened to one drive step.
 
 Type: `"pending"` \| `"done"` \| `"aborted"` \| `"skipped"`
+
+### StructuredIn
+
+`POST /me/provider/structured`: a text-only question whose answer is one JSON object (ADR 0075). The schema goes to the model as its structured output format (strict JSON schema: every object closed, every property required); the answer is not validated against it here, the caller validates it against its own rules.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `name` | string | no | min length 1; max length 64; pattern `^[A-Za-z0-9_-]+$`; default `"answer"` |
+| `purpose` | string | yes | The calling module (cost accounting and logs), e.g. `assistant`.; min length 1; max length 32; pattern `^[a-z0-9_]+$` |
+| `schema` | object | yes | JSON schema of the answer. |
+| `system` | string | yes | min length 1; max length 12000 |
+| `text` | string | yes | min length 1; max length 4000 |
+
+### StructuredOut
+
+The answer of a structured request: the model's JSON object and what it cost.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `cost_usd` | number or null | yes | LiteLLM's estimate; null when unknown. |
+| `family` | string | yes |  |
+| `hosted` | boolean | yes |  |
+| `input_tokens` | integer or null | yes |  |
+| `latency_ms` | integer | yes |  |
+| `model` | string | yes |  |
+| `output` | object | yes |  |
+| `output_tokens` | integer or null | yes |  |
 
 ### ValidationError
 

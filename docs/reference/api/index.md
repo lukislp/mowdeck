@@ -6,6 +6,7 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 
 | Service | Base path | Operations | What it does |
 | --- | --- | --- | --- |
+| [assistant](assistant.md) | `/api/v1/assistant` | 2 | Chat control: proposals from typed requests (optional add-on, ADR 0075). |
 | [billing](billing.md) | `/api/v1/billing` | 6 | Plans, checkout and the Stripe webhook (only with billing enabled). |
 | [device-gateway](device-gateway.md) | `/api/v1/device-gateway` | 1 | Mower links of the installation (operator view). |
 | [entitlements](entitlements.md) | `/api/v1/entitlements` | 8 | What the account's plan allows; usage and limits. |
@@ -16,7 +17,7 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | [realtime](realtime.md) | `/api/v1/realtime` | 0 | The WebSocket for live state and command results (protocol in the guide). |
 | [scheduler](scheduler.md) | `/api/v1/scheduler` | 14 | Schedules, their runs, rain pause and the weather. |
 | [telemetry](telemetry.md) | `/api/v1/telemetry` | 44 | Current state, history, positions, maps, health and reports. |
-| [vision](vision.md) | `/api/v1/vision` | 16 | AI assisted recovery: proposals, approvals and the provider settings. |
+| [vision](vision.md) | `/api/v1/vision` | 17 | AI assisted recovery: proposals, approvals and the provider settings. |
 
 The raw OpenAPI 3.1 documents are in [`apps/web/openapi`](https://github.com/lukislp/mowdeck/blob/main/apps/web/openapi): load them into Swagger UI, Redoc, Scalar, Insomnia, Bruno or a client generator of your choice.
 

@@ -1,0 +1,17 @@
+{{- /* Assistant (ADR 0075): the optional chat control add-on (Compose service assistant, profile
+"assistant"). Off by default (services.assistant.enabled=false). It turns a typed request into a
+proposal the user confirms in the web app and executes nothing itself. HTTP only: it reads
+Identity, Fleet and Telemetry and asks Vision for structured answers, always with the caller's
+own access token, so it has no NATS user, no database and no secret. Enabled, Identity lists its
+descriptor (templates/identity.yaml) and the web app shows the chat box on the mower page. */ -}}
+{{- $c := .Values.config }}
+{{- $env := merge (omit (include "mowdeck.commonEnv" . | fromJson) "MOWDECK_NATS_URL") (include "mowdeck.jwksEnv" . | fromJson) (dict
+  "MOWDECK_NATS_ENABLED" "false"
+  "MOWDECK_ASSISTANT_INTERPRETER" $c.ASSISTANT_INTERPRETER
+  "MOWDECK_ASSISTANT_REQUESTS_PER_MINUTE" (toString $c.ASSISTANT_REQUESTS_PER_MINUTE)
+  "MOWDECK_ASSISTANT_AI_TIMEOUT_SECONDS" (toString $c.ASSISTANT_AI_TIMEOUT_SECONDS)
+  "MOWDECK_ASSISTANT_IDENTITY_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "identity"))
+  "MOWDECK_ASSISTANT_FLEET_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "fleet"))
+  "MOWDECK_ASSISTANT_TELEMETRY_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "telemetry"))
+  "MOWDECK_ASSISTANT_VISION_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "vision"))) }}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "assistant" "key" "assistant" "image" "assistant" "env" $env) }}
