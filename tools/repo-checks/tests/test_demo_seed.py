@@ -128,3 +128,14 @@ def test_the_seed_needs_its_secret(seed: ModuleType, monkeypatch: pytest.MonkeyP
 def test_the_gardens_lie_apart(seed: ModuleType) -> None:
     origins = {seed._origin(m["offset_m"]) for m in seed.MOWERS}
     assert len(origins) == len(seed.MOWERS)
+
+
+def test_with_sandboxes_the_job_prepares_no_shared_account(
+    seed: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Demo sandboxes (ADR 0076): Identity fills every visitor's account; the job only waits."""
+    recorder = Recorder()
+    monkeypatch.setattr(seed.Api, "call", recorder)
+    monkeypatch.setenv("DEMO_SANDBOXES", "true")
+    assert seed.main() == 0
+    assert recorder.calls == []

@@ -62,6 +62,11 @@ class Tx(Protocol):
         """Delete a template; False if there was none."""
         ...
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete the account's templates and the facts of its mowers (demo purge,
+        ADR 0076); returns the rows deleted."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions."""

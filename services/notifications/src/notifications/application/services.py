@@ -6,6 +6,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import NewDeviceLogin, NotificationKind
 
 from notifications.application.context import NotificationsConfig
+from notifications.application.demo import DemoPurge
 from notifications.application.fanout import Fanout, Notified
 from notifications.application.live_activity import LiveActivities
 from notifications.application.outbox import DeliveryObserver, Outbox
@@ -113,6 +114,8 @@ class Services:
     """Live Activities and widget reloads (ADR 0059)."""
     push_images: PushImages | None = None
     """Serves the push image URLs; None without a public URL and signing secret."""
+    demo: DemoPurge | None = None
+    """The demo sandbox purge (ADR 0076)."""
 
 
 def build_services(
@@ -134,8 +137,9 @@ def build_services(
     explains vendor error codes in the push texts, None keeps the vendor's message)."""
     fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos, errors)
     live = LiveActivities(store, channels, views, clock, errors)
+    watcher = Watcher(store, fanout, config, clock, live)
     return Services(
-        watcher=Watcher(store, fanout, config, clock, live),
+        watcher=watcher,
         fanout=fanout,
         outbox=Outbox(store, channels, config, clock, observer),
         users=UserNotifications(store, fanout, channels, views, catalog, config, clock),
@@ -143,4 +147,5 @@ def build_services(
         config=config,
         live=live,
         push_images=PushImages(store, image_links, clock) if image_links is not None else None,
+        demo=DemoPurge(store, [fanout.forget_mowers, watcher.forget_mowers, live.forget_mowers]),
     )

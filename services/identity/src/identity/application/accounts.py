@@ -126,11 +126,25 @@ class AccountService:
 
         ``ignore_mode`` (operator CLI only) registers even when registration is closed.
         """
-        username_norm = validate_username(data.username)
+        validate_username(data.username)
         validate_password(data.password, username=data.username)
+        password_hash = await self.deps.hasher.hash(data.password)
+        return await self.create(data, password_hash, ctx, ignore_mode=ignore_mode)
+
+    async def create(
+        self,
+        data: Registration,
+        password_hash: str | None,
+        ctx: RequestContext,
+        *,
+        ignore_mode: bool = False,
+    ) -> Registered:
+        """The account, its owner, the default roles and the owner's tuples, with a password
+        hash already made (``data.password`` is not read). ``password_hash`` None makes a user
+        without a password (a demo sandbox's visitor, ADR 0076: nobody signs in with one)."""
+        username_norm = validate_username(data.username)
         email_norm = normalize_email(data.email)
         name = validate_name(data.account_name)
-        password_hash = await self.deps.hasher.hash(data.password)
         now = self.deps.clock()
         async with self.deps.uow() as work:
             tx = work.tx
@@ -165,7 +179,7 @@ class AccountService:
                     status=Status.ACTIVE,
                     created_at=now,
                     password_hash=password_hash,
-                    password_changed_at=now,
+                    password_changed_at=now if password_hash is not None else None,
                     email=data.email.strip() if data.email and email_norm else None,
                     email_norm=email_norm,
                 )

@@ -31,7 +31,7 @@ replica) passes every ``MowerState`` to :meth:`AutoAnalysis.on_state`:
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
@@ -142,6 +142,11 @@ class AutoAnalysis:
         self._monotonic = monotonic
         self._known: dict[UUID, tuple[str | None, float]] = {}
         self._running: set[UUID] = set()
+
+    def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
+        """Drop the remembered error of these mowers (demo sandbox purge)."""
+        for mower_id in mower_ids:
+            self._known.pop(mower_id, None)
 
     async def on_state(self, state: MowerState) -> bool:
         """Record the state's recoverable error; True when it starts an automatic analysis
