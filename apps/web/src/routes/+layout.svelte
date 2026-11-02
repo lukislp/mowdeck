@@ -53,6 +53,7 @@
     resetHours={demo.config.resetHours}
     href={demo.sourceUrl}
     explorer={demo.apiExplorer}
+    idleMinutes={demo.config.sandbox?.idleMinutes ?? null}
   />
 {/if}
 

@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from enum import Enum
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import ColumnElement, Table, delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +25,7 @@ from identity.domain.models import (
     AppLoginRequest,
     AuditEntry,
     CatalogueEntry,
+    DemoSandbox,
     ExternalIdentity,
     KnownDevice,
     LoginAttempt,
@@ -178,6 +180,17 @@ class SqlTx:
     oauth_states: SqlTable[OAuthState]
     onboarding: SqlTable[OnboardingProgress]
     known_devices: SqlTable[KnownDevice]
+    sandboxes: SqlTable[DemoSandbox]
+
+    async def purge_audit(self, account_id: UUID) -> int:
+        """Delete one demo sandbox account's audit rows: the trigger lets a ``DELETE`` pass
+        while ``mowdeck.audit_purge`` is on, for this transaction only (ADR 0076)."""
+        conn = self.audit.conn
+        await conn.execute(select(func.set_config("mowdeck.audit_purge", "on", True)))
+        try:
+            return await self.audit.delete(account_id=account_id)
+        finally:
+            await conn.execute(select(func.set_config("mowdeck.audit_purge", "off", True)))
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -202,6 +215,7 @@ class SqlTx:
             oauth_states=SqlTable(conn, tables.oauth_states, OAuthState, "id"),
             onboarding=SqlTable(conn, tables.onboarding_progress, OnboardingProgress, "user_id"),
             known_devices=SqlTable(conn, tables.known_devices, KnownDevice, "id"),
+            sandboxes=SqlTable(conn, tables.demo_sandboxes, DemoSandbox, "account_id"),
         )
 
 

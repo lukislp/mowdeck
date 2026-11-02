@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
     MetaData,
     String,
@@ -332,6 +333,23 @@ known_devices = Table(
     Column("last_seen_at", TS, nullable=False),
     Column("last_ip_prefix", String(64)),
     UniqueConstraint("user_id", "token_hash", name="uq_known_devices_user_id_token_hash"),
+)
+
+# Public demo (ADR 0076): one row per visitor sandbox. No foreign key: the row outlives its
+# account while the purge in the other services runs.
+demo_sandboxes = Table(
+    "demo_sandboxes",
+    metadata,
+    Column("account_id", Uuid, primary_key=True),
+    Column("user_id", Uuid, nullable=False),
+    Column("state", String(16), nullable=False, index=True),
+    Column("created_at", TS, nullable=False),
+    Column("claimed_at", TS),
+    Column("purge_reason", String(32)),
+    Column("purged", JSONB, nullable=False),
+    Column("attempts", Integer, nullable=False),
+    Column("next_attempt_at", TS),
+    Column("last_error", String(500)),
 )
 
 # Schema only in Phase 1 (design section 5): support access and invitations.

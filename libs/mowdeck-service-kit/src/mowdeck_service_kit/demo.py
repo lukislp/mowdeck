@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 from fastapi import Request
 from mowdeck_contracts.v1 import PROBLEM_TYPE_PREFIX, ProblemDetails
+from pydantic import BaseModel, Field
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -168,6 +169,18 @@ def require_demo(request: Request) -> None:
     """FastAPI dependency of demo-only endpoints: 404 outside demo mode."""
     if not demo_enabled(request):
         raise NotFound("there is no demo on this installation")
+
+
+DEMO_PURGE_PATH = "/demo/accounts/{account_id}"
+"""Path (after a service's prefix) of its demo purge endpoint, ``DELETE`` (ADR 0076)."""
+
+
+class DemoPurgeOut(BaseModel):
+    """Answer of a service's demo purge endpoint (ADR 0076): ``DELETE
+    /api/v1/<service>/demo/accounts/{account_id}`` removes everything the service holds of one
+    demo sandbox account. Idempotent: a second call answers ``deleted`` 0."""
+
+    deleted: int = Field(ge=0, description="Rows or objects removed (0: nothing was left).")
 
 
 def require_demo_seed(request: Request) -> None:

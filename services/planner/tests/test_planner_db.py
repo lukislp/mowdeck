@@ -193,3 +193,26 @@ async def test_planner_memory_store_rolls_back_on_error() -> None:
             await tx.put_template(_template(uuid4(), "x"))
             raise RuntimeError("boom")
     assert store.data.templates == {}
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_planner_db_purge_account(kind: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0076: ``purge_account`` deletes the account's templates and mower facts and nothing
+    of another account; a second purge finds nothing."""
+    account_id, other = uuid4(), uuid4()
+    mowers = {account_id: uuid4(), other: uuid4()}
+    async with store_of(kind, monkeypatch) as store:
+        async with store.transaction() as tx:
+            for owner, mower_id in mowers.items():
+                await tx.put_template(_template(owner, "a"))
+                await tx.put_template(_template(owner, "b"))
+                await tx.put_map(mower_id, owner, NOW, {"areas": [1]})
+                await tx.put_capabilities(mower_id, owner, NOW, {"custom_paths": True})
+        async with store.transaction() as tx:
+            assert await tx.purge_account(account_id) == 3
+            assert await tx.purge_account(account_id) == 0
+        async with store.transaction() as tx:
+            assert await tx.count_templates(account_id) == 0
+            assert await tx.get_facts(mowers[account_id]) is None
+            assert await tx.count_templates(other) == 2
+            assert await tx.get_facts(mowers[other]) is not None

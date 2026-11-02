@@ -59,6 +59,30 @@ describe('parseConfig demo', () => {
     expect(parseConfig({ demo: { resetHours: 2.5 } }).demo).toEqual({ resetHours: 6 });
     expect(parseConfig({ demo: { resetHours: 1000 } }).demo).toEqual({ resetHours: 168 });
   });
+
+  it('reads demo sandboxes (ADR 0076) and their idle minutes', () => {
+    expect(parseConfig({ demo: { resetHours: 6, sandbox: { idleMinutes: 45 } } }).demo).toEqual({
+      resetHours: 6,
+      sandbox: { idleMinutes: 45 },
+    });
+    expect(parseConfig({ demo: { sandbox: { idleMinutes: 5 } } }).demo?.sandbox).toEqual({
+      idleMinutes: 5,
+    });
+    expect(parseConfig({ demo: { sandbox: { idleMinutes: 1440 } } }).demo?.sandbox).toEqual({
+      idleMinutes: 1440,
+    });
+  });
+
+  it('falls back to 30 idle minutes and leaves sandboxes off without the block', () => {
+    for (const idleMinutes of [undefined, 0, 4, 1441, 12.5, '30', null]) {
+      expect(parseConfig({ demo: { sandbox: { idleMinutes } } }).demo?.sandbox).toEqual({
+        idleMinutes: 30,
+      });
+    }
+    for (const sandbox of [undefined, null, true, 'yes', 1]) {
+      expect(parseConfig({ demo: { resetHours: 6, sandbox } }).demo).toEqual({ resetHours: 6 });
+    }
+  });
 });
 
 describe.skipIf(!hasSh)('rendered demo block', () => {
@@ -71,6 +95,36 @@ describe.skipIf(!hasSh)('rendered demo block', () => {
     const config = render({ MOWDECK_WEB_DEMO_MODE: 'true', MOWDECK_WEB_DEMO_RESET_HOURS: '4' });
     expect(config.demo).toEqual({ resetHours: 4 });
     expect(parseConfig(config).demo).toEqual({ resetHours: 4 });
+  });
+
+  it('adds the sandbox block only when sandboxes are on', () => {
+    const shared = render({ MOWDECK_WEB_DEMO_MODE: 'true', MOWDECK_WEB_DEMO_SANDBOX: 'false' });
+    expect(shared.demo).toEqual({ resetHours: 6 });
+    for (const on of ['true', '1', 'yes', 'on', 'TRUE']) {
+      const config = render({ MOWDECK_WEB_DEMO_MODE: 'true', MOWDECK_WEB_DEMO_SANDBOX: on });
+      expect(config.demo).toEqual({ resetHours: 6, sandbox: { idleMinutes: 30 } });
+    }
+    const custom = render({
+      MOWDECK_WEB_DEMO_MODE: 'true',
+      MOWDECK_WEB_DEMO_RESET_HOURS: '4',
+      MOWDECK_WEB_DEMO_SANDBOX: 'true',
+      MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES: '45',
+    });
+    expect(custom.demo).toEqual({ resetHours: 4, sandbox: { idleMinutes: 45 } });
+    expect(parseConfig(custom).demo).toEqual({ resetHours: 4, sandbox: { idleMinutes: 45 } });
+    // Sandboxes without the demo mode are no demo at all.
+    expect(render({ MOWDECK_WEB_DEMO_SANDBOX: 'true' })).not.toHaveProperty('demo');
+  });
+
+  it('replaces unusable idle minutes', () => {
+    for (const minutes of ['', 'abc', '4', '1441', '-5', '2.5']) {
+      const config = render({
+        MOWDECK_WEB_DEMO_MODE: 'true',
+        MOWDECK_WEB_DEMO_SANDBOX: 'true',
+        MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES: minutes,
+      });
+      expect(config.demo).toEqual({ resetHours: 6, sandbox: { idleMinutes: 30 } });
+    }
   });
 
   it('replaces an unusable interval', () => {
@@ -107,6 +161,26 @@ describe.skipIf(!hasSh)('demo label in the served HTML (demo.conf)', () => {
     // Text in <head> only: no script, so the build's CSP hashes stay valid.
     expect(replace).not.toMatch(/<script|\son\w+=|\sstyle=/i);
     expect(demoTitle('Demo · MowDeck', 'Demo')).toBe('Demo · MowDeck');
+    // The shared demo says so.
+    expect(replace).toMatch(/geteilt mit allen Besuchern/);
+  });
+
+  it('does not claim sharing when every visitor has an own sandbox', () => {
+    const conf = renderNginx({
+      MOWDECK_WEB_DEMO_MODE: 'true',
+      MOWDECK_WEB_DEMO_SANDBOX: 'true',
+      MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES: '45',
+    });
+    const rule = /^sub_filter '([^']+)' '([^']+)';$/m.exec(conf);
+    expect(rule, conf).not.toBeNull();
+    const [, find, replace] = rule ?? [];
+    expect(appHtml).toContain(find);
+    expect(replace).toContain('<title>Demo · MowDeck</title>');
+    expect(replace).not.toMatch(/geteilt|shared/i);
+    expect(replace).toMatch(
+      /<meta name="description" content="[^"]*Sandbox[^"]*45 min[^"]*6 h[^"]*" \/>/,
+    );
+    expect(replace).not.toMatch(/<script|\son\w+=|\sstyle=/i);
   });
 });
 

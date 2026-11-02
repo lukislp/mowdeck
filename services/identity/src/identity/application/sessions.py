@@ -265,6 +265,29 @@ class SessionService:
             raise NotFoundError("the demo is being prepared; try again in a minute")
         return await self._start_session(found.id, None, ctx, method="demo")
 
+    async def login_sandbox(
+        self, user_id: UUID, account_id: UUID, ctx: RequestContext
+    ) -> TokenPair:
+        """Public demo with sandboxes (ADR 0076): a session of the visitor's own sandbox user,
+        exactly like ``login_demo`` (no device, no new-login alert)."""
+        return await self._start_session(user_id, account_id, ctx, method="demo")
+
+    async def provisioning_token(self, user_id: UUID, account_id: UUID) -> str:
+        """An access token of a demo sandbox's user for filling its own sandbox (ADR 0076): no
+        login session, no audit row, valid for the usual access token lifetime."""
+        async with self.deps.store.transaction() as tx:
+            found = await tx.users.get(id=user_id)
+            acct = await tx.accounts.get(id=account_id)
+            membership = await tx.memberships.get(account_id=account_id, user_id=user_id)
+            if found is None or acct is None or membership is None:
+                raise NotFoundError("the sandbox account is gone")
+            catalogue = await self.deps.catalogue.current(tx)
+            principal = await user_principal(
+                tx, found, acct, membership, catalogue, session_id=None
+            )
+        principal = await self._with_plan(principal, acct)
+        return self.issuer.issue(principal).token
+
     async def _start_session(
         self,
         user_id: UUID,

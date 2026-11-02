@@ -15,21 +15,23 @@ export interface TourText {
 
 export function tourText(
   id: TourStepId,
-  context: Pick<TourContext, 'canManage' | 'demo'>,
+  context: Pick<TourContext, 'canManage' | 'demo' | 'sandbox'>,
 ): TourText {
+  // Demo sandboxes (ADR 0076): the mowers are the visitor's own, not shared with everybody.
+  const own = context.sandbox === true;
   const text = ((): TourText => {
     switch (id) {
       case 'welcome':
         return {
           title: m.tour_welcome_title(),
           body: m.tour_welcome_body(),
-          demo: m.tour_welcome_demo(),
+          demo: own ? m.tour_welcome_demo_sandbox() : m.tour_welcome_demo(),
         };
       case 'overview':
         return {
           title: m.tour_overview_title(),
           body: m.tour_overview_body(),
-          demo: m.tour_overview_demo(),
+          demo: own ? m.tour_overview_demo_sandbox() : m.tour_overview_demo(),
         };
       case 'map':
         return { title: m.tour_map_title(), body: m.tour_map_body(), demo: null };

@@ -40,6 +40,8 @@ export interface TourContext {
   modules: ReadonlySet<string>;
   /** The public demo (ADR 0068). */
   demo: boolean;
+  /** The demo gives every visitor an own sandbox (ADR 0076): the notes do not claim sharing. */
+  sandbox?: boolean;
 }
 
 export interface TourStepDef {
