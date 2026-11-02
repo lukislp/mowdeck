@@ -119,11 +119,24 @@ class ServiceSettings(BaseSettings):
     database_url: SecretStr | None = None
     """PostgreSQL URL, e.g. ``postgresql://user:pass@host/db``. Usually given as ``_FILE``."""
 
+    database_pool_size: int = Field(default=5, ge=1, le=100)
+    """Connections the request pool keeps open (``MOWDECK_DATABASE_POOL_SIZE``). Together with
+    ``database_max_overflow`` and the one readiness connection this is the service's share of
+    PostgreSQL's ``max_connections``; the budget of the stack is in docs/ops/compose.md."""
+
+    database_max_overflow: int = Field(default=5, ge=0, le=100)
+    """Connections the pool may open beyond ``database_pool_size`` under load and closes again
+    when they are returned (``MOWDECK_DATABASE_MAX_OVERFLOW``)."""
+
     otel_exporter_otlp_endpoint: str | None = None
     """OTLP/HTTP endpoint (e.g. ``http://otel-collector:4318``). Tracing is off when unset."""
 
     metrics_enabled: bool = True
     """Serve Prometheus metrics at ``/metrics``."""
+
+    readiness_interval_seconds: float = Field(default=30.0, ge=0, le=3600)
+    """How often the service evaluates its own readiness checks (metric
+    ``mowdeck_readiness_check_up``, a log line when it changes, ADR 0077); 0 turns it off."""
 
     shutdown_grace_seconds: float = Field(default=10.0, ge=0, le=300)
     """Time budget for shutdown hooks and draining the bus before the process exits."""

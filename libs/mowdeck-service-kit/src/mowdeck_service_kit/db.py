@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from mowdeck_service_kit.health import ReadinessCheck
 from mowdeck_service_kit.settings import ServiceSettings
@@ -32,20 +33,35 @@ def async_database_url(url: str) -> str:
 
 
 def create_engine(settings: ServiceSettings, **options: Any) -> AsyncEngine:
-    """Create the async engine for ``settings.database_url`` (raises if it is not set)."""
+    """Create the async engine for ``settings.database_url`` (raises if it is not set).
+
+    The pool holds ``database_pool_size`` connections and opens up to ``database_max_overflow``
+    more under load; ``options`` override both (one-shot jobs pass ``pool_size=1``).
+    """
     if settings.database_url is None:
         msg = "MOWDECK_DATABASE_URL (or MOWDECK_DATABASE_URL_FILE) is not set"
         raise ValueError(msg)
     url = async_database_url(settings.database_url.get_secret_value())
-    defaults: dict[str, Any] = {"pool_pre_ping": True, "pool_size": 5, "max_overflow": 10}
+    defaults: dict[str, Any] = {
+        "pool_pre_ping": True,
+        "pool_size": settings.database_pool_size,
+        "max_overflow": settings.database_max_overflow,
+    }
     return create_async_engine(url, **{**defaults, **options})
 
 
 def readiness_check_db(engine: AsyncEngine, *, timeout_seconds: float = 2.0) -> ReadinessCheck:
-    """A readiness check named ``database`` that runs ``SELECT 1``."""
+    """A readiness check named ``database`` that runs ``SELECT 1``.
+
+    It runs on a connection of its own, opened for the check and closed right after it, never on
+    the request pool: a pool whose connections are all busy serving requests is load, not a
+    broken database, and must not make the service unready (ADR 0077). Each check briefly uses
+    one connection of the service's budget (docs/ops/compose.md).
+    """
+    probe = create_async_engine(engine.url, poolclass=NullPool)
 
     async def check() -> None:
-        async with engine.connect() as connection:
+        async with probe.connect() as connection:
             await connection.execute(text("SELECT 1"))
 
     return ReadinessCheck(name="database", check=check, timeout_seconds=timeout_seconds)

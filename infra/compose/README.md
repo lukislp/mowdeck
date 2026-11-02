@@ -110,7 +110,7 @@ The ids are only logged. Services using `mowdeck-authz` resolve the store **by n
 
 ## MowDeck services
 
-Services are built from the repository root (`build.context: ../..`); `docker compose up -d --build --wait` rebuilds them. They run as non-root with `read_only: true` and a tmpfs at `/tmp`, and their healthcheck calls `/readyz`.
+Services are built from the repository root (`build.context: ../..`); `docker compose up -d --build --wait` rebuilds them. They run as non-root with `read_only: true` and a tmpfs at `/tmp`, and their healthcheck calls `/startupz`: healthy once every readiness check passed once, afterwards only "the process answers", so load or a later dependency failure never takes a service out of Traefik's routing (ADR 0077, `docs/ops/compose.md`, "Health and routing"). PostgreSQL runs with `max_connections=200`; the connection budget per service is in `docs/ops/compose.md`, "Database connections".
 
 ### Identity
 
