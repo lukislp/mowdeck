@@ -263,8 +263,8 @@ What changed:
   validation. The answers are unchanged.
 - **Connection budget.** Pools are 5 + 5 per service (Telemetry 10 + 5) instead of 5 + 10, so
   connections are kept rather than opened and closed under load, and PostgreSQL runs with
-  `max_connections=200`; the budget per service is in [Compose: Database
-  connections](compose.md#database-connections) and checked in CI.
+  `max_connections=200`; the budget per service is in
+  [Compose: Database connections](compose.md#database-connections) and checked in CI.
 - **Logs of failed authorization checks name the cause.** Standard library records keep their
   `extra` fields in the JSON log (secrets masked), so `mowdeck_authz` shows
   `"operation": "check", "error": "TimeoutError"`.
