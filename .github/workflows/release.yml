@@ -88,14 +88,14 @@ jobs:
       # starts the tag workflows (helm-kind.yml); verifyConditions runs a push --dry-run here too.
       - if: github.event_name == 'push'
         name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@8d601225359f47a17757024a06fcdf227ed2a59a # v1.8.19
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@1e08eeda9f5ded5011c26e0f49d4c71a7927a375 # v1.8.22
         with:
           deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
       # Dry run: computes the next version from the commits since the last tag without tagging.
       # "No relevant changes" is the expected outcome for docs/ci/chore-only pushes, not a failure.
       - if: github.event_name == 'push'
         id: semrel
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@8d601225359f47a17757024a06fcdf227ed2a59a # v1.8.19
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@1e08eeda9f5ded5011c26e0f49d4c71a7927a375 # v1.8.22
         with:
           dry-run: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -203,7 +203,7 @@ jobs:
             exit 1
           fi
       - name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@8d601225359f47a17757024a06fcdf227ed2a59a # v1.8.19
+        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@1e08eeda9f5ded5011c26e0f49d4c71a7927a375 # v1.8.22
         with:
           deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
       # semantic-release creates its tag with a plain `git tag <name> <sha>`. With tag.gpgSign git
@@ -233,7 +233,7 @@ jobs:
             echo "GIT_COMMITTER_EMAIL=155678024+lukislp@users.noreply.github.com"
           } >> "$GITHUB_ENV"
       - id: semrel
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@8d601225359f47a17757024a06fcdf227ed2a59a # v1.8.19
+        uses: lukislp/ci-workflows/.github/actions/semantic-release@1e08eeda9f5ded5011c26e0f49d4c71a7927a375 # v1.8.22
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       # No retry from a newer tip (unlike the repositories that build after tagging from main):
