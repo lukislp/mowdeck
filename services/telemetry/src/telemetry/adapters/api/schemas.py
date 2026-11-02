@@ -110,8 +110,9 @@ class PositionOut(BaseModel):
 
     @classmethod
     def of(cls, row: PositionRow) -> "PositionOut":
-        """Build from a stored row."""
-        return cls(
+        """Build from a stored row. Without validation: the row is typed already, and a track
+        has thousands of points (validating each was a large share of the mower page)."""
+        return cls.model_construct(
             observed_at=row.observed_at,
             lat=row.lat,
             lon=row.lon,

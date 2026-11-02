@@ -53,7 +53,7 @@ def instrument_app(app: FastAPI, settings: ServiceSettings) -> ShutdownFunction 
     FastAPIInstrumentor.instrument_app(
         app,
         tracer_provider=provider,
-        excluded_urls="healthz,readyz,metrics",
+        excluded_urls="healthz,startupz,readyz,metrics",
     )
     _log.info("tracing enabled", endpoint=traces_endpoint(endpoint))
 

@@ -16,7 +16,7 @@ from mowdeck_service_kit import CurrentAccountId
 from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
 
-from telemetry.adapters.api.deps import ControlMower, ServicesDep, ViewMower
+from telemetry.adapters.api.deps import ControlMower, ServicesDep, SharedReads, ViewMower
 from telemetry.application.zones import ZoneOverview, Zones, ZoneTotals
 from telemetry.domain.zones import (
     MAX_ANCHOR_DISTANCE_M,
@@ -238,7 +238,7 @@ class ZoneStatsOut(BaseModel):
     items: list[ZoneTotalsOut]
 
 
-@router.get("/mowers/{mower_id}/zones")
+@router.get("/mowers/{mower_id}/zones", dependencies=[SharedReads])
 async def list_zones(
     mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, zones: ZonesDep
 ) -> ZonesOut:
@@ -301,7 +301,7 @@ async def delete_zone(
     return Response(status_code=204)
 
 
-@router.get("/mowers/{mower_id}/zones/stats")
+@router.get("/mowers/{mower_id}/zones/stats", dependencies=[SharedReads])
 async def zone_stats(
     mower_id: UUID,
     _: ViewMower,

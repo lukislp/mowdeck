@@ -30,12 +30,14 @@ kubectl -n mowdeck create secret docker-registry ghcr-pull \
 | openfga, openfga-migrate | [OpenFGA chart](https://github.com/openfga/helm-charts) 0.3.16 (`openfga.enabled`) | postgres datastore, migration as an init container, `http://mowdeck-openfga:8080` |
 | authz-bootstrap | Job `mowdeck-authz-bootstrap-r<revision>` | writes the model when it changed (idempotent) |
 | `<service>-migrate` | Job per service (hook or per revision, see [Upgrades](#upgrades-and-migrations)) | `python -m <package>.adapters.db.migrate` |
-| identity, fleet, telemetry, realtime, notifications, scheduler, entitlements, planner, vision | Deployment + Service + ConfigMap | probes on `/healthz` (startup, liveness) and `/readyz` (readiness) |
+| identity, fleet, telemetry, realtime, notifications, scheduler, entitlements, planner, vision | Deployment + Service + ConfigMap | probes: startup `/startupz`, liveness `/healthz`, readiness `/readyz` (see below) |
 | device-gateway | StatefulSet + Service + headless Service | one shard per replica ([ADR 0013](../adr/0013-device-gateway-registry-and-sharding.md)) |
 | web | Deployment (nginx, uid 101, port 8080) | `/healthz`, runtime config from `WEB_MAP_*` |
 | camera-relay, mediamtx | Deployment each (`services.cameraRelay.enabled`) + a third Ingress `mowdeck-media` | off by default, see [Camera relay](#camera-relay-media-plane) |
 | agora-bridge | a second container of the camera-relay pod (`services.cameraRelay.agoraBridge`, your own image) | off by default, see [Agora source](#agora-source) |
 | matter-server | Deployment with `hostNetwork` and the `Recreate` strategy, a PersistentVolumeClaim (`services.matterServer.enabled`) | off by default; `/api/v1/matter` through the Ingress, API tokens from `secrets.MATTER_API_TOKENS`; pin it to a node in the hub's LAN and firewall that node's ports, see [Matter server](matter.md#helm) |
+
+**Probes** ([ADR 0077](../adr/0077-liveness-readiness-and-routing.md), `probes` in `values.yaml`): the startup probe (`/startupz`, every 2 s, up to 3 minutes) waits until every readiness check passed once; the liveness probe (`/healthz`) never touches a dependency, so a busy pod is not restarted (6 misses in a row, one minute); the readiness probe (`/readyz`: database on a connection of its own, OpenFGA, NATS, ...) takes a pod out of its Service only after 3 failures 10 s apart, with a 5 s timeout above the checks' own 2 s, so slow answers under load do not flap it.
 
 Every MowDeck pod runs as a non-root user with a read-only root file system, `allowPrivilegeEscalation: false`, all capabilities dropped, the `RuntimeDefault` seccomp profile, a memory-backed `/tmp` and no service account token. Settings come from a ConfigMap per service; secrets are mounted as files under `/run/secrets/mowdeck` and passed as the services' `MOWDECK_<NAME>_FILE` settings (database URL, OpenFGA token, Identity's key encryption key, the VAPID private key), so they never appear in the environment. Database services wait in an init container (`wait-for-schema`) until their database carries the newest migration of their image; services using OpenFGA wait (`wait-for-model`) until the store's latest model is the one of their release.
 
@@ -122,6 +124,8 @@ postgresql:
 ```
 
 Create the databases and roles first, like `infra/compose/init/01-databases.sql`. With an external database the migrations run as `pre-install`/`pre-upgrade` hooks before any pod changes.
+
+**Connections.** The in-cluster `Cluster` gets `max_connections` from `postgresql.cloudnativepg.maxConnections` (default 200, like Compose). Every replica of a service holds up to `MOWDECK_DATABASE_POOL_SIZE` + `MOWDECK_DATABASE_MAX_OVERFLOW` (5 + 5; Telemetry 10 + 5) plus one short-lived readiness connection, OpenFGA up to 30 per replica; the budget for one replica each is in [Compose: Database connections](compose.md#database-connections). Raise `maxConnections` (or the external server's setting) when you add replicas.
 
 ## NATS and OpenFGA
 
