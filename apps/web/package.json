@@ -22,9 +22,9 @@
   },
   "devDependencies": {
     "@inlang/paraglide-js": "2.29.2",
-    "@scalar/api-reference": "1.75.1",
-    "@sveltejs/adapter-static": "4.0.0",
-    "@sveltejs/kit": "3.1.0",
+    "@scalar/api-reference": "1.76.3",
+    "@sveltejs/adapter-static": "4.0.1",
+    "@sveltejs/kit": "3.1.1",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",
