@@ -33,6 +33,7 @@ from mowdeck_service_kit.entitlements import (
     install_entitlements,
 )
 
+from planner.adapters.api.demo_routes import router as demo_router
 from planner.adapters.api.deps import install_error_mapping
 from planner.adapters.api.routes import router
 from planner.adapters.bus.subscriptions import subscribe_all
@@ -121,7 +122,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router],
+        routers=[router, demo_router],
         readiness_checks=[readiness_check_db(engine)] if engine is not None else [],
         on_startup=[startup],
         on_shutdown=[shutdown],

@@ -29,6 +29,7 @@ from fleet.application.base_stations import BaseStationService
 from fleet.application.camera import CameraService
 from fleet.application.commands import CommandService
 from fleet.application.context import FleetConfig
+from fleet.application.demo_purge import AccountPurge
 from fleet.application.drive import DriveService
 from fleet.application.groups import GroupService
 from fleet.application.linked_accounts import CredentialVault, LinkedAccountService
@@ -72,6 +73,7 @@ class Services:
     base_stations: BaseStationService
     access: Access
     writer: TupleWriter
+    purge: AccountPurge
 
 
 def build_services(
@@ -106,6 +108,15 @@ def build_services(
     # One provider list for linking and for the options of cloud mowers (ADR 0066).
     discovery = cloud_discovery or _NoCloudDiscovery()
     catalog = ProviderCatalog(discovery, clock)
+    camera = CameraService(
+        store,
+        camera_gateway or _NoCameraGateway(),
+        clock,
+        entitlements,
+        camera_relay,
+        photos=photo_gateway or _NoPhotoGateway(),
+        snapshot_min_interval_seconds=snapshot_min_interval_seconds,
+    )
     return Services(
         sites=sites,
         groups=GroupService(uow, store, access, clock, entitlements),
@@ -113,15 +124,7 @@ def build_services(
         area_names=AreaNameService(uow, store, clock),
         commands=command_service,
         drive=DriveService(store, access, clock),
-        camera=CameraService(
-            store,
-            camera_gateway or _NoCameraGateway(),
-            clock,
-            entitlements,
-            camera_relay,
-            photos=photo_gateway or _NoPhotoGateway(),
-            snapshot_min_interval_seconds=snapshot_min_interval_seconds,
-        ),
+        camera=camera,
         path_preview=PathPreviewService(
             store, path_preview_gateway or _NoPathPreviewGateway(), entitlements
         ),
@@ -149,6 +152,7 @@ def build_services(
         ),
         access=access,
         writer=writer,
+        purge=AccountPurge(uow, camera),
     )
 
 

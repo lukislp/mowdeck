@@ -90,6 +90,13 @@ class MemoryTx:
         """Insert or update."""
         self.state.features[entry.key] = copy.deepcopy(entry)
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Drop the account's row and history."""
+        before = len(self.state.accounts) + len(self.state.history)
+        self.state.accounts.pop(account_id, None)
+        self.state.history = [h for h in self.state.history if h.account_id != account_id]
+        return before - len(self.state.accounts) - len(self.state.history)
+
 
 class MemoryStore:
     """The state lives in this object; one transaction at a time."""
