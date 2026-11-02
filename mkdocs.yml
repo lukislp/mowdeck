@@ -152,6 +152,7 @@ nav:
       - ops/assistant.md
       - ops/source-code.md
       - ops/demo.md
+      - ops/load-testing.md
   - Spikes:
       - spikes/index.md
       - spikes/0001-ble-bridge-and-pymammotion.md

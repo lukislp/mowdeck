@@ -1,0 +1,96 @@
+# Override for the load test stack (tests/load, docs/ops/load-testing.md). Use it on top of
+# docker-compose.yml and docker-compose.demo.yml, never on its own and never on a real
+# installation or the public demo:
+#
+#   node tests/load/load.mjs up        # project mowdeck-load, http://localhost:8590
+#
+# It shapes the stack like the public demo's host (ADR 0068: a VPS with 2 vCPU and 7.8 GB):
+#
+# - Every container of the stack is pinned to the same two host CPUs (cpuset, LOAD_STACK_CPUSET),
+#   so the whole stack shares two cores as on the VPS. The load generator (k6) runs pinned to
+#   other cores (LOAD_K6_CPUSET) and does not take CPU time from the stack.
+# - Every long-running service has a memory limit; together about 7 GB.
+# - The network gets a fixed subnet. load.env lists it in GATEWAY_TRUSTED_PROXIES with
+#   GATEWAY_CLIENT_IP_DEPTH=1, the same settings the demo host uses for its TLS proxy: k6 sends
+#   every virtual visitor with its own X-Forwarded-For address, so every per-address rate limit
+#   counts each visitor as in production. No rate limit is changed.
+
+x-stack-cpus: &stack-cpus
+  cpuset: ${LOAD_STACK_CPUSET:-0,1}
+
+services:
+  traefik:
+    <<: *stack-cpus
+    mem_limit: 256m
+  nats:
+    <<: *stack-cpus
+    mem_limit: 384m
+  nats-streams:
+    <<: *stack-cpus
+  postgres:
+    <<: *stack-cpus
+    mem_limit: 1280m
+  openfga-migrate:
+    <<: *stack-cpus
+  openfga:
+    <<: *stack-cpus
+    mem_limit: 512m
+  authz-bootstrap:
+    <<: *stack-cpus
+  identity-migrate:
+    <<: *stack-cpus
+  identity:
+    <<: *stack-cpus
+    mem_limit: 512m
+  fleet-migrate:
+    <<: *stack-cpus
+  fleet:
+    <<: *stack-cpus
+    mem_limit: 512m
+  device-gateway:
+    <<: *stack-cpus
+    mem_limit: 512m
+  telemetry-migrate:
+    <<: *stack-cpus
+  telemetry:
+    <<: *stack-cpus
+    mem_limit: 768m
+  realtime:
+    <<: *stack-cpus
+    mem_limit: 512m
+  notifications-migrate:
+    <<: *stack-cpus
+  notifications:
+    <<: *stack-cpus
+    mem_limit: 384m
+  scheduler-migrate:
+    <<: *stack-cpus
+  scheduler:
+    <<: *stack-cpus
+    mem_limit: 384m
+  entitlements-migrate:
+    <<: *stack-cpus
+  entitlements:
+    <<: *stack-cpus
+    mem_limit: 256m
+  planner-migrate:
+    <<: *stack-cpus
+  planner:
+    <<: *stack-cpus
+    mem_limit: 384m
+  vision-migrate:
+    <<: *stack-cpus
+  vision:
+    <<: *stack-cpus
+    mem_limit: 384m
+  web:
+    <<: *stack-cpus
+    mem_limit: 128m
+  demo-seed:
+    <<: *stack-cpus
+
+networks:
+  mowdeck:
+    ipam:
+      config:
+        - subnet: ${LOAD_SUBNET:-10.251.77.0/24}

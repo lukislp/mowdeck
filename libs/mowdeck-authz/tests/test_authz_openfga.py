@@ -1,5 +1,6 @@
 """OpenFgaAuthorizer against a scripted SDK client: resolution, fail closed, cache, batch."""
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
@@ -336,6 +337,110 @@ async def test_cache_is_bounded() -> None:
     for i in range(3):
         await authz.check(LUKAS, "can_view", mower(f"m{i}"))
     assert len(authz.cache) == 2
+
+
+# --- One question in flight -------------------------------------------------------------------
+
+
+async def _settle() -> None:
+    for _ in range(5):
+        await asyncio.sleep(0)
+
+
+async def test_concurrent_identical_checks_ask_openfga_once() -> None:
+    client = connected_client()
+    client.allowed = lukas_only
+    client.gate = asyncio.Event()
+    registry = CollectorRegistry()
+    authz = authorizer(client, registry=registry)
+    await authz.connect()
+    tasks = [asyncio.create_task(authz.check(LUKAS, "can_view", M1)) for _ in range(20)]
+    other = asyncio.create_task(authz.check(EVE, "can_view", M1))
+    await _settle()
+    client.gate.set()
+    assert await asyncio.gather(*tasks) == [True] * 20
+    assert not await other
+    assert client.names().count("check") == 2  # one per key, not one per request
+    assert registry.get_sample_value("mowdeck_authz_coalesced_total") == 19
+    # The answer is cached as before.
+    assert await authz.check(LUKAS, "can_view", M1)
+    assert client.names().count("check") == 2
+
+
+async def test_a_batch_joins_questions_in_flight_and_its_own_duplicates() -> None:
+    client = connected_client()
+    client.allowed = lukas_only
+    client.gate = asyncio.Event()
+    authz = authorizer(client)
+    await authz.connect()
+    first = asyncio.create_task(authz.check(LUKAS, "can_view", M1))
+    await _settle()
+    batch = asyncio.create_task(
+        authz.check_many(
+            [(LUKAS, "can_view", M1), (LUKAS, "can_drive", M1), (LUKAS, "can_drive", M1)]
+        )
+    )
+    await _settle()
+    client.gate.set()
+    assert await first
+    assert await batch == [True, True, True]
+    # The batch asked only for can_drive, once; can_view came from the first request.
+    assert client.names().count("check") == 2
+    assert "batch_check" not in client.names()
+
+
+async def test_a_failed_question_denies_its_waiters_and_is_not_cached() -> None:
+    client = connected_client()
+    client.allowed = lukas_only
+    client.gate = asyncio.Event()
+    client.fail["check"] = TimeoutError()
+    authz = authorizer(client)
+    await authz.connect()
+    tasks = [asyncio.create_task(authz.check(LUKAS, "can_view", M1)) for _ in range(3)]
+    await _settle()
+    client.gate.set()
+    assert await asyncio.gather(*tasks) == [False, False, False]  # fail closed
+    assert client.names().count("check") == 1
+    del client.fail["check"]
+    assert await authz.check(LUKAS, "can_view", M1)  # nothing stuck, nothing cached
+    assert client.names().count("check") == 2
+
+
+async def test_waiters_ask_themselves_when_the_asking_request_is_cancelled() -> None:
+    client = connected_client()
+    client.allowed = lukas_only
+    client.gate = asyncio.Event()
+    authz = authorizer(client)
+    await authz.connect()
+    owner = asyncio.create_task(authz.check(LUKAS, "can_view", M1))
+    await _settle()
+    waiter = asyncio.create_task(authz.check(LUKAS, "can_view", M1))
+    await _settle()
+    owner.cancel()
+    await _settle()
+    client.gate.set()
+    assert await waiter
+    assert owner.cancelled()
+    assert client.names().count("check") == 2
+
+
+async def test_sensitive_relations_and_invalidation_never_join() -> None:
+    client = connected_client()
+    client.allowed = lukas_only
+    client.gate = asyncio.Event()
+    authz = authorizer(client)
+    await authz.connect()
+    sensitive = [
+        asyncio.create_task(authz.check(LUKAS, "can_manage_users", account("A"))) for _ in range(2)
+    ]
+    before = asyncio.create_task(authz.check(LUKAS, "can_view", M1))
+    await _settle()
+    authz.invalidate_subject(LUKAS)  # grants changed: later checks ask afresh
+    after = asyncio.create_task(authz.check(LUKAS, "can_view", M1))
+    await _settle()
+    client.gate.set()
+    assert await asyncio.gather(*sensitive, before, after) == [True, True, True, True]
+    assert client.names().count("check") == 4
 
 
 # --- list_objects, readiness, close -----------------------------------------------------------
