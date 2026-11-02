@@ -135,6 +135,7 @@ nav:
       - dev/home-assistant.md
       - "Camera source bridge protocol": dev/camera-relay-bridge-protocol.md
       - "Fuzzing and property-based tests": dev/fuzzing.md
+      - "CI and pull request scope": dev/ci.md
       - dev/wiki.md
   - Operations:
       - ops/compose.md

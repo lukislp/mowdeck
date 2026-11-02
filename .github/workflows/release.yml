@@ -23,7 +23,9 @@ name: release
 # The web image also carries /whats-new.json, the notes of the app's "Was ist neu" sheet: the feat/fix
 # commits between the tags, with the German and English texts of apps/web/whats-new/*.json
 # (docs/ops/release.md, "Notes for the app").
-# Nothing is published from a push whose commits are docs/ci/chore/test only. By hand the workflow
+# Nothing is published from a push whose commits are docs/ci/chore/test only (fix(ci) included,
+# .releaserc.json), nor when every file changed since the last tag is CI configuration
+# (tools/repo-checks/scripts/ci_scope.py release-guard). By hand the workflow
 # builds a test version (for example 0.1.0-rc.1) from any branch: images and chart, no tag, no
 # GitHub release, no :latest. Versions are set at build time (image labels, chart version and
 # appVersion, APK); no file in the repository carries the release version, so a release makes no
@@ -122,6 +124,13 @@ jobs:
               echo "No releasable commits since the last tag (docs, ci, chore, test only): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
             elif [ "$(git rev-parse HEAD)" != "$SHA" ]; then
               echo "main moved past this run's commit ($SHA): the newer push's run releases it." | tee -a "$GITHUB_STEP_SUMMARY"
+            # Whatever the commit types say: when every file changed since the last tag is CI
+            # configuration (workflows, Dependabot, release config, CI scripts; CI_PATTERNS of
+            # ci_scope.py), nothing an installation runs changed, so nothing is published. Any
+            # error here (no tag, git, the script) falls through to the release.
+            elif last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null)" &&
+              [ "$(python3 tools/repo-checks/scripts/ci_scope.py release-guard --base "$last_tag" --head HEAD)" = "ci_only=true" ]; then
+              echo "Only CI configuration changed since $last_tag: nothing to publish (docs/ops/release.md, 'CI-only changes')." | tee -a "$GITHUB_STEP_SUMMARY"
             else
               version="$NEXT_VERSION"
               # semantic-release starts a repository without tags at 1.0.0. MowDeck's line starts
@@ -825,4 +834,4 @@ jobs:
           python3 src/tools/repo-checks/scripts/release_assets.py notes --body notes.md \
             --section section.md --out notes.md
           gh_retry gh release edit "$tag" -R "$REPOSITORY" --notes-file notes.md
-          echo "- release \`$tag\` with $(ls assets | wc -l) assets" >> "$GITHUB_STEP_SUMMARY"
+          echo "- release \`$tag\` with $(find assets -mindepth 1 -maxdepth 1 | wc -l) assets" >> "$GITHUB_STEP_SUMMARY"

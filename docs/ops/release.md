@@ -5,7 +5,7 @@ Releases are cut by [semantic-release](https://semantic-release.gitbook.io/) fro
 ## How a merge becomes a release
 
 1. A pull request is merged into `main`. Its commit messages are [Conventional Commits](https://www.conventionalcommits.org/) and decide the release (table below): a squash merge leaves one commit with the pull request title (or the single commit's message), a merge or rebase keeps every commit, and the highest release type among them wins.
-2. Job `version`: semantic-release dry run from the tip of `main`. Docs, ci, chore, test and style commits produce no release; the run ends there, green.
+2. Job `version`: semantic-release dry run from the tip of `main`. Docs, ci, chore, test and style commits produce no release, nor do changes of CI configuration only ([CI-only changes](#ci-only-changes)); the run ends there, green.
 3. Job `tag`: semantic-release creates the annotated tag `v<version>`, signed with the SSH key `DEPLOY_SIGNING_KEY` (GitHub shows it as "Verified"), pushes it, and creates the GitHub release with notes generated from the commits, grouped into Features and Bug Fixes, with links to the pull requests. It comments "released in" on the merged pull requests and closed issues.
 4. Jobs `licence-gate`, `images`, `chart`, `android` build the tagged commit, which is always the commit of the run itself: a run whose commit is no longer the tip of `main` releases nothing, and the run of the newer push releases instead (table under [What the workflow publishes](#what-the-workflow-publishes)). Each image index and the chart are signed keyless with Sigstore and get a GitHub build provenance attestation in the registry.
 5. Job `publish` attaches the chart archive, the SBOMs and the APK with `SHA256SUMS`, a Sigstore bundle per file and the build provenance file (only these files: `tools/repo-checks/scripts/release_assets.py` selects them from the run's artifacts and fails the upload on any other file), and appends the install snippet, the digest of every image and the chart, and the verification commands to the release notes.
@@ -20,10 +20,20 @@ The tag push starts `helm-kind.yml` (the kind install test) when the deploy key 
 | `feat:` | minor (0.4.2 to 0.5.0) | `feat(planner): spot mowing around a point` |
 | `feat!:`, `fix!:` or a `BREAKING CHANGE:` footer | minor (0.5.0 to 0.6.0), never 1.0.0 | `feat(api)!: drop the v0 mower endpoints` |
 | `docs:`, `ci:`, `chore:`, `test:`, `style:`, `build:` | none | `docs(ops): explain the backup restore` |
+| `fix(ci):` | none (CI-only, see below) | `fix(ci): retry the image pull` |
 
 **The 0.x line.** MowDeck stays below 1.0.0 until the owner decides otherwise. On 0.x a breaking change is allowed in a minor version ([Semantic Versioning, item 4](https://semver.org/#spec-item-4)), so `.releaserc.json` maps every breaking change to a minor release (`"releaseRules": [{"breaking": true, "release": "minor"}, ...]`); the `!` after the type is recognised through the commit analyzer's `parserOpts`. `refactor` releases a patch, as in the other repositories that use the shared actions. The release job refuses to publish when no `v*` tag exists, because semantic-release would then start at 1.0.0: the line starts from the initial tag `v0.0.0` (see [Setting up releases](#setting-up-releases)).
 
 **Going to 1.0.0 deliberately.** In one pull request, remove the rule `{"breaking": true, "release": "minor"}` from `.releaserc.json` and give the merged commit a `BREAKING CHANGE:` footer (for example `feat!: MowDeck 1.0` with the footer `BREAKING CHANGE: first stable release, see the upgrade notes`). semantic-release then publishes 1.0.0, and from then on a breaking change is a major release as usual. Update this page and the "Releases" section of `CONTRIBUTING.md` in the same pull request.
+
+### CI-only changes
+
+A change that only touches CI configuration ships nothing to an installation and never releases a version. Two rules make sure of it:
+
+- **Commit types.** Use `ci:` for workflow, Dependabot, release and CI script changes. `.releaserc.json` also maps `fix(ci):` to no release (`{"type": "fix", "scope": "ci", "release": false}`), so a CI fix written as a fix does not cut a patch either. Dependabot's GitHub Actions and ClusterFuzzLite toolchain bumps arrive as `ci: bump ...`; the runtime dependencies (`uv`, `npm`) stay `fix(deps): bump ...` and release a patch as before.
+- **Changed files.** Job `version` checks the files changed since the last tag with `tools/repo-checks/scripts/ci_scope.py release-guard`. When every one of them is CI configuration (`CI_PATTERNS`: `.github/**`, `.releaserc.json`, `socket.yml`, `osv-scanner.toml`, `.pre-commit-config.yaml`, `.clusterfuzzlite/**`, the repo-checks tests and the CI-only scripts), it publishes nothing even if a commit says `fix:` or `feat:`. Any error of this check (no tag, git, the script) falls through to the normal release. Those commits are not lost: the next real release lists them.
+
+Pull requests are scoped the same way in CI: a CI-only pull request runs `ci-config` and the jobs whose definition it changes, not the whole pipeline ([CI and pull request scope](../dev/ci.md)).
 
 ## Setting up releases
 
