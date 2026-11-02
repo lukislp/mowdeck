@@ -4,8 +4,10 @@ The generated tests are not run here (that would need a workspace sync); the Dev
 generated from the template and is linted, type checked and tested with the rest of the repo.
 """
 
+import importlib.util
 import tomllib
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -58,6 +60,34 @@ def _render(repo_root: Path, destination: Path, **answers: Any) -> Path:
 
 def _files(paths: tuple[str, ...], package: str) -> list[str]:
     return [p.format(pkg=package) for p in paths]
+
+
+def _gate(repo_root: Path) -> ModuleType:
+    path = repo_root / "tools" / "repo-checks" / "scripts" / "licence_gate.py"
+    spec = importlib.util.spec_from_file_location("licence_gate", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("needs_db", [False, True])
+def test_template_image_passes_the_release_licence_checks(
+    repo_root: Path, tmp_path: Path, needs_db: bool
+) -> None:
+    # The same static check as test_release_licences.py runs on every released Dockerfile: a
+    # generated service is releasable without fixing its Dockerfile by hand (LICENSING.md).
+    service = _render(repo_root, tmp_path / "reports", service_name="reports", needs_db=needs_db)
+    dockerfile = (service / "Dockerfile").read_text("utf-8")
+    ignore = (service / "Dockerfile.dockerignore").read_text("utf-8")
+    gate = _gate(repo_root)
+    assert gate.dockerfile_problems(dockerfile, ignore, "AGPL-3.0-only AND Apache-2.0") == []
+    # Health model (ADR 0077): the container healthcheck asks /startupz, never /readyz, and its
+    # request timeout stays below the healthcheck timeout.
+    assert "HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=3" in dockerfile
+    assert "/startupz" in dockerfile
+    assert "timeout=8)" in dockerfile
+    assert "/readyz" not in dockerfile
 
 
 def test_template_renders_a_service_without_database(repo_root: Path, tmp_path: Path) -> None:

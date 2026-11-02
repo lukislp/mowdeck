@@ -21,6 +21,10 @@ It fails (exit 1) when
   MowDeck licence texts are missing under ``/usr/share/doc/mowdeck`` (``--no-licence-files``
   for an image whose build context cannot reach them).
 
+``dockerfile_problems`` is the static half on the Dockerfile sources (label, licence texts, the
+AGPL-3.0 section 13 source address, the ignore file's allow list); the repository checks run it
+on every released Dockerfile and on the rendered service template.
+
 Standard library only; ``docker`` must be on the PATH. ``--files`` / ``--labels`` take a file
 list and a label JSON instead of asking Docker (tests).
 """
@@ -63,6 +67,21 @@ LICENCE_FILES = (
     "usr/share/doc/mowdeck/LICENSES/Apache-2.0.txt",
     "usr/share/doc/mowdeck/LICENSES/GPL-3.0.txt",
 )
+# What the Dockerfile of a released image must contain (static check, dockerfile_problems):
+# the licence texts, and the AGPL-3.0 section 13 source address (LICENSING.md).
+DOCKERFILE_LICENCE_LINES = (
+    "COPY LICENSE LICENSING.md /usr/share/doc/mowdeck/",
+    "COPY LICENSES/ /usr/share/doc/mowdeck/LICENSES/",
+)
+DOCKERFILE_SOURCE_LINES = (
+    "ARG MOWDECK_VERSION=",
+    "ARG MOWDECK_SOURCE_URL=https://github.com/lukislp/mowdeck",
+    "ARG MOWDECK_SOURCE_REF=",
+    "MOWDECK_VERSION=${MOWDECK_VERSION}",
+    "MOWDECK_SOURCE_URL=${MOWDECK_SOURCE_URL}",
+    "MOWDECK_SOURCE_REF=${MOWDECK_SOURCE_REF}",
+)
+DOCKERIGNORE_LICENCE_LINES = ("!LICENSE", "!LICENSING.md", "!LICENSES/")
 WEB_ROOT = "usr/share/nginx/html/"
 WEB_MANIFEST = WEB_ROOT + "third-party-licences.json"
 
@@ -138,6 +157,39 @@ def licence_file_problems(paths: Iterable[str]) -> list[str]:
     """The MowDeck licence texts inside the image."""
     present = set(paths)
     return [f"{path} missing" for path in LICENCE_FILES if path not in present]
+
+
+def dockerfile_problems(
+    dockerfile: str, dockerignore: str | None, expected: str, *, licence_files: bool = True
+) -> list[str]:
+    """Static check of a released image's Dockerfile and its ``Dockerfile.dockerignore``.
+
+    The licence label equals ``expected``; unless ``licence_files`` is false (an image whose
+    build context cannot reach them), the image copies the MowDeck licence texts, the ignore
+    file lets them into the build context and the image declares its source address.
+    """
+    problems: list[str] = []
+    label = f'org.opencontainers.image.licenses="{expected}"'
+    if label not in dockerfile:
+        problems.append(f"Dockerfile: no LABEL {label}")
+    if not licence_files:
+        return problems
+    lines = {line.strip().rstrip("\\").strip() for line in dockerfile.splitlines()}
+    problems.extend(
+        f"Dockerfile: missing {line!r}" for line in DOCKERFILE_LICENCE_LINES if line not in lines
+    )
+    problems.extend(
+        f"Dockerfile: missing {needle!r} (AGPL-3.0 section 13)"
+        for needle in DOCKERFILE_SOURCE_LINES
+        if needle not in dockerfile
+    )
+    allowed = {line.strip() for line in (dockerignore or "").splitlines()}
+    problems.extend(
+        f"Dockerfile.dockerignore: missing {line!r}"
+        for line in DOCKERIGNORE_LICENCE_LINES
+        if line not in allowed
+    )
+    return problems
 
 
 def _docker(*args: str, check: bool = True) -> str:
