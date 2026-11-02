@@ -1,8 +1,14 @@
-"""Operational endpoints outside ``/api/v1``.
+"""Operational endpoints outside ``/api/v1`` (health model: ADR 0077).
 
-* ``GET /healthz``: liveness, 200 while the process runs.
+* ``GET /healthz``: liveness, 200 while the process serves requests. Never touches a dependency.
+* ``GET /startupz``: started, runs the readiness checks until they pass once, then answers like
+  ``/healthz`` for the rest of the process's life. The container healthcheck (Docker, Compose)
+  and the Kubernetes startup probe use it: a service counts as up only once it was ready, but a
+  busy service or a dependency that fails later never takes a running container out of routing.
 * ``GET /readyz``: readiness, runs all registered checks; 503 with details on failure and while
-  the service is shutting down.
+  the service is shutting down. Used by the Kubernetes readiness probe and by operators. The
+  service also evaluates it every ``readiness_interval_seconds`` itself (:func:`watch_readiness`)
+  for the metric ``mowdeck_readiness_check_up`` and a log line when it changes.
 * ``GET /metrics``: Prometheus metrics (when ``metrics_enabled``).
 * ``GET /.well-known/mowdeck-module``: the service's :class:`ModuleDescriptor`.
 """
@@ -20,6 +26,7 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
+    Gauge,
     GCCollector,
     Histogram,
     PlatformCollector,
@@ -72,6 +79,7 @@ async def run_check(check: ReadinessCheck) -> CheckOutcome:
         async with asyncio.timeout(check.timeout_seconds):
             result = await check.check()
     except TimeoutError:
+        _log.warning("readiness check timed out", check=check.name, timeout=check.timeout_seconds)
         outcome_error: str | None = "timeout"
         ok = False
     except Exception as exc:
@@ -96,6 +104,80 @@ def add_readiness_check(app: FastAPI, check: ReadinessCheck | CheckFunction) -> 
     readiness_checks(app).append(as_readiness_check(check))
 
 
+class ReadinessMetrics:
+    """``mowdeck_readiness_check_up{check}`` (1 passed, 0 failed) of the last evaluation, and
+    ``mowdeck_service_started`` (1 once the service was ready once)."""
+
+    def __init__(self, registry: CollectorRegistry) -> None:
+        self.check_up = Gauge(
+            "mowdeck_readiness_check_up",
+            "Result of the last evaluation of each readiness check (1 passed, 0 failed).",
+            ["check"],
+            registry=registry,
+        )
+        self.started = Gauge(
+            "mowdeck_service_started",
+            "1 once all readiness checks passed once since the process started.",
+            registry=registry,
+        )
+
+
+async def evaluate_readiness(app: FastAPI) -> list[CheckOutcome]:
+    """Run every readiness check of ``app`` once, record the outcome and return it.
+
+    Records the gauges of :class:`ReadinessMetrics`, logs a change between ready and not ready
+    (with the failing checks' names) and marks the service as started the first time every check
+    passes (``app.state.started``, read by ``/startupz``).
+    """
+    outcomes = list(await asyncio.gather(*(run_check(c) for c in readiness_checks(app))))
+    ready = all(o.ok for o in outcomes)
+    metrics: ReadinessMetrics | None = getattr(app.state, "readiness_metrics", None)
+    if metrics is not None:
+        for outcome in outcomes:
+            metrics.check_up.labels(outcome.name).set(1 if outcome.ok else 0)
+    previous: bool | None = getattr(app.state, "last_ready", None)
+    if previous is not None and previous != ready:
+        if ready:
+            _log.info("service ready again")
+        else:
+            _log.warning(
+                "service not ready",
+                failing=[f"{o.name}: {o.error}" for o in outcomes if not o.ok],
+            )
+    app.state.last_ready = ready
+    if ready and not getattr(app.state, "started", False):
+        app.state.started = True
+        if metrics is not None:
+            metrics.started.set(1)
+    return outcomes
+
+
+async def watch_readiness(app: FastAPI, interval_seconds: float) -> None:
+    """Evaluate the readiness every ``interval_seconds`` until cancelled (the first time at
+    once): keeps the metrics current and logs dependency trouble even when nothing polls
+    ``/readyz`` (Compose, ADR 0077). Never raises."""
+    while True:
+        try:
+            await evaluate_readiness(app)
+        except Exception:  # pragma: no cover - run_check never raises; keep watching anyway
+            _log.exception("readiness evaluation failed")
+        await asyncio.sleep(interval_seconds)
+
+
+def _readiness_body(outcomes: list[CheckOutcome], status: str) -> dict[str, Any]:
+    return {
+        "status": status,
+        "checks": {
+            o.name: {
+                "status": "ok" if o.ok else "fail",
+                "duration_ms": o.duration_ms,
+                **({"error": o.error} if o.error else {}),
+            }
+            for o in outcomes
+        },
+    }
+
+
 def build_health_router(descriptor: ModuleDescriptor, *, metrics: bool) -> APIRouter:
     """Build the router with the operational endpoints."""
     router = APIRouter(tags=["operations"])
@@ -104,25 +186,28 @@ def build_health_router(descriptor: ModuleDescriptor, *, metrics: bool) -> APIRo
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @router.get("/startupz", include_in_schema=False)
+    async def startupz(request: Request) -> JSONResponse:
+        app: FastAPI = request.app
+        if getattr(app.state, "started", False):
+            return JSONResponse({"status": "ok"})
+        if getattr(app.state, "draining", False):
+            return JSONResponse({"status": "draining", "checks": {}}, status_code=503)
+        outcomes = await evaluate_readiness(app)
+        if getattr(app.state, "started", False):
+            return JSONResponse({"status": "ok"})
+        return JSONResponse(_readiness_body(outcomes, "starting"), status_code=503)
+
     @router.get("/readyz", include_in_schema=False)
     async def readyz(request: Request) -> JSONResponse:
         app: FastAPI = request.app
         if getattr(app.state, "draining", False):
             return JSONResponse({"status": "draining", "checks": {}}, status_code=503)
-        outcomes = await asyncio.gather(*(run_check(c) for c in readiness_checks(app)))
+        outcomes = await evaluate_readiness(app)
         status: Literal["ok", "fail"] = "ok" if all(o.ok for o in outcomes) else "fail"
-        body = {
-            "status": status,
-            "checks": {
-                o.name: {
-                    "status": "ok" if o.ok else "fail",
-                    "duration_ms": o.duration_ms,
-                    **({"error": o.error} if o.error else {}),
-                }
-                for o in outcomes
-            },
-        }
-        return JSONResponse(body, status_code=200 if status == "ok" else 503)
+        return JSONResponse(
+            _readiness_body(outcomes, status), status_code=200 if status == "ok" else 503
+        )
 
     if metrics:
 

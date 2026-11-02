@@ -36,6 +36,7 @@ services:
       - --providers.docker.exposedbydefault=false
       - --providers.docker.network=${MOWDECK_NETWORK:-mowdeck}
       - --providers.docker.constraints=Label(`com.docker.compose.project`,`${MOWDECK_TRAEFIK_PROJECT:-mowdeck}`)
+      - --providers.docker.allowEmptyServices=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --entrypoints.web.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}

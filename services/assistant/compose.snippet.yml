@@ -27,11 +27,12 @@ services:
       - traefik.http.routers.assistant.entrypoints=web
       - traefik.http.services.assistant.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
     depends_on:
       identity:
         condition: service_healthy
