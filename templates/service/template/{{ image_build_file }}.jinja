@@ -39,6 +39,6 @@ COPY --from=build /app/.venv /app/.venv
 WORKDIR /app
 USER 10001:10001
 EXPOSE {{ http_port }}
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/healthz' % os.environ.get('MOWDECK_HTTP_PORT', '{{ http_port }}'), timeout=2)" || exit 1
+HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/startupz' % os.environ.get('MOWDECK_HTTP_PORT', '{{ http_port }}'), timeout=8)" || exit 1
 CMD ["python", "-m", "{{ package_name }}.main"]

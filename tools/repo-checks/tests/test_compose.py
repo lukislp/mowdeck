@@ -2,9 +2,11 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -286,11 +288,13 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
         assert environment.get("MOWDECK_DEMO_MODE") == "true", name
         assert "MOWDECK_DEMO_SEED_TOKEN" in environment, name
     middlewares = "demo-headers@docker,demo-ratelimit@docker"
+    base_command = base["services"]["traefik"]["command"]
+    split = max(i for i, flag in enumerate(base_command) if "forwardedHeaders" in flag) + 1
     assert services["traefik"]["command"] == [
-        *base["services"]["traefik"]["command"][:8],
+        *base_command[:split],
         f"--entrypoints.web.http.middlewares={middlewares}",
         f"--entrypoints.websecure.http.middlewares={middlewares}",
-        *base["services"]["traefik"]["command"][8:],
+        *base_command[split:],
     ]
     labels = services["web"]["labels"]
     assert (
@@ -390,3 +394,137 @@ def test_every_rate_limit_counts_the_configured_client_entry(repo_root: Path) ->
     for service in ("identity", "telemetry"):
         env = base[service]["environment"]
         assert env["MOWDECK_CLIENT_IP_DEPTH"] == "${GATEWAY_CLIENT_IP_DEPTH:-}", service
+
+
+# --- Health model (ADR 0077) -----------------------------------------------------------------
+
+_KIT_HEALTHCHECK = "urllib.request"
+
+
+def _kit_services(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Long-running services built on the service kit: they have a Python healthcheck."""
+    return {
+        name: svc
+        for name, svc in data["services"].items()
+        if _KIT_HEALTHCHECK in " ".join(svc.get("healthcheck", {}).get("test", []))
+    }
+
+
+def _seconds(value: str) -> float:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(ms|s|m)", value)
+    assert match, value
+    number, unit = float(match.group(1)), match.group(2)
+    return number / 1000 if unit == "ms" else number * 60 if unit == "m" else number
+
+
+def test_kit_healthchecks_ask_startupz_not_readyz(repo_root: Path) -> None:
+    """A busy service or a dependency that fails later must not make the container unhealthy:
+    Traefik's Docker provider would drop its routes (404 for every request, as the load test
+    showed). /startupz waits for the first ready evaluation, then only asks for liveness."""
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    services = _kit_services(data)
+    python_images = {
+        path.parent.name
+        for path in (repo_root / "services").glob("*/Dockerfile")
+        if "${PYTHON_IMAGE}" in path.read_text("utf-8")
+    }
+    long_running = {
+        name
+        for name, svc in data["services"].items()
+        if name in python_images and svc.get("restart") == "unless-stopped"
+    }
+    assert long_running, "no kit services found"
+    assert long_running <= set(services), (
+        f"without a kit healthcheck: {long_running - set(services)}"
+    )
+    for name, svc in services.items():
+        health = svc["healthcheck"]
+        test = " ".join(health["test"])
+        assert "/startupz'" in test, name
+        assert "/readyz" not in test and "/healthz" not in test, name
+        urlopen = float(re.search(r"timeout=(\d+(?:\.\d+)?)\)", test).group(1))  # type: ignore[union-attr]
+        assert urlopen + 1 < _seconds(health["timeout"]), f"{name}: urlopen must time out first"
+        assert _seconds(health["timeout"]) >= 10, f"{name}: a slow answer under load is no failure"
+        assert health["retries"] >= 3, name
+        # Fast while starting (up --wait), rare afterwards (each check starts an interpreter).
+        assert _seconds(health["start_interval"]) <= 2, name
+        assert _seconds(health["interval"]) >= 30, name
+
+
+def test_service_snippets_carry_the_healthcheck_of_the_stack(repo_root: Path) -> None:
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    checked = 0
+    for path in sorted((repo_root / "services").glob("*/compose.snippet.yml")):
+        snippet = yaml.safe_load(path.read_text("utf-8"))["services"]
+        for name, svc in snippet.items():
+            if "healthcheck" not in svc or name not in data["services"]:
+                continue
+            assert svc["healthcheck"] == data["services"][name]["healthcheck"], path
+            checked += 1
+    assert checked >= 10
+    template = (repo_root / "templates/service/template/compose.snippet.yml.jinja").read_text(
+        "utf-8"
+    )
+    assert "/startupz', timeout=8)" in template
+    assert "/readyz" not in template.split("healthcheck:")[1].split("depends_on")[0]
+
+
+def test_dockerfile_healthchecks_ask_startupz(repo_root: Path) -> None:
+    files = [
+        *(
+            p
+            for p in (repo_root / "services").glob("*/Dockerfile")
+            if "PYTHON_IMAGE" in p.read_text("utf-8")
+        ),
+        repo_root / "templates/service/template/{{ image_build_file }}.jinja",
+    ]
+    for path in files:
+        text = path.read_text("utf-8")
+        assert "/startupz'" in text, path
+        assert "/healthz'" not in text and "/readyz'" not in text, path
+
+
+def test_traefik_keeps_routes_of_unhealthy_containers(repo_root: Path) -> None:
+    """With allowEmptyServices an unhealthy service answers 503 (retry) instead of losing its
+    routes, which clients saw as 404 "not found"; the demo's own command keeps the flag."""
+    compose_dir = _compose_dir(repo_root)
+    flag = "--providers.docker.allowEmptyServices=true"
+    base = yaml.safe_load((compose_dir / "docker-compose.yml").read_text("utf-8"))
+    assert flag in base["services"]["traefik"]["command"]
+    text = (compose_dir / "docker-compose.demo.yml").read_text("utf-8")
+    demo = yaml.load(text, Loader=_ComposeLoader)  # noqa: S506 - a SafeLoader subclass
+    assert flag in demo["services"]["traefik"]["command"]
+
+
+def test_database_connection_budget_fits_max_connections(repo_root: Path) -> None:
+    """Every pool at its maximum (pool size + overflow + one readiness connection), OpenFGA's
+    pool, one connection per one-shot job and Postgres's reserved superuser slots fit into
+    max_connections (docs/ops/compose.md, "Database connections")."""
+    from mowdeck_service_kit.settings import ServiceSettings
+
+    fields = ServiceSettings.model_fields
+    default_size = fields["database_pool_size"].default
+    default_overflow = fields["database_max_overflow"].default
+    data = yaml.safe_load((_compose_dir(repo_root) / "docker-compose.yml").read_text("utf-8"))
+    services = data["services"]
+    command = services["postgres"]["command"]
+    max_connections = int(
+        next(arg.split("=", 1)[1] for arg in command if arg.startswith("max_connections="))
+    )
+    budget = 3  # superuser_reserved_connections
+    for svc in services.values():
+        env = svc.get("environment") or {}
+        if not isinstance(env, dict) or "MOWDECK_DATABASE_URL" not in env:
+            continue
+        if svc.get("restart") == "unless-stopped":
+            size = int(env.get("MOWDECK_DATABASE_POOL_SIZE", default_size))
+            overflow = int(env.get("MOWDECK_DATABASE_MAX_OVERFLOW", default_overflow))
+            budget += size + overflow + 1
+        else:
+            budget += 1  # migrations: pool_size=1, max_overflow=0
+    openfga = services["openfga"]["environment"]
+    budget += int(openfga["OPENFGA_DATASTORE_MAX_OPEN_CONNS"])
+    budget += 1  # openfga-migrate
+    assert budget <= max_connections, f"budget {budget} > max_connections {max_connections}"
+    assert max_connections - budget >= 20, "keep headroom for psql, backups and a replica more"
+    assert services["telemetry"]["environment"]["MOWDECK_DATABASE_POOL_SIZE"] == "10"

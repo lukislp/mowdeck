@@ -1,6 +1,7 @@
 """Application factory: one call builds a fully equipped MowDeck service."""
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Annotated, Any
@@ -21,10 +22,12 @@ from mowdeck_service_kit.health import (
     CheckFunction,
     HttpMetricsMiddleware,
     ReadinessCheck,
+    ReadinessMetrics,
     add_readiness_check,
     as_readiness_check,
     build_health_router,
     create_metrics_registry,
+    watch_readiness,
 )
 from mowdeck_service_kit.logging import configure_logging, get_logger
 from mowdeck_service_kit.otel import instrument_app
@@ -95,9 +98,15 @@ def create_app(
 
             app.state.readiness_checks = [c for c in app.state.readiness_checks if c.name != "nats"]
             add_readiness_check(app, ReadinessCheck(name="nats", check=nats))
+        watcher: asyncio.Task[None] | None = None
         try:
             for hook in on_startup:
                 await hook(app)
+            if settings.readiness_interval_seconds > 0:
+                watcher = asyncio.create_task(
+                    watch_readiness(app, settings.readiness_interval_seconds),
+                    name="readiness-watch",
+                )
             _log.info(
                 "service started",
                 version=descriptor.version,
@@ -107,6 +116,10 @@ def create_app(
             yield
         finally:
             app.state.draining = True
+            if watcher is not None:
+                watcher.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
             await _shutdown(app, on_shutdown, active_bus, settings.shutdown_grace_seconds)
             if otel_shutdown is not None:
                 await otel_shutdown()
@@ -126,20 +139,23 @@ def create_app(
     app.state.descriptor = descriptor
     app.state.bus = bus
     app.state.draining = False
+    app.state.started = False
     app.state.readiness_checks = [as_readiness_check(c) for c in readiness_checks]
     app.state.principal_resolver = principal_resolver
     app.state.permission_checker = None
     app.state.metrics_registry = None
+    app.state.readiness_metrics = None
 
     install_error_handlers(app)
     route_templates: dict[int, str] = {}
     if settings.metrics_enabled:
         registry = create_metrics_registry()
         app.state.metrics_registry = registry
+        app.state.readiness_metrics = ReadinessMetrics(registry)
         app.add_middleware(
             HttpMetricsMiddleware,
             registry=registry,
-            skip_paths=("/metrics", "/healthz", "/readyz"),
+            skip_paths=("/metrics", "/healthz", "/startupz", "/readyz"),
             route_templates=route_templates,
         )
     # Added last = outermost: correlation id is set before errors are logged and rendered. The
