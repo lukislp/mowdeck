@@ -60,3 +60,8 @@ class ZoneStore(Protocol):
     ) -> list[ZoneDay]:
         """Day totals in ``[first, last]``, ordered by zone and day."""
         ...
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every zone, presence and day total of an account (demo sandbox purge, ADR
+        0076); returns the number of rows removed."""
+        ...

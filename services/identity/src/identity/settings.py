@@ -15,6 +15,7 @@ from pydantic import Field, SecretStr
 
 from identity.adapters.apple import load_signing_key
 from identity.application.context import AppleLogin, GitHubLogin, IdentityConfig, RegistrationMode
+from identity.application.sandboxes import SandboxConfig
 from identity.domain.models import RelyingParty, oauth_callback_url
 
 _log = get_logger("identity.settings")
@@ -179,6 +180,37 @@ class Settings(ServiceSettings):
     identity_demo_display_name: str = Field(default="Demo visitor", min_length=1, max_length=100)
     """Display name of the demo user."""
 
+    identity_demo_sandboxes: bool = False
+    """Public demo only (``MOWDECK_DEMO_MODE``, ADR 0076): "Try the demo" gives every visitor an
+    own sandbox account with its own simulated mowers instead of the one shared demo user.
+    Needs the demo seed secret. Ignored outside demo mode."""
+
+    identity_demo_sandbox_max: int = Field(default=40, ge=1, le=10_000)
+    """Sandboxes visitors may hold at once; one more visitor sees "the demo is full"."""
+
+    identity_demo_sandbox_pool: int = Field(default=2, ge=0, le=50)
+    """Ready sandboxes kept for the next visitors (their history takes seconds to make)."""
+
+    identity_demo_sandbox_idle_minutes: int = Field(default=30, ge=5, le=24 * 60)
+    """A sandbox is deleted this long after its last session refresh (the web app refreshes
+    every few minutes while a tab is open), or right after a logout."""
+
+    identity_demo_sandbox_max_hours: float = Field(default=6, gt=0, le=168)
+    """A sandbox is deleted this long after the visitor got it, however active."""
+
+    identity_demo_sandbox_per_address_per_hour: int = Field(default=6, ge=1, le=1_000_000)
+    """Sandboxes one client address (IPv6: its /64) may start an hour."""
+
+    identity_demo_sandbox_history_days: int = Field(default=7, ge=0, le=31)
+    """Days of simulated history of a pool sandbox's mowers (0: none)."""
+
+    identity_demo_service_url: str = "http://{service}:8000/api/v1/{service}"
+    """Where Identity reaches the other services to fill and empty sandboxes (``{service}`` is
+    replaced by the service name)."""
+
+    identity_demo_sandbox_sweep_seconds: float = Field(default=60, ge=1)
+    """Interval of the sweep that deletes idle and expired sandboxes."""
+
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
 
@@ -201,6 +233,23 @@ class Settings(ServiceSettings):
             key_rotation=timedelta(days=self.identity_key_rotation_days),
             passkey_rp=None if self.demo_mode else self.relying_party(),
             demo_username=self.identity_demo_username if self.demo_mode else None,
+        )
+
+    @property
+    def sandboxes_enabled(self) -> bool:
+        """Demo sandboxes are on: demo mode and ``identity_demo_sandboxes``."""
+        return self.demo_mode and self.identity_demo_sandboxes
+
+    def sandbox_config(self) -> SandboxConfig:
+        """The limits and timings of the demo sandboxes (ADR 0076)."""
+        return SandboxConfig(
+            max_active=self.identity_demo_sandbox_max,
+            pool_size=self.identity_demo_sandbox_pool,
+            idle=timedelta(minutes=self.identity_demo_sandbox_idle_minutes),
+            max_age=timedelta(hours=self.identity_demo_sandbox_max_hours),
+            per_address_per_hour=self.identity_demo_sandbox_per_address_per_hour,
+            account_name=self.identity_demo_account_name,
+            display_name=self.identity_demo_display_name,
         )
 
     def relying_party(self) -> RelyingParty | None:

@@ -4,7 +4,7 @@ claimed schedule is never claimed twice."""
 
 import asyncio
 import copy
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -25,6 +25,8 @@ class MemoryData:
     status: dict[UUID, MowerStatus] = field(default_factory=dict)
     places: dict[UUID, MowerPlace] = field(default_factory=dict)
     capabilities: dict[UUID, tuple[datetime, MowerCapabilities]] = field(default_factory=dict)
+    capability_accounts: dict[UUID, UUID] = field(default_factory=dict)
+    """The account of each mower in ``capabilities``."""
     angles: dict[tuple[UUID, str], AreaAngle] = field(default_factory=dict)
     rotation: dict[UUID, MowerRotation] = field(default_factory=dict)
 
@@ -128,11 +130,11 @@ class MemoryTx:
         observed_at: datetime,
         capabilities: MowerCapabilities,
     ) -> bool:
-        del account_id
         current = self._data.capabilities.get(mower_id)
         if current is not None and current[0] >= observed_at:
             return False
         self._data.capabilities[mower_id] = (observed_at, capabilities)
+        self._data.capability_accounts[mower_id] = account_id
         return True
 
     async def get_capabilities(self, mower_id: UUID) -> MowerCapabilities | None:
@@ -175,6 +177,27 @@ class MemoryTx:
         del key
         return True
 
+    async def purge_account(self, account_id: UUID) -> int:
+        data = self._data
+        deleted = _drop(data.runs, lambda r: r.account_id == account_id)
+        deleted += _drop(data.schedules, lambda s: s.account_id == account_id)
+        deleted += _drop(data.status, lambda s: s.account_id == account_id)
+        deleted += _drop(data.places, lambda p: p.account_id == account_id)
+        doomed = [m for m, owner in data.capability_accounts.items() if owner == account_id]
+        for mower_id in doomed:
+            del data.capability_accounts[mower_id]
+            deleted += data.capabilities.pop(mower_id, None) is not None
+        deleted += _drop(data.angles, lambda a: a.account_id == account_id)
+        return deleted + _drop(data.rotation, lambda r: r.account_id == account_id)
+
+
+def _drop[K, V](rows: dict[K, V], doomed: Callable[[V], bool]) -> int:
+    """Delete the rows ``doomed`` picks; returns how many."""
+    keys = [key for key, value in rows.items() if doomed(value)]
+    for key in keys:
+        del rows[key]
+    return len(keys)
+
 
 class MemoryStore:
     """Implements ``Store`` in memory."""
@@ -196,6 +219,7 @@ class MemoryStore:
                 self.data.status = snapshot.status
                 self.data.places = snapshot.places
                 self.data.capabilities = snapshot.capabilities
+                self.data.capability_accounts = snapshot.capability_accounts
                 self.data.angles = snapshot.angles
                 self.data.rotation = snapshot.rotation
                 raise

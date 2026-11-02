@@ -31,6 +31,7 @@ from identity.domain.errors import (
     AuthenticationFailed,
     AuthzUnavailable,
     ConflictError,
+    DemoFull,
     ForbiddenError,
     IdentityError,
     InvalidInput,
@@ -47,6 +48,14 @@ class TooManyRequests(ServiceError):  # noqa: N818 - HTTP status names read best
     status = 429
     problem_type = "too-many-requests"
     title = "Too many requests"
+
+
+class DemoFullError(ServiceError):
+    """Every demo sandbox is taken (503) with ``Retry-After`` (ADR 0076)."""
+
+    status = 503
+    problem_type = "demo-full"
+    title = "The demo is full"
 
 
 def get_services(request: Request) -> Services:
@@ -159,6 +168,8 @@ def to_service_error(exc: IdentityError) -> ServiceError:
             return Conflict(exc.message)
         case AuthzUnavailable():
             return ServiceUnavailable(exc.message)
+        case DemoFull():
+            return DemoFullError(exc.message, headers={"Retry-After": str(exc.retry_after_seconds)})
         case _:
             return ServiceError(exc.message)
 

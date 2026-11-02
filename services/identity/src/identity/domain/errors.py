@@ -42,5 +42,13 @@ class RateLimited(IdentityError):  # noqa: N818 - reads like the HTTP status it 
         self.retry_after_seconds = retry_after_seconds
 
 
+class DemoFull(IdentityError):  # noqa: N818 - reads like the HTTP status it maps to
+    """Every demo sandbox is taken (503, ADR 0076); try again after ``retry_after_seconds``."""
+
+    def __init__(self, message: str, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class AuthzUnavailable(IdentityError):  # noqa: N818 - reads like the HTTP status it maps to
     """OpenFGA could not be written; nothing was changed (503)."""

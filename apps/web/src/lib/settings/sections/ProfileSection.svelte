@@ -12,6 +12,7 @@
   import PlanPanel from '#lib/components/PlanPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import DemoLock from '#lib/demo/DemoLock.svelte';
+  import { forgetVisitor } from '#lib/demo/sandbox.js';
   import { problemMessage, roleLabel } from '#lib/i18n.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -124,6 +125,8 @@
   async function logout(): Promise<void> {
     // App shell: remove this device's APNs token while the session can still do so.
     await nativeShell.signingOut();
+    // A demo visitor who logs out left on purpose: no fresh sandbox by itself (ADR 0076).
+    forgetVisitor();
     await session.logout();
     await goto('/login', { replace: true });
   }

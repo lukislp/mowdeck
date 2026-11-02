@@ -3,7 +3,8 @@
  * of the test stack (CI job e2e-demo; locally `MOWDECK_E2E_DEMO=1 pnpm e2e:stack up`). On any
  * other stack (no `demo` block in /config.json) every test skips, so the regular shards pass it.
  *
- * Covers: "Try the demo" signs in with one click into the seeded account; registration and the
+ * Covers: "Try the demo" signs in with one click (into the seeded shared account, or with demo
+ * sandboxes, ADR 0076, into a sandbox of the visitor's own: sandbox-demo.spec.ts); registration and the
  * other sign-in methods are neither shown nor reachable; the banner and the "Demo" title label
  * are on every main page and cannot be dismissed; the API marks its responses and refuses what
  * the demo does not allow; the app locks those actions with one hint ("In der Demo nicht
@@ -37,7 +38,7 @@ async function tryTheDemo(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/mowers$/);
 }
 
-test('"Try the demo" signs in with one click into the seeded account', async ({ page }) => {
+test('"Try the demo" signs in with one click into the simulated mowers', async ({ page }) => {
   await page.goto('/login');
   await expectLabelled(page);
   await expect(page.getByTestId('login-demo-badge')).toBeVisible();
@@ -51,6 +52,14 @@ test('"Try the demo" signs in with one click into the seeded account', async ({ 
   await expect(page).toHaveURL(/\/mowers$/);
   await expectLabelled(page);
   await expect(page.locator('[data-testid^="mower-row-"]')).toHaveCount(3, { timeout: 60_000 });
+  // The band says what kind of demo this is: shared with every visitor, or an own sandbox.
+  const band = page.getByTestId('demo-banner');
+  if ((await band.getAttribute('data-mode')) === 'sandbox') {
+    await expect(band).toContainText('Sandbox');
+    await expect(band).not.toContainText(/geteilt/);
+  } else {
+    await expect(band).toContainText(/geteilt|Simuliert/);
+  }
 });
 
 test('registration is not reachable, neither in the app nor in the API', async ({
@@ -69,6 +78,7 @@ test('registration is not reachable, neither in the app nor in the API', async (
   expect(register.headers()['x-mowdeck-demo']).toBe('1');
   expect((await register.json()).type).toBe(DEMO_PROBLEM);
 
+  // No password sign-in at all: neither as the shared demo user nor as any sandbox user.
   const password = await request.post('/api/v1/identity/session', {
     data: { username: 'demo', password: 'a-long-password-1' },
   });

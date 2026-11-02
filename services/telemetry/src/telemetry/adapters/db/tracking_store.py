@@ -119,6 +119,18 @@ class SqlTrackingStore:
             )
         return result.rowcount
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Links and photos first (the cascade would hide them from the count), then the
+        sessions; one transaction."""
+        removed = 0
+        async with self.engine.begin() as conn:
+            for table in (tables.tracking_photos, tables.tracking_links, tables.tracking_sessions):
+                result = await conn.execute(
+                    sa.delete(table).where(table.c.account_id == account_id)
+                )
+                removed += result.rowcount
+        return removed
+
     async def add_link(self, link: TrackingLink) -> None:
         async with self.engine.begin() as conn:
             await conn.execute(sa.insert(tables.tracking_links).values(**_fields(link)))

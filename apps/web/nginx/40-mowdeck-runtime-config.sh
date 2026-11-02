@@ -35,6 +35,12 @@
 #                                sign-in page (the services enforce the demo themselves)
 #   MOWDECK_WEB_DEMO_RESET_HOURS hours between two resets of the demo, shown in the banner
 #                                (1 to 168, default 6)
+#   MOWDECK_WEB_DEMO_SANDBOX     true (with the demo mode): every visitor gets an own sandbox account
+#                                (ADR 0076); the banner and the sign-in page say so, and the app
+#                                starts a fresh sandbox when a visitor's one was deleted
+#   MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES
+#                                minutes after the last visit until a sandbox is deleted, shown
+#                                in the banner (5 to 1440, default 30); match Identity's setting
 #   MOWDECK_WEB_API_EXPLORER     true: the interactive API explorer at /api-explorer (ADR 0072),
 #                                meant for the public demo: "try it" calls run with the visitor's
 #                                own session. Anything else: no page, and nginx answers 404 for
@@ -145,14 +151,34 @@ case "$(printf '%s' "${MOWDECK_WEB_DEMO_MODE:-false}" | tr '[:upper:]' '[:lower:
       '' | *[!0-9]*) reset_hours=6 ;;
     esac
     if [ "$reset_hours" -lt 1 ] || [ "$reset_hours" -gt 168 ]; then reset_hours=6; fi
-    demo_json=",\"demo\":{\"resetHours\":$reset_hours}"
-    echo "mowdeck: PUBLIC DEMO (banner on every page, reset every $reset_hours h)"
+    sandbox_json=""
+    idle_minutes=""
+    case "$(printf '%s' "${MOWDECK_WEB_DEMO_SANDBOX:-false}" | tr '[:upper:]' '[:lower:]')" in
+      true | 1 | yes | on)
+        idle_minutes="${MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES:-30}"
+        case "$idle_minutes" in
+          '' | *[!0-9]*) idle_minutes=30 ;;
+        esac
+        if [ "$idle_minutes" -lt 5 ] || [ "$idle_minutes" -gt 1440 ]; then idle_minutes=30; fi
+        sandbox_json=",\"sandbox\":{\"idleMinutes\":$idle_minutes}"
+        ;;
+    esac
+    demo_json=",\"demo\":{\"resetHours\":$reset_hours$sandbox_json}"
+    if [ -n "$sandbox_json" ]; then
+      echo "mowdeck: PUBLIC DEMO with a sandbox per visitor (deleted $idle_minutes min after the last visit, reset every $reset_hours h)"
+    else
+      echo "mowdeck: PUBLIC DEMO (banner on every page, reset every $reset_hours h)"
+    fi
     ;;
 esac
 
 # The demo label in the served HTML (app.html's <title>MowDeck</title>, once per page).
 if [ -n "$demo_json" ]; then
-  demo_text="Öffentliche MowDeck-Demo mit simulierten Mähern, geteilt mit allen Besuchern, alle $reset_hours h zurückgesetzt."
+  if [ -n "$sandbox_json" ]; then
+    demo_text="Öffentliche MowDeck-Demo: deine eigene Sandbox mit simulierten Mähern, $idle_minutes min nach dem letzten Besuch gelöscht, alle $reset_hours h zurückgesetzt."
+  else
+    demo_text="Öffentliche MowDeck-Demo mit simulierten Mähern, geteilt mit allen Besuchern, alle $reset_hours h zurückgesetzt."
+  fi
   {
     echo "# Public demo (MOWDECK_WEB_DEMO_MODE=true): the label in the page itself."
     echo "sub_filter_once on;"

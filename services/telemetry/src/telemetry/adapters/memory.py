@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from dataclasses import replace as replace_fields
 from datetime import date, datetime, timedelta
+from typing import Protocol
 from uuid import UUID
 
 from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
@@ -25,6 +26,13 @@ from telemetry.domain.models import (
 )
 from telemetry.domain.rules import downsample, raw_points
 from telemetry.domain.thinning import CONTEXT, ThinPolicy, keep_set
+
+
+class _Owned(Protocol):
+    """A row that carries its account."""
+
+    @property
+    def account_id(self) -> UUID: ...
 
 
 class _Data:
@@ -366,3 +374,36 @@ class MemoryStore:
     @asynccontextmanager
     async def retention(self) -> AsyncIterator[RetentionScope | None]:
         yield None if self.lock_held_elsewhere else _MemoryRetention(self.data)
+
+    async def purge_account(self, account_id: UUID) -> int:
+        async with self._lock:
+            data = self.data
+            mine = {
+                *(e.mower_id for e in data.directory.values() if e.account_id == account_id),
+                *(r.mower_id for r in data.latest.values() if r.account_id == account_id),
+                *(p.mower_id for p in data.positions.values() if p.account_id == account_id),
+            }
+            others = {e.mower_id for e in data.directory.values() if e.account_id != account_id}
+            removed = 0
+            before = len(data.thinned_until)
+            data.thinned_until = {
+                k: v for k, v in data.thinned_until.items() if k not in mine or k in others
+            }
+            removed += before - len(data.thinned_until)
+
+            def drop[K, V: _Owned](rows: dict[K, V]) -> dict[K, V]:
+                nonlocal removed
+                kept = {k: v for k, v in rows.items() if v.account_id != account_id}
+                removed += len(rows) - len(kept)
+                return kept
+
+            data.directory = drop(data.directory)
+            data.latest = drop(data.latest)
+            data.history = drop(data.history)
+            data.positions = drop(data.positions)
+            data.commands = drop(data.commands)
+            data.snapshots = drop(data.snapshots)
+            data.health = drop(data.health)
+            data.daily = drop(data.daily)
+            data.blade_changes = drop(data.blade_changes)
+            return removed

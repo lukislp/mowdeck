@@ -2,18 +2,28 @@
   The demo band (ADR 0068): pinned above every page of a demo installation, in the browser and
   inside the app shells, and never dismissible. It sits in the strip the page frame reserves at
   the top (`--md-safe-top` grows by the band's height while `<html>` has the demo class), so no
-  layout below has to know about it. A hatched "calibration tape" tag, as on a test rig.
+  layout below has to know about it. A hatched "calibration tape" tag, as on a test rig. With demo
+  sandboxes (ADR 0076) it says the visitor's sandbox is their own and when it is deleted.
 -->
 <script lang="ts">
   import { session } from '#lib/auth/session.svelte.js';
   import { navigatePath } from '#lib/navigate.js';
   import { m } from '#lib/paraglide/messages.js';
 
+  import { markVisitor } from './sandbox';
+
   let {
     resetHours,
     href,
     explorer = false,
-  }: { resetHours: number; href: string; explorer?: boolean } = $props();
+    idleMinutes = null,
+  }: {
+    resetHours: number;
+    href: string;
+    explorer?: boolean;
+    /** Demo sandboxes (ADR 0076): minutes until an idle sandbox is deleted; null: shared demo. */
+    idleMinutes?: number | null;
+  } = $props();
 
   /** Signed out (the sign-in page): start the demo session first, then open the explorer,
    * instead of landing on the sign-in page again. A failed demo sign-in falls back to the
@@ -23,6 +33,7 @@
     event.preventDefault();
     try {
       await session.tryDemo();
+      markVisitor();
     } catch {
       // The sign-in page shows why the demo is unavailable.
     }
@@ -30,11 +41,22 @@
   }
 </script>
 
-<div class="band" role="note" aria-label={m.demo_badge()} data-testid="demo-banner">
+<div
+  class="band"
+  role="note"
+  aria-label={m.demo_badge()}
+  data-testid="demo-banner"
+  data-mode={idleMinutes === null ? 'shared' : 'sandbox'}
+>
   <span class="tag"><span class="tag-text">{m.demo_badge()}</span></span>
   <span class="text">
-    <span class="long">{m.demo_banner({ hours: resetHours })}</span>
-    <span class="short">{m.demo_banner_short({ hours: resetHours })}</span>
+    {#if idleMinutes === null}
+      <span class="long">{m.demo_banner({ hours: resetHours })}</span>
+      <span class="short">{m.demo_banner_short({ hours: resetHours })}</span>
+    {:else}
+      <span class="long">{m.demo_banner_sandbox({ minutes: idleMinutes, hours: resetHours })}</span>
+      <span class="short">{m.demo_banner_sandbox_short({ minutes: idleMinutes })}</span>
+    {/if}
   </span>
   {#if explorer}
     <a class="get" href="/api-explorer" data-testid="demo-api-explorer" onclick={openExplorer}>
@@ -120,6 +142,24 @@
 
     .short {
       display: inline;
+    }
+
+    /* Phones: tighter, so the short text keeps its numbers whole next to the two links. */
+    .band {
+      gap: var(--md-space-2);
+    }
+
+    .tag-text {
+      padding-inline: var(--md-space-2);
+      letter-spacing: 0.16em;
+    }
+
+    .text {
+      letter-spacing: 0;
+    }
+
+    .get {
+      padding-inline: var(--md-space-2);
     }
   }
 </style>

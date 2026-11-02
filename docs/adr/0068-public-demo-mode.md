@@ -124,8 +124,12 @@ A re-audit tightened three points (every installation unless noted):
 
 **Follow-up: a reduced demo role.** The cleaner fix is a demo user without the account-admin reads (`audit.view`, `users.manage`, `billing.manage`). OpenFGA derives them from `owner` and `admin` (`can_view_audit: owner or admin or ...`), and the demo user owns the account it was registered with, so it needs a separate owner nobody signs in as and the visitor as a member with a custom role at account level; the seed job, the tuples it writes, and the web app areas that follow the role would change with it. Until then the filters above close the gap.
 
+## Amendment (2026-11-01): a sandbox per visitor
+
+The open question "shared or isolated accounts" is decided in [ADR 0076](0076-demo-sandboxes.md): with `DEMO_SANDBOXES` (on by default in `docker-compose.demo.yml`) "Try the demo" gives every visitor an own sandbox account with its own simulated mowers, schedules and inbox, claimed from a small ready pool, capped (`503 demo-full`), limited per address, deleted after 30 minutes without a visit, at a logout or after the reset interval, and purged in every service through demo-only purge endpoints. The mowers of a sandbox nobody watches rest in the Device-Gateway (Realtime's `presence.accounts`). The policy, the labels, the seed secret, the reset and the hardening of this ADR stay; the shared demo user and its read filters remain the mode with `DEMO_SANDBOXES=false`, and the seed job then prepares it as before.
+
 ## Open questions
 
 - **Hosting**: which host and address (a small VPS, a separate VM; never the host of a real installation), TLS in front of Traefik (`GATEWAY_TRUSTED_PROXIES`), and whether a public demo in Germany needs the imprint pages (`WEB_LEGAL_ENABLED`, filled `/legal/*.md`).
 - **Reset interval**: 6 hours by default; shorter resets limit vandalism, longer ones keep a visitor's session alive longer (a reset ends every session).
-- **Shared or isolated accounts**: one shared demo account (this ADR) is simple and shows the multi-user live view, but visitors see each other's actions. An account per visitor would need a pool of seeded accounts or seeding on demand (about a second of simulated history per mower), plus a cap on concurrent accounts.
+- **Shared or isolated accounts** (decided in [ADR 0076](0076-demo-sandboxes.md): a sandbox per visitor): one shared demo account (this ADR) is simple and shows the multi-user live view, but visitors see each other's actions. An account per visitor would need a pool of seeded accounts or seeding on demand (about a second of simulated history per mower), plus a cap on concurrent accounts.

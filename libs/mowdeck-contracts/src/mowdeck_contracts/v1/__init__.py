@@ -332,6 +332,7 @@ from mowdeck_contracts.v1.positions import (
     PositionTrackReply,
     PositionTrackRequest,
 )
+from mowdeck_contracts.v1.presence import ACCOUNT_PRESENCE, AccountPresence, AccountWatchers
 from mowdeck_contracts.v1.principal import Principal, PrincipalKind, PrincipalRef
 from mowdeck_contracts.v1.problem import (
     PROBLEM_JSON_MEDIA_TYPE,
@@ -482,6 +483,7 @@ from mowdeck_contracts.v1.vision import (
 )
 
 __all__ = [
+    "ACCOUNT_PRESENCE",
     "ALL_FEATURES",
     "ALWAYS_ALLOWED_FEATURES",
     "AREA_FALLBACK",
@@ -597,6 +599,8 @@ __all__ = [
     "VISION_STREAM_LEASE_SECONDS",
     "AccountCreated",
     "AccountKind",
+    "AccountPresence",
+    "AccountWatchers",
     "ApiTokenRevoked",
     "AreaNamesChanged",
     "BaseStationFirmwareUpdate",

@@ -117,6 +117,7 @@ USERS: dict[str, Access] = {
             "gateway.mower.*.path.preview",
             "gateway.mower.*.photo",
             "gateway.mower.*.tracking",
+            "presence.accounts",
         ),
         consume=("command.mower.*", "event.mower.>"),
     ),
@@ -189,7 +190,13 @@ USERS: dict[str, Access] = {
         consume=("device.mower.>", *_GRANTS, *_PLAN_CHANGES),
     ),
     "realtime": Access(
-        publish=("command.mower.*", *_PLANS, "fleet.drive.start", "fleet.drive.stop"),
+        publish=(
+            "command.mower.*",
+            *_PLANS,
+            "fleet.drive.start",
+            "fleet.drive.stop",
+            "presence.accounts",
+        ),
         consume=(
             "command.result.mower.*",
             "device.mower.*.capabilities",
@@ -370,8 +377,8 @@ def summary(users: Mapping[str, Access] = USERS) -> str:
 _SUBSCRIBE = {"subscribe", "_subscribe"}
 _REQUEST = {"request", "_request"}
 _PUBLISH = {"publish", "_publish", "emit", "connection_event", "_connection_event"}
-_CORE = {"fleet", "gateway", "entitlements", "tracks", "relay"}
-"""First tokens of the core NATS (request/reply) subjects."""
+_CORE = {"fleet", "gateway", "entitlements", "tracks", "relay", "presence"}
+"""First tokens of the core NATS subjects (request/reply, and ``presence.accounts``)."""
 _SUBJECT = re.compile(r"[a-z_][a-z0-9_*>-]*(\.[a-z0-9_*>-]+)+")
 
 LIB_ENTRY_POINTS: Mapping[str, tuple[tuple[Kind, str], ...]] = {

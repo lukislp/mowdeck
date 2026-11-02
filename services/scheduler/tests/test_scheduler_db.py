@@ -419,3 +419,52 @@ async def test_scheduler_db_due_schedules_are_claimed_once(
             claimed_two = await two.claim_due(NOW)
             assert claimed_one is not None and claimed_two is not None
             assert claimed_one.id != claimed_two.id  # SKIP LOCKED: the other replica moves on
+
+
+async def _fill(store: Store, account_id: Any) -> Schedule:
+    """One row in every table of the account (two runs, two angles)."""
+    item = schedule_row(account_id, "Morning")
+    mower_id = item.target_id
+    async with store.transaction() as tx:
+        await tx.add_schedule(item)
+        await tx.add_run(run_row(item, NOW))
+        await tx.add_run(run_row(item, NOW + timedelta(minutes=1), "skipped_rain"))
+        await tx.put_status(MowerStatus(mower_id, account_id, "mowing", NOW))
+        await tx.put_place(MowerPlace(mower_id, account_id, NOW, 48.1, 11.5, ["front"]))
+        await tx.put_capabilities(mower_id, account_id, NOW, MowerCapabilities())
+        await tx.put_area_angles(
+            [
+                AreaAngle(mower_id, area, account_id, 30.0, NOW, "schedule", item.id)
+                for area in ("front", "back")
+            ]
+        )
+        await tx.put_rotation(MowerRotation(mower_id, account_id, 45.0, NOW))
+    return item
+
+
+@pytest.mark.parametrize("kind", STORES)
+async def test_scheduler_db_purge_account(kind: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR 0076: ``purge_account`` deletes every row of one account in every table and
+    nothing of another account; a second purge finds nothing."""
+    account_id, other = uuid4(), uuid4()
+    async with store_of(kind, monkeypatch) as store:
+        gone = await _fill(store, account_id)
+        kept = await _fill(store, other)
+        async with store.transaction() as tx:
+            assert await tx.purge_account(account_id) == 9
+            assert await tx.purge_account(account_id) == 0
+        async with store.transaction() as tx:
+            assert await tx.count_schedules(account_id) == 0
+            assert await tx.list_runs(gone.id, account_id, limit=5, before=None) == []
+            assert await tx.get_status(gone.target_id) is None
+            assert await tx.get_place(gone.target_id) is None
+            assert await tx.get_capabilities(gone.target_id) is None
+            assert await tx.get_area_angles(gone.target_id) == []
+            assert await tx.get_rotation(gone.target_id) is None
+            assert await tx.count_schedules(other) == 1
+            assert len(await tx.list_runs(kept.id, other, limit=5, before=None)) == 2
+            assert await tx.get_status(kept.target_id) is not None
+            assert await tx.get_place(kept.target_id) is not None
+            assert await tx.get_capabilities(kept.target_id) is not None
+            assert len(await tx.get_area_angles(kept.target_id)) == 2
+            assert await tx.get_rotation(kept.target_id) is not None

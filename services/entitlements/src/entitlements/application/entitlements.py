@@ -285,6 +285,13 @@ class EntitlementsService:
             history = await tx.history(account_id, self.config.history_limit)
         return AccountDetail(resolved, history)
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Forget an expired demo sandbox account (ADR 0076): its plan row and assignment
+        history, in one transaction; returns the rows removed (0 on a repeated call). No event:
+        the account is gone everywhere, nobody needs its plan any more."""
+        async with self.store.transaction() as tx:
+            return await tx.purge_account(account_id)
+
     async def assign(self, account_id: UUID, data: Assignment, actor: str | None) -> AccountDetail:
         """Assign a plan by hand (``source=manual``), record it and tell every client."""
         now = self.clock()

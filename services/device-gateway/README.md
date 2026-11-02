@@ -177,6 +177,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_SNAPSHOT_RECHECK_SECONDS` | `30` | While states arrive, compare capabilities (reloaded) and the map (rebuilt by adapters with `MapRebuildable`, never re-read from the mower) again this often and republish only what changed (model, limits, dock and RTK reference arrive after the connect) |
 | `MOWDECK_SIM_TIME_SCALE` | `1.0` | Simulated seconds per real second (unless a registration sets `time_scale`) |
 | `MOWDECK_SIM_TICK_SECONDS` | `1.0` | Real seconds between simulation steps |
+| `MOWDECK_SIM_PAUSE_UNWATCHED` | `true` | Demo mode only ([ADR 0076](../../docs/adr/0076-demo-sandboxes.md)): the mowers of an account without a live socket (Realtime's `presence.accounts`) rest: no simulation clock, no states, no heartbeats |
+| `MOWDECK_SIM_WAKE_SECONDS` | `120` | Demo mode: how long a request (command, scheduled start, photo, path preview) wakes the mowers of an unwatched account |
 | `MOWDECK_FLEET_REQUEST_TIMEOUT_SECONDS` | `2.0` | Timeout of `fleet.mowers.list` |
 | `MOWDECK_FLEET_RETRY_MAX_SECONDS` | `30.0` | Maximum backoff between Fleet requests |
 | `MOWDECK_RECONNECT_INITIAL_SECONDS` | `1.0` | First reconnect delay |

@@ -16,8 +16,13 @@ Every step is idempotent: an account that already has mowers is left as it is, s
 job does not double anything. The job talks to the services inside the Compose network only;
 the seed secret never passes the gateway (Traefik strips the header from outside requests).
 
+With ``DEMO_SANDBOXES`` true (the demo stack's default, ADR 0076) every visitor gets an own
+sandbox account that Identity fills itself (``identity.adapters.demo_sandbox``, the same garden
+as :data:`MOWERS`); the job then only waits until the services are ready and prepares nothing.
+
 Environment: ``MOWDECK_DEMO_SEED_TOKEN`` (or ``MOWDECK_DEMO_SEED_TOKEN_FILE``), optionally
-``DEMO_HISTORY_DAYS`` (default 7) and ``DEMO_<SERVICE>_URL`` for other service addresses.
+``DEMO_HISTORY_DAYS`` (default 7), ``DEMO_SANDBOXES`` (default false here; the compose file sets
+it) and ``DEMO_<SERVICE>_URL`` for other service addresses.
 """
 
 import json
@@ -161,9 +166,17 @@ def _store_notification_preferences(api: Api) -> None:
     _log("notification preferences stored (the defaults: the inbox fills)")
 
 
+def _sandboxes() -> bool:
+    """Demo sandboxes (ADR 0076): Identity fills every visitor's own account itself."""
+    return os.environ.get("DEMO_SANDBOXES", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
 def main() -> int:
     api = Api(_seed_token())
     _wait_ready(["identity", "fleet", "scheduler", "telemetry", "notifications"])
+    if _sandboxes():
+        _log("demo sandboxes: every visitor gets an own account; no shared demo account")
+        return 0
     seeded = api.call("POST", f"{_url('identity')}/demo/seed", seed=True)
     _log(f"account {seeded['account_id']} ({'created' if seeded['created'] else 'existing'})")
     session = api.call("POST", f"{_url('identity')}/demo/session")

@@ -9,6 +9,7 @@ import itertools
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
+from uuid import UUID
 
 from fleet.application.ports import Gt, In, Lt
 from fleet.domain.errors import ConflictError
@@ -203,6 +204,10 @@ class MemoryTx:
         """Transactions run one at a time, so the lock is always free."""
         del key
         return True
+
+    async def purge_audit(self, account_id: UUID) -> int:
+        """Delete the account's audit rows (demo purge)."""
+        return await self._tables.audit.delete(account_id=account_id)
 
 
 class MemoryStore:

@@ -6,6 +6,7 @@ from typing import Protocol
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    AccountPresence,
     CommandEnvelope,
     DriveStartReply,
     DriveStartRequest,
@@ -14,6 +15,14 @@ from mowdeck_contracts.v1 import (
 )
 
 from realtime.domain.models import Authenticated
+
+
+class PresencePublisher(Protocol):
+    """Announces who watches which account (demo sandboxes, ADR 0076)."""
+
+    async def announce(self, presence: AccountPresence) -> None:
+        """Publish ``presence``; failures are the adapter's to log, never raised."""
+        ...
 
 
 class Clock(Protocol):

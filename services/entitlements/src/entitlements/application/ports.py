@@ -74,6 +74,12 @@ class Tx(Protocol):
         """Insert or update a catalogue entry."""
         ...
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete the account's plan row and its assignment history (demo sandbox purge, ADR
+        0076); returns the number of rows removed. Plans and features are the
+        installation's."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions."""

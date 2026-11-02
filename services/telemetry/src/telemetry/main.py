@@ -54,6 +54,7 @@ from telemetry.adapters.memory_tracking import MemoryTrackingStore
 from telemetry.adapters.memory_zones import MemoryZoneStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
+from telemetry.application.demo import DemoPurge
 from telemetry.application.errors import ErrorExplanations, ErrorLexiconGateway
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
@@ -173,7 +174,10 @@ def build_app(
             error_lexicons or BusErrorLexicons(lambda: getattr(app.state, "bus", None)),
             services.queries,
         )
-        services = dataclasses.replace(services, tracking=tracking, errors=explanations)
+        demo = DemoPurge(
+            store_ref, zones_ref, tracking_store, forget=[services.aerial.forget_account]
+        )
+        services = dataclasses.replace(services, tracking=tracking, errors=explanations, demo=demo)
         app.state.telemetry = services
         app.state.directory_seeded = False
         subscriptions: list[Subscription] = []

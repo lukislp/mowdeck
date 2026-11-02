@@ -35,7 +35,14 @@ from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient
 from identity.adapters.api.deps import install_error_mapping
 from identity.adapters.api.routes import DEMO_POLICY, ROUTERS, jwks_document
 from identity.adapters.bus.subscriptions import subscribe_all
-from identity.application.ports import Clock, Lt, ModuleSource, PasswordHasher, Store
+from identity.application.ports import (
+    Clock,
+    Lt,
+    ModuleSource,
+    PasswordHasher,
+    SandboxProvisioner,
+    Store,
+)
 from identity.module import DESCRIPTOR
 from identity.runtime import Runtime
 from identity.settings import Settings
@@ -69,6 +76,7 @@ def build_app(
     entitlements: Entitlements | None = None,
     github_transport: httpx.AsyncBaseTransport | None = None,
     apple_transport: httpx.AsyncBaseTransport | None = None,
+    provisioner: SandboxProvisioner | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA and Argon2id."""
     runtime = Runtime(
@@ -82,6 +90,7 @@ def build_app(
         entitlements=entitlements,
         github_transport=github_transport,
         apple_transport=apple_transport,
+        provisioner=provisioner,
     )
     keys = runtime.keys
     verifier = JwtVerifier(
@@ -180,6 +189,15 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
             name="maintenance",
         ),
     ]
+    sandboxes = services.sandboxes
+    if sandboxes is not None:  # the public demo with sandboxes (ADR 0076)
+        tasks.append(asyncio.create_task(sandboxes.run_pool(), name="sandbox-pool"))
+        tasks.append(
+            asyncio.create_task(
+                every(settings.identity_demo_sandbox_sweep_seconds, "sandboxes", sandboxes.sweep),
+                name="sandbox-sweep",
+            )
+        )
     if settings.identity_reconcile_seconds > 0:
         reconcile = services.accounts.reconcile_all
         tasks.append(

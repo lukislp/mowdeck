@@ -16,8 +16,12 @@
 #   providers; the list is in ADR 0068).
 # - Traefik labels every response, removes the seed secret header from every outside request and
 #   rate limits every client address; "Try the demo" has the login limit.
-# - The seed job (demo/seed.py) prepares the demo account, three simulated mowers in three
-#   gardens, their schedules and a week of history before the Device-Gateway starts.
+# - Demo sandboxes (ADR 0076, default): "Try the demo" gives every visitor an own account with
+#   its own simulated mowers, schedules and inbox; nobody sees another visitor's actions. Identity
+#   keeps a small pool ready, caps the sandboxes (DEMO_SANDBOX_MAX) and deletes a sandbox after
+#   DEMO_SANDBOX_IDLE_MINUTES without a visit; the Device-Gateway lets the mowers of a sandbox
+#   nobody watches rest. With DEMO_SANDBOXES=false the seed job (demo/seed.py) prepares the one
+#   shared demo account instead (three simulated mowers, schedules, a week of history).
 # - The web app shows the demo banner, "Demo" in the title and "Try the demo" on the sign-in page.
 #
 # Do not add the profiles relay, agora, matter or billing to a demo: they talk to manufacturer
@@ -73,6 +77,17 @@ services:
       MOWDECK_IDENTITY_APPLE_SERVICES_ID: ""
       MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: ""
       MOWDECK_IDENTITY_DEMO_USERNAME: ${DEMO_USERNAME:-demo}
+      # Demo sandboxes (ADR 0076): every visitor gets an own account with its own simulated
+      # mowers, made from a small ready pool, deleted after DEMO_SANDBOX_IDLE_MINUTES without a
+      # visit (or at the reset). DEMO_SANDBOXES=false brings back the one shared demo user.
+      # Defaults live here, so demo/demo.env needs none of these keys.
+      MOWDECK_IDENTITY_DEMO_SANDBOXES: ${DEMO_SANDBOXES:-true}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_MAX: ${DEMO_SANDBOX_MAX:-40}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_POOL: ${DEMO_SANDBOX_POOL:-2}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_IDLE_MINUTES: ${DEMO_SANDBOX_IDLE_MINUTES:-30}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_MAX_HOURS: ${DEMO_RESET_HOURS:-6}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_PER_ADDRESS_PER_HOUR: ${DEMO_SANDBOX_PER_ADDRESS_PER_HOUR:-6}
+      MOWDECK_IDENTITY_DEMO_SANDBOX_HISTORY_DAYS: ${DEMO_HISTORY_DAYS:-7}
     # No provider secrets in a demo.
     volumes: !reset []
     labels:
@@ -149,6 +164,9 @@ services:
     environment:
       MOWDECK_WEB_DEMO_MODE: "true"
       MOWDECK_WEB_DEMO_RESET_HOURS: ${DEMO_RESET_HOURS:-6}
+      # The band and the sign-in page explain the visitor's own sandbox (ADR 0076).
+      MOWDECK_WEB_DEMO_SANDBOX: ${DEMO_SANDBOXES:-true}
+      MOWDECK_WEB_DEMO_SANDBOX_IDLE_MINUTES: ${DEMO_SANDBOX_IDLE_MINUTES:-30}
       # The interactive API explorer (ADR 0072): visitors try the API with their demo session.
       MOWDECK_WEB_API_EXPLORER: "true"
     labels:
@@ -177,6 +195,9 @@ services:
     environment:
       MOWDECK_DEMO_SEED_TOKEN: ${DEMO_SEED_TOKEN:?set DEMO_SEED_TOKEN in demo/demo.env}
       DEMO_HISTORY_DAYS: ${DEMO_HISTORY_DAYS:-7}
+      # With sandboxes Identity fills each visitor's account itself; the job only waits until
+      # the services are ready (the Device-Gateway starts after it).
+      DEMO_SANDBOXES: ${DEMO_SANDBOXES:-true}
     volumes:
       - ./demo/seed.py:/seed/seed.py:ro
     depends_on:

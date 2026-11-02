@@ -91,6 +91,7 @@ from mowdeck_service_kit import get_logger
 from pydantic import BaseModel
 
 from device_gateway.application.ports import (
+    BackgroundJob,
     CameraFrame,
     CameraFrames,
     CameraSnapshotter,
@@ -204,8 +205,17 @@ class MowerSession:
         credentials: CredentialSource | None = None,
         snapshotters: Sequence[CameraSnapshotter] = (),
         snapshot_timeout_seconds: float = 20.0,
+        awake: bool = True,
     ) -> None:
         self.registration = registration
+        self._awake = asyncio.Event()
+        """Set while the mower runs; cleared while it rests (demo sandboxes nobody watches,
+        ADR 0076): no simulation clock, no heartbeats, no periodic firmware checks."""
+        self._asleep = asyncio.Event()
+        if awake:
+            self._awake.set()
+        else:
+            self._asleep.set()
         self._snapshotters = tuple(snapshotters)
         self._snapshot_timeout_seconds = snapshot_timeout_seconds
         self._photo_lock = asyncio.Lock()
@@ -355,6 +365,27 @@ class MowerSession:
         raise PhotoUnsupported("this connection has no camera")
 
     # --- lifecycle ----------------------------------------------------------------------------
+
+    @property
+    def paused(self) -> bool:
+        """True while the mower rests (see :meth:`pause`)."""
+        return not self._awake.is_set()
+
+    def pause(self) -> None:
+        """Let the mower rest (demo sandboxes nobody watches, ADR 0076): the connection stays,
+        but its background jobs (the simulation clock) stop and no state or heartbeat goes out
+        until :meth:`resume`. Simulated time stands still meanwhile. Idempotent."""
+        if self._awake.is_set():
+            self._awake.clear()
+            self._asleep.set()
+            _log.debug("mower paused", mower_id=str(self.mower_id))
+
+    def resume(self) -> None:
+        """Run again after :meth:`pause`; the current state goes out at once. Idempotent."""
+        if not self._awake.is_set():
+            self._asleep.clear()
+            self._awake.set()
+            _log.debug("mower resumed", mower_id=str(self.mower_id))
 
     def start(self) -> None:
         """Start supervising the connection in the background."""
@@ -506,11 +537,12 @@ class MowerSession:
         self, controller: MowerController, connection: MowerConnection
     ) -> None:
         """Run telemetry, the liveness check and adapter jobs; return when one of them ends."""
+        jobs = self._provider.background_jobs(connection)
         tasks = [
             asyncio.create_task(self._telemetry(controller)),
             asyncio.create_task(self._watch_link(connection)),
             asyncio.create_task(self._firmware_checks(controller)),
-            *(asyncio.create_task(job()) for job in self._provider.background_jobs(connection)),
+            *([asyncio.create_task(self._run_jobs(jobs))] if jobs else []),
         ]
         try:
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -526,6 +558,28 @@ class MowerSession:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def _run_jobs(self, jobs: Sequence[BackgroundJob]) -> None:
+        """Run the adapter's background jobs while the mower is awake; a pause cancels them and
+        a resume starts them again (the simulator keeps its state in between). Returns, or
+        raises, when a job ends by itself, which ends the connected run like before."""
+        while True:
+            await self._awake.wait()
+            running = [asyncio.create_task(job()) for job in jobs]
+            sleeping = asyncio.create_task(self._asleep.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    [*running, sleeping], return_when=asyncio.FIRST_COMPLETED
+                )
+            finally:
+                sleeping.cancel()
+                for task in running:
+                    task.cancel()
+                await asyncio.gather(sleeping, *running, return_exceptions=True)
+            ended = [task for task in running if task in done]
+            if ended:
+                ended[0].result()  # re-raises the job's failure
+                return
+
     async def _firmware_checks(self, controller: MowerController) -> None:
         """Ask the manufacturer for firmware updates once after the connect (when the adapter's
         device information rounds are through) and then daily (ADR 0038); nothing for a
@@ -535,6 +589,7 @@ class MowerSession:
             return
         await asyncio.sleep(initial)
         while True:
+            await self._awake.wait()  # a resting mower asks nobody (ADR 0076)
             for target in ("mower", "base_station"):
                 if target == "base_station" and self.registration.base_station is None:
                     continue
@@ -695,6 +750,12 @@ class MowerSession:
         rechecked_at = loop.time()
         try:
             while True:
+                if not self._awake.is_set():
+                    # Resting (ADR 0076): nothing goes out; on waking the current state goes
+                    # out at once, so the visitor sees the mower without waiting a heartbeat.
+                    await self._awake.wait()
+                    published_at = loop.time() - self._timing.heartbeat_seconds
+                    published = None
                 heartbeat = (
                     drive_heartbeat
                     if controller.drive_session_active

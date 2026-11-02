@@ -12,7 +12,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from mowdeck_contracts.v1 import utc_now
 from mowdeck_control.history import MAX_DAYS, simulated_history
-from mowdeck_service_kit.demo import require_demo_seed
+from mowdeck_service_kit.demo import DemoPurgeOut, require_demo_seed
+from mowdeck_service_kit.errors import ServiceUnavailable
 from pydantic import BaseModel, Field
 
 from telemetry.adapters.api.deps import ServicesDep
@@ -64,3 +65,17 @@ async def demo_history(
             if await services.ingest.record_state(state):
                 stored += 1
     return DemoHistoryOut(states=offered, stored=stored)
+
+
+@router.delete("/accounts/{account_id}", include_in_schema=False)
+async def demo_purge(
+    account_id: UUID,
+    _: Annotated[None, Depends(require_demo_seed)],
+    services: ServicesDep,
+) -> DemoPurgeOut:
+    """Delete everything telemetry holds of an expired demo sandbox account (ADR 0076):
+    latest states, history, positions, commands, snapshots, health, zones, tracking sessions
+    and the mower directory. Idempotent."""
+    if services.demo is None:
+        raise ServiceUnavailable("telemetry is starting")
+    return DemoPurgeOut(deleted=await services.demo.purge_account(account_id))
