@@ -91,6 +91,11 @@ class TrackingStore(Protocol):
         """Photos of a session, oldest first."""
         ...
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every session, link and photo of an account, active ones included (demo
+        sandbox purge, ADR 0076); returns the number of rows removed."""
+        ...
+
     def leader(self) -> AbstractAsyncContextManager[bool]:
         """Try to become the replica that runs the background tick; yields False when another
         replica is running it."""

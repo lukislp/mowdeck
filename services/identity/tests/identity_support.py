@@ -222,6 +222,7 @@ async def harness(
     entitlements: Any = None,
     github_transport: httpx.AsyncBaseTransport | None = None,
     apple_transport: httpx.AsyncBaseTransport | None = None,
+    provisioner: Any = None,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan. ``backend`` replaces the tuple backend;
@@ -245,6 +246,7 @@ async def harness(
         entitlements=entitlements,
         github_transport=github_transport,
         apple_transport=apple_transport,
+        provisioner=provisioner,
     )
     async with lifespan_client(app) as client:
         await app.state.identity.deps.catalogue.refresh(fetch_modules=True)

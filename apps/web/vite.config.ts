@@ -128,6 +128,8 @@ export default defineConfig({
         'src/lib/navigate.ts',
         'src/lib/tour/steps.ts',
         'src/lib/tour/tour.svelte.ts',
+        'src/lib/tour/stores.ts',
+        'src/lib/demo/sandbox.ts',
       ],
       reporter: ['text-summary'],
       thresholds: { lines: 80 },

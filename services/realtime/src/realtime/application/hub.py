@@ -37,11 +37,13 @@ import contextlib
 from collections import OrderedDict, defaultdict
 from collections.abc import Collection, Coroutine, Iterable
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
     NOTIFICATIONS_VIEW_PERMISSION,
     VISION_FINAL_STATES,
+    AccountPresence,
+    AccountWatchers,
     CommandResult,
     CommandStatus,
     MowerCapabilities,
@@ -80,6 +82,7 @@ from realtime.application.ports import (
     DriveBackend,
     Metrics,
     NoMetrics,
+    PresencePublisher,
     Socket,
     TokenVerifier,
 )
@@ -124,8 +127,14 @@ class Hub:
         metrics: Metrics | None = None,
         drive: DriveBackend | None = None,
         plans: Entitlements | None = None,
+        presence: PresencePublisher | None = None,
+        instance: str | None = None,
     ) -> None:
         self.config = config
+        self.presence = presence if config.presence_seconds > 0 else None
+        """Announces the watched accounts (demo sandboxes, ADR 0076); None announces nothing."""
+        self.instance = instance or uuid4().hex
+        """Names this instance in its presence announcements."""
         self.verifier = verifier
         self.access = access
         self.clock = clock
@@ -204,7 +213,10 @@ class Hub:
         if address:
             self._by_address[address].add(session)
         self._by_user[principal.subject].add(session)
+        first = principal.account_id not in self._by_account
         self._by_account[principal.account_id].add(session)
+        if first:
+            self._announce({principal.account_id: 1})
 
     def remove(self, session: Session) -> None:
         """Forget a finished session everywhere."""
@@ -215,8 +227,11 @@ class Hub:
         principal = session.principal
         if principal is not None:
             _discard(self._by_user, principal.subject, session)
-            if principal.account_id is not None:
-                _discard(self._by_account, principal.account_id, session)
+            account_id = principal.account_id
+            if account_id is not None and session in self._by_account.get(account_id, ()):
+                _discard(self._by_account, account_id, session)
+                if account_id not in self._by_account:
+                    self._announce({account_id: 0})
         if session.owner_key is not None:
             _discard(self._by_owner, session.owner_key, session)
         if session.address:
@@ -445,6 +460,46 @@ class Hub:
     def spawn(self, coroutine: Coroutine[Any, Any, None], name: str) -> None:
         """Run a background job of a session (kept until it finished)."""
         self._spawn(coroutine, name)
+
+    # --- presence (demo sandboxes, ADR 0076) ---------------------------------------------------
+
+    def watched_accounts(self) -> dict[UUID, int]:
+        """Open authenticated sockets per account of this instance."""
+        return {account: len(sessions) for account, sessions in self._by_account.items()}
+
+    def _announce(self, accounts: dict[UUID, int], *, full: bool = False) -> None:
+        """Announce in the background (never blocks a socket on the bus)."""
+        if self.presence is None:
+            return
+        self._spawn(self._send_presence(accounts, full=full), "realtime-presence")
+
+    async def _send_presence(self, accounts: dict[UUID, int], *, full: bool) -> None:
+        if self.presence is None:
+            return
+        await self.presence.announce(
+            AccountPresence(
+                instance=self.instance,
+                accounts=[
+                    AccountWatchers(account_id=account, watchers=count)
+                    for account, count in accounts.items()
+                ],
+                full=full,
+                interval_seconds=self.config.presence_seconds,
+                at=self.clock(),
+            )
+        )
+
+    async def run_presence(self) -> None:
+        """Announce every watched account as a keep-alive every ``presence_seconds`` until
+        cancelled (an empty list too: it tells a restarted listener that nobody watches)."""
+        if self.presence is None:
+            return
+        while True:
+            await asyncio.sleep(self.config.presence_seconds)
+            try:
+                await self._send_presence(self.watched_accounts(), full=True)
+            except Exception:
+                _log.exception("presence keep-alive failed")
 
     # --- re-checks ----------------------------------------------------------------------------
 

@@ -8,6 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
+    AccountPresence,
     BridgeScanError,
     BridgeScanErrorCode,
     BridgeScanReply,
@@ -53,6 +54,7 @@ from device_gateway.application.ports import (
     GatewayPublisher,
     SnapshotFailed,
 )
+from device_gateway.application.presence import PresenceTracker
 from device_gateway.application.session import (
     BridgeScanUnsupported,
     FirmwareUnsupported,
@@ -100,8 +102,12 @@ class DeviceGateway:
         credentials: CredentialSource | None = None,
         snapshotters: Sequence[CameraSnapshotter] = (),
         snapshot_timeout_seconds: float = 20.0,
+        presence: PresenceTracker | None = None,
     ) -> None:
         self.shard = shard
+        self._presence = presence
+        """Demo sandboxes (ADR 0076): mowers of accounts nobody watches rest. None: every mower
+        always runs (every installation but a demo)."""
         self._snapshotters = tuple(snapshotters)
         self._snapshot_timeout_seconds = snapshot_timeout_seconds
         self._credentials = credentials
@@ -166,6 +172,7 @@ class DeviceGateway:
             credentials=self._credentials,
             snapshotters=self._snapshotters,
             snapshot_timeout_seconds=self._snapshot_timeout_seconds,
+            awake=self._presence is None or self._presence.awake(registration.account_id),
         )
         self._sessions[mower_id] = session
         session.start()
@@ -193,6 +200,39 @@ class DeviceGateway:
         await session.close()
         _log.info("mower removed", mower_id=str(mower_id), source=source)
         return True
+
+    # --- presence (demo sandboxes, ADR 0076) ---------------------------------------------------
+
+    def apply_presence(self, presence: AccountPresence) -> None:
+        """Take a Realtime announcement: wake or rest the mowers whose account changed."""
+        if self._presence is not None:
+            self._apply_awake(self._presence.update(presence))
+
+    def expire_presence(self) -> None:
+        """Rest the mowers whose watchers or wake-up timed out (called periodically)."""
+        if self._presence is not None:
+            self._apply_awake(self._presence.expire())
+
+    def _wake(self, account_id: UUID) -> None:
+        """A request reached a mower of ``account_id``: its mowers run for a while."""
+        if self._presence is not None:
+            self._apply_awake(self._presence.wake(account_id))
+
+    def _apply_awake(self, accounts: set[UUID]) -> None:
+        if not accounts or self._presence is None:
+            return
+        for session in self._sessions.values():
+            account_id = session.registration.account_id
+            if account_id not in accounts:
+                continue
+            if self._presence.awake(account_id):
+                session.resume()
+            else:
+                session.pause()
+
+    def paused_count(self) -> int:
+        """Mowers of this instance that rest now (metrics, tests)."""
+        return sum(1 for session in self._sessions.values() if session.paused)
 
     # --- Fleet --------------------------------------------------------------------------------
 
@@ -256,6 +296,7 @@ class DeviceGateway:
                 )
             )
             return None
+        self._wake(envelope.account_id)
         return session.submit(envelope)
 
     # --- camera -------------------------------------------------------------------------------
@@ -279,6 +320,7 @@ class DeviceGateway:
                 code=code.value,
             )
             return _camera_error(code, detail)
+        self._wake(request.account_id)
         try:
             camera = await session.camera_session()
         except NotConnected as exc:
@@ -461,6 +503,7 @@ class DeviceGateway:
                 code=code.value,
             )
             return _firmware_error(code, detail)
+        self._wake(request.account_id)
         try:
             info = await session.check_firmware(request.target)
         except NotConnected as exc:
@@ -498,6 +541,8 @@ class DeviceGateway:
         session = self._sessions.get(request.mower_id)
         if session is None or session.registration.account_id != request.account_id:
             return TrackingLeaseReply(code=TrackingLeaseCode.NOT_FOUND, detail="unknown mower")
+        if request.lease_seconds > 0:
+            self._wake(request.account_id)
         reply = session.set_tracking(request.interval_seconds, request.lease_seconds)
         if request.lease_seconds > 0:
             _log.info(
@@ -533,6 +578,7 @@ class DeviceGateway:
                 reason=detail,
             )
             return _preview_error(code, detail)
+        self._wake(request.account_id)
         try:
             async with asyncio.timeout(timeout_seconds):
                 path = await session.preview_path(request.area_ids, request.pattern)
@@ -587,6 +633,7 @@ class DeviceGateway:
                 account_id=str(request.account_id),
             )
             return _photo_error(PhotoErrorCode.NOT_FOUND, "mower not found")
+        self._wake(request.account_id)
         try:
             async with asyncio.timeout(timeout_seconds):
                 found = await session.capture_frames(
