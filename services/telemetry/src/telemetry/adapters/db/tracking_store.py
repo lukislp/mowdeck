@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from telemetry.adapters.db import tables
+from telemetry.adapters.db.reads import read_connection
 from telemetry.domain.tracking import TrackingLink, TrackingPhoto, TrackingSession
 
 TRACKING_LOCK_KEY = 0x4D44_5445_4C45_0002
@@ -67,7 +68,7 @@ class SqlTrackingStore:
         statement = sa.select(tables.tracking_sessions).where(*conditions)
         if newest:
             statement = statement.order_by(_S.started_at.desc())
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             row = (await conn.execute(statement.limit(1))).first()
         return _session(row) if row else None
 
@@ -85,7 +86,7 @@ class SqlTrackingStore:
     async def sessions_of(
         self, account_id: UUID, mower_id: UUID, limit: int
     ) -> list[TrackingSession]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.tracking_sessions)
                 .where(_S.account_id == account_id, _S.mower_id == mower_id)
@@ -95,7 +96,7 @@ class SqlTrackingStore:
             return [_session(r) for r in result]
 
     async def active_sessions(self) -> list[TrackingSession]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.tracking_sessions).where(_S.ended_at.is_(None))
             )
@@ -124,7 +125,7 @@ class SqlTrackingStore:
             await conn.execute(sa.insert(tables.tracking_links).values(**_fields(link)))
 
     async def links_of(self, session_id: UUID) -> list[TrackingLink]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.tracking_links)
                 .where(_L.session_id == session_id)
@@ -133,7 +134,7 @@ class SqlTrackingStore:
             return [_link(r) for r in result]
 
     async def link_by_hash(self, token_hash: str) -> TrackingLink | None:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             row = (
                 await conn.execute(
                     sa.select(tables.tracking_links).where(_L.token_hash == token_hash)
@@ -165,7 +166,7 @@ class SqlTrackingStore:
 
     async def photos_of(self, session_id: UUID) -> list[TrackingPhoto]:
         photos = tables.tracking_photos.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.tracking_photos)
                 .where(photos.session_id == session_id)

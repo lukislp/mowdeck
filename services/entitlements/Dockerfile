@@ -55,6 +55,6 @@ ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
     MOWDECK_SOURCE_REF=${MOWDECK_SOURCE_REF}
 USER 10001:10001
 EXPOSE 8000
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/healthz' % os.environ.get('MOWDECK_HTTP_PORT', '8000'), timeout=2)" || exit 1
+HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/startupz' % os.environ.get('MOWDECK_HTTP_PORT', '8000'), timeout=8)" || exit 1
 CMD ["python", "-m", "entitlements.main"]

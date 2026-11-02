@@ -456,6 +456,10 @@ postgresql:
     createRoleSecrets: true
     # -- PodMonitor for the Prometheus Operator (needs its CRDs).
     enablePodMonitor: false
+    # -- PostgreSQL max_connections. Each service pod may hold MOWDECK_DATABASE_POOL_SIZE +
+    # MOWDECK_DATABASE_MAX_OVERFLOW (5 + 5, Telemetry 10 + 5) plus one readiness connection, OpenFGA
+    # 30 per replica: the budget is in docs/ops/compose.md. Raise it with the replica counts.
+    maxConnections: 200
     # -- Extra fields merged into the Cluster spec (backup, affinity, postgresql parameters, ...).
     extraSpec: {}
   # Database and role of every service (role name = owner of the database).
@@ -537,19 +541,29 @@ securityContext:
     drop: ["ALL"]
 # -- Longer than MOWDECK_SHUTDOWN_GRACE_SECONDS (default 10) so shutdown hooks can finish.
 terminationGracePeriodSeconds: 30
+# Health model (ADR 0077). startup: /startupz passes once every readiness check (database,
+# OpenFGA, NATS, ...) passed once, up to 3 minutes. liveness: /healthz never touches a dependency,
+# so a busy pod is not restarted; 6 misses in a row (a minute) mean a hung process. readiness:
+# /readyz checks the dependencies (the database on a connection of its own, not the request
+# pool); it takes a pod out of its Service only after 30 s of failures, so a slow answer under
+# load does not flap it. timeoutSeconds stays above the checks' own timeout of 2 s.
 probes:
   startup:
-    httpGet: {path: /healthz, port: http}
+    httpGet: {path: /startupz, port: http}
     periodSeconds: 2
-    failureThreshold: 60
+    timeoutSeconds: 5
+    failureThreshold: 90
   liveness:
     httpGet: {path: /healthz, port: http}
     periodSeconds: 10
-    timeoutSeconds: 3
+    timeoutSeconds: 5
+    failureThreshold: 6
   readiness:
     httpGet: {path: /readyz, port: http}
-    periodSeconds: 5
-    timeoutSeconds: 3
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
 podAnnotations: {}
 podLabels: {}
 nodeSelector: {}
