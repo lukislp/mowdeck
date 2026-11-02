@@ -57,6 +57,7 @@ dev = [
   # installed here, its tests use a fake SDK).
   "agora-bridge",
   # Services, installed editable for their tests and type checks.
+  "assistant",
   "billing",
   "camera-relay",
   "device-gateway",
@@ -84,6 +85,7 @@ mowdeck-provider-testkit = { workspace = true }
 mowdeck-service-kit = { workspace = true }
 mowdeck-wiki-sync = { workspace = true }
 agora-bridge = { workspace = true }
+assistant = { workspace = true }
 billing = { workspace = true }
 camera-relay = { workspace = true }
 device-gateway = { workspace = true }

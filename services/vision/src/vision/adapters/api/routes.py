@@ -9,6 +9,7 @@ GET  /me/provider                           the caller      own provider (no key
 PUT  /me/provider                           the caller      save own provider (key write-only)
 DELETE /me/provider                         the caller      delete own provider
 POST /me/provider/test                      the caller      minimal vision call (rate limited)
+POST /me/provider/structured                the caller      text-only JSON answer (ADR 0075)
 GET  /me/preferences                        the caller      preferences: stereo frames, automatic
                                                             analysis on errors (with its limits)
 PUT  /me/preferences                        the caller      change them (opt-in: ``ai_recover``)
@@ -65,8 +66,10 @@ from vision.adapters.api.schemas import (
     RecoverIn,
     RetryIn,
     StatusOut,
+    StructuredIn,
+    StructuredOut,
 )
-from vision.application.providers import ProviderUpdate
+from vision.application.providers import ProviderUpdate, StructuredRequest
 from vision.domain.errors import InvalidInput
 from vision.domain.models import Image
 
@@ -144,6 +147,37 @@ async def test_my_provider(caller: CallerDep, service: ProvidersDep) -> Provider
     """One minimal vision call with a tiny generated image: model, latency, tokens and the
     estimated cost. 429 ``vision-quota`` beyond the hourly limit."""
     return ProviderTestOut.of(await service.test(caller))
+
+
+@router.post(
+    "/me/provider/structured",
+    responses={
+        409: {"description": "`vision-provider-missing`: no own provider, no hosted default."},
+        422: {"description": "A field is out of its limits or the schema is not an object."},
+        429: {"description": "`vision-quota`: the hourly limit of structured answers."},
+        502: {"description": "`vision-provider-failed`: no JSON object came back."},
+    },
+)
+async def structured_answer(
+    body: StructuredIn, caller: CallerDep, service: ProvidersDep
+) -> StructuredOut:
+    """A text-only question to the caller's effective provider (own, else the installation's)
+    whose answer is one JSON object shaped by ``schema`` (ADR 0075): the interface other
+    modules (the optional assistant) use to reuse the AI provider without seeing a key. Its own
+    hourly limit per user (``MOWDECK_VISION_STRUCTURED_PER_HOUR``); recorded in the cost
+    accounting as kind ``structured``. The text and the answer are neither logged nor stored;
+    the caller validates the answer."""
+    result = await service.structured(
+        caller,
+        StructuredRequest(
+            purpose=body.purpose,
+            system=body.system,
+            text=body.text,
+            schema=body.json_schema,
+            name=body.name,
+        ),
+    )
+    return StructuredOut.of(result)
 
 
 @router.get("/me/preferences")

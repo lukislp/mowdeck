@@ -32,6 +32,7 @@ OPERATIONS_SKIPPED = {"/.well-known/mowdeck-module"}
 """The module descriptor is for Identity and the web app shell, not for scripts."""
 
 PURPOSE: dict[str, str] = {
+    "assistant": "Chat control: proposals from typed requests (optional add-on, ADR 0075).",
     "billing": "Plans, checkout and the Stripe webhook (only with billing enabled).",
     "device-gateway": "Mower links of the installation (operator view).",
     "entitlements": "What the account's plan allows; usage and limits.",

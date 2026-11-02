@@ -83,6 +83,10 @@ type Recurrence = Pick<
 export function recurrenceSummary(schedule: Recurrence, locale: Locale): string {
   const time = clockTime(schedule.start_time);
   const duration = formatDuration(schedule.duration_minutes);
+  if (schedule.kind === 'once') {
+    const date = schedule.anchor_date ? formatDay(schedule.anchor_date, locale) : '';
+    return `${m.sched_once_on({ date }, { locale })} ${time}, ${duration}`;
+  }
   if (schedule.kind === 'every_n_days') {
     const count = schedule.interval_days ?? 1;
     const date = schedule.anchor_date ? formatDay(schedule.anchor_date, locale) : '';

@@ -1,0 +1,10 @@
+# Changes here will be overwritten by Copier; do not edit by hand.
+_src_path: templates/service
+description: 'Optional chat control add-on: turns a typed request into a validated,
+    confirmable mower action proposal.'
+http_port: 8000
+needs_db: false
+package_name: assistant
+permissions:
+    assistant.use: Ask the assistant for action proposals
+service_name: assistant

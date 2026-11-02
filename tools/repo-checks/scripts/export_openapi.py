@@ -219,6 +219,13 @@ def _vision() -> FastAPI:
     )
 
 
+def _assistant() -> FastAPI:
+    from assistant.main import build_app
+    from assistant.settings import Settings
+
+    return build_app(Settings.model_validate(_COMMON))
+
+
 SERVICES: Mapping[str, Callable[[], FastAPI]] = {
     "identity": _identity,
     "fleet": _fleet,
@@ -231,6 +238,7 @@ SERVICES: Mapping[str, Callable[[], FastAPI]] = {
     "billing": _billing,
     "planner": _planner,
     "vision": _vision,
+    "assistant": _assistant,
 }
 """Service name (file name) to app factory."""
 

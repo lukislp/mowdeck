@@ -17,6 +17,8 @@ offers it next to the dock fallback), ``fake/empty`` proposes nothing, ``fake/fa
 """
 
 import math
+from collections.abc import Mapping
+from typing import Any
 
 from mowdeck_contracts.v1 import VisionTask
 
@@ -31,8 +33,60 @@ from vision.domain.models import (
     ProposedStep,
     RiskFlag,
     Situation,
+    StructuredAnswer,
     Usage,
 )
+
+_MAX_DEPTH = 8
+
+
+def minimal_instance(schema: Mapping[str, Any], depth: int = 0) -> Any:
+    """The smallest value of a JSON schema: an object with its required properties, an empty
+    array (or ``minItems`` elements), the first ``enum`` value or ``const``, null for a nullable
+    type, else zero, false or the shortest string."""
+    if depth > _MAX_DEPTH:
+        return None
+    if "const" in schema:
+        return schema["const"]
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum:
+        return enum[0]
+    for key in ("anyOf", "oneOf"):
+        options = schema.get(key)
+        if isinstance(options, list) and options and isinstance(options[0], Mapping):
+            return minimal_instance(options[0], depth + 1)
+    kind = schema.get("type")
+    if isinstance(kind, list):
+        if "null" in kind:
+            return None
+        kind = kind[0] if kind else None
+    match kind:
+        case "object":
+            properties = schema.get("properties")
+            props: Mapping[str, Any] = properties if isinstance(properties, Mapping) else {}
+            required = schema.get("required")
+            names = required if isinstance(required, list) else []
+            return {
+                str(n): minimal_instance(props.get(n, {}), depth + 1)
+                for n in names
+                if isinstance(props.get(n, {}), Mapping)
+            }
+        case "array":
+            items = schema.get("items")
+            count = int(schema.get("minItems", 0) or 0)
+            if count and isinstance(items, Mapping):
+                return [minimal_instance(items, depth + 1) for _ in range(min(count, 4))]
+            return []
+        case "integer" | "number":
+            low = schema.get("minimum")
+            return low if isinstance(low, int | float) else 0
+        case "boolean":
+            return False
+        case "string":
+            return "x" * int(schema.get("minLength", 0) or 0)
+        case _:
+            return None
+
 
 RECOVER_STEPS = (
     ProposedStep(linear=-0.8, angular=0.0, seconds=1.0),
@@ -133,6 +187,19 @@ class FakeVisionProvider:
             )
         return Assessment(
             answer, self.model, "fake", Usage(latency_ms=0, cost_usd=0.0, mode="fake")
+        )
+
+    async def structured(
+        self, system: str, text: str, schema: Mapping[str, Any], name: str
+    ) -> StructuredAnswer:
+        """The smallest object ``schema`` allows (``fake/fail`` and ``fake/invalid`` fail): a
+        caller sees the shape of an answer without any model (ADR 0075)."""
+        if self.mode in ("fail", "invalid"):
+            raise ProviderFailed("the fake provider failed on purpose")
+        value = minimal_instance(schema)
+        output = value if isinstance(value, dict) else {}
+        return StructuredAnswer(
+            output, self.model, "fake", Usage(latency_ms=0, cost_usd=0.0, mode="fake")
         )
 
     def _answer(self, context: SceneContext, task: VisionTask) -> AssessmentOut:

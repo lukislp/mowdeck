@@ -162,6 +162,13 @@ services:
   mediamtx:
     profiles: !reset []
 
+  # Chat control (ADR 0075; the "assistant" profile otherwise) runs in every test stack with the
+  # phrase parser (ASSISTANT_INTERPRETER=phrases in tests/e2e-web/stack.env): the suites test the
+  # confirm flow without any AI. Identity does not list it, so other specs never see the chat box;
+  # chat-control-desktop.spec.ts adds its UI area to the page's ui-areas answer.
+  assistant:
+    profiles: !reset []
+
 volumes:
   # The key pair the fake Apple generates for this stack (see fake-apple).
   fake-apple-keys:

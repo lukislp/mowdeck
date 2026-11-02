@@ -435,6 +435,17 @@ jobs:
           tags: mowdeck/vision:ci
           cache-from: type=gha,scope=vision
           cache-to: type=gha,mode=max,scope=vision
+      - name: Build assistant image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/assistant/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/assistant:ci
+          cache-from: type=gha,scope=assistant
+          cache-to: type=gha,mode=max,scope=assistant
       - name: Build camera-relay image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:

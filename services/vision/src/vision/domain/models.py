@@ -363,8 +363,20 @@ class StoredImage:
     delete_after: datetime
 
 
-RequestKind = Literal["analysis", "test"]
-"""``analysis``: AI assist rounds; ``test``: provider tests."""
+RequestKind = Literal["analysis", "test", "structured"]
+"""``analysis``: AI assist rounds; ``test``: provider tests; ``structured``: text-only
+structured answers for other modules (``POST /me/provider/structured``, ADR 0075)."""
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredAnswer:
+    """A text-only structured answer: the JSON object the model returned (not validated beyond
+    being an object; the caller validates it against its own rules), who gave it and its cost."""
+
+    output: dict[str, Any]
+    model: str
+    family: str
+    usage: Usage
 
 
 @dataclass(frozen=True, slots=True)

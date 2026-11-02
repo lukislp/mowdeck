@@ -118,6 +118,7 @@ nav:
       - adr/0072-api-explorer-in-the-web-app.md
       - adr/0073-guided-tour.md
       - adr/0074-nats-authentication-and-subject-permissions.md
+      - adr/0075-chat-control-assistant-add-on.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
@@ -148,6 +149,7 @@ nav:
       - ops/apple-login.md
       - ops/theft-tracking.md
       - ops/matter.md
+      - ops/assistant.md
       - ops/source-code.md
       - ops/demo.md
       - ops/load-testing.md
@@ -168,11 +170,13 @@ nav:
       - guides/apple-watch.md
       - guides/setup-tour.md
       - guides/matter.md
+      - guides/chat-control.md
       - guides/worx-landroid.md
       - guides/scripting.md
   - Capability matrix: reference/capabilities.md
   - API reference:
       - reference/api/index.md
+      - reference/api/assistant.md
       - reference/api/billing.md
       - reference/api/device-gateway.md
       - reference/api/entitlements.md

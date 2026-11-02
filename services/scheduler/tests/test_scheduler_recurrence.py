@@ -88,6 +88,25 @@ def test_scheduler_every_n_days_with_a_past_anchor_continues_the_rhythm() -> Non
     assert found.astimezone(BERLIN).date() == date(2026, 10, 15)
 
 
+def test_scheduler_once_fires_a_single_time_on_its_day() -> None:
+    rule = Recurrence(kind="once", at=time(7, 30), anchor=date(2026, 11, 2))
+    first = next_after(rule, BERLIN, utc(2026, 11, 1, 12))
+    assert first == utc(2026, 11, 2, 6, 30)
+    assert first is not None
+    assert next_after(rule, BERLIN, first, last_fired=first) is None
+    assert next_after(rule, BERLIN, utc(2026, 11, 3)) is None
+    assert next_after(Recurrence(kind="once", at=time(7, 0)), BERLIN, utc(2026, 1, 1)) is None
+
+
+def test_scheduler_once_validation_needs_its_day() -> None:
+    item = _schedule(kind="once", anchor_date=date(2026, 11, 2), interval_days=4)
+    validate_schedule(item)
+    assert item.days_of_week == [] and item.interval_days is None
+    assert item.recurrence.kind == "once"
+    with pytest.raises(InvalidInput):
+        validate_schedule(_schedule(kind="once"))
+
+
 def test_scheduler_a_rule_that_never_fires_has_no_next_run() -> None:
     assert next_after(weekly(time(7, 0)), BERLIN, utc(2026, 1, 1)) is None
     broken = Recurrence(kind="every_n_days", at=time(7, 0))

@@ -78,3 +78,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0072](0072-api-explorer-in-the-web-app.md) | API explorer in the web app, for the public demo | Accepted |
 | [0073](0073-guided-tour.md) | Guided tour with coach marks | Accepted |
 | [0074](0074-nats-authentication-and-subject-permissions.md) | NATS authentication and per-service subject permissions | Accepted |
+| [0075](0075-chat-control-assistant-add-on.md) | Chat control as an optional assistant add-on | Accepted |

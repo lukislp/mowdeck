@@ -62,7 +62,9 @@ class Schedule:
     @property
     def recurrence(self) -> Recurrence:
         """The recurrence rule."""
-        kind: RecurrenceKind = "weekly" if self.kind == "weekly" else "every_n_days"
+        kind: RecurrenceKind = (
+            "weekly" if self.kind == "weekly" else "once" if self.kind == "once" else "every_n_days"
+        )
         return Recurrence(
             kind=kind,
             at=self.start_time,

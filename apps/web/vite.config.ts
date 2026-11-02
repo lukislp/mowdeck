@@ -114,6 +114,7 @@ export default defineConfig({
         'src/lib/camera/factory.ts',
         'src/lib/camera/viewer.svelte.ts',
         'src/lib/camera/freeze.ts',
+        'src/lib/assistant/assistant.ts',
         'src/lib/vision/api.ts',
         'src/lib/vision/assist.svelte.ts',
         'src/lib/vision/labels.ts',

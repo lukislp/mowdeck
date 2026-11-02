@@ -16,7 +16,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
@@ -28,7 +28,13 @@ from mowdeck_control import flat_png
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.entitlements import Entitlements
 
-from vision.application.ports import Clock, ProviderFactory, SecretBox, Store
+from vision.application.ports import (
+    Clock,
+    ProviderFactory,
+    SecretBox,
+    Store,
+    StructuredFactory,
+)
 from vision.domain.context import Motion, SceneContext
 from vision.domain.errors import (
     ConflictError,
@@ -52,6 +58,7 @@ from vision.domain.models import (
     Image,
     ProviderConfig,
     ProviderRequest,
+    StructuredAnswer,
     UserPreferences,
     UserProvider,
 )
@@ -80,6 +87,42 @@ class ProviderPolicy:
     allow_fake: bool = False
     api_base_policy: ApiBasePolicy = "any"
     tests_per_hour: int = 10
+    structured_per_hour: int = 30
+    """Structured answers (``POST /me/provider/structured``) per user and hour."""
+
+
+STRUCTURED_SYSTEM_MAX = 12_000
+STRUCTURED_TEXT_MAX = 4_000
+STRUCTURED_SCHEMA_MAX = 16_384
+"""Size limits of a structured request (characters; the schema as compact JSON)."""
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredRequest:
+    """``POST /me/provider/structured``: a text-only question with a JSON schema (ADR 0075).
+
+    ``purpose`` names the calling module for the cost accounting (``detail``) and the logs; the
+    text and the answer are never logged or stored."""
+
+    purpose: str
+    system: str
+    text: str
+    schema: dict[str, Any]
+    name: str = "answer"
+
+
+@dataclass(frozen=True, slots=True)
+class StructuredResult:
+    """The answer of a structured request."""
+
+    output: dict[str, Any]
+    model: str
+    family: str
+    hosted: bool
+    latency_ms: int
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +185,7 @@ class ProviderService:
         hosted: HostedDefault,
         policy: ProviderPolicy,
         clock: Clock,
+        structured_factory: StructuredFactory | None = None,
     ) -> None:
         self.store = store
         self.box = box
@@ -150,6 +194,7 @@ class ProviderService:
         self.hosted = hosted
         self.policy = policy
         self.clock = clock
+        self.structured_factory = structured_factory
 
     # --- families -------------------------------------------------------------------------
 
@@ -374,6 +419,84 @@ class ProviderService:
         await self.store.put_provider(own)
         return result
 
+    # --- structured answers (ADR 0075) -----------------------------------------------------
+
+    async def structured(
+        self, principal: Principal, request: StructuredRequest
+    ) -> StructuredResult:
+        """Ask the caller's effective provider (own, else hosted) a text-only question whose
+        answer is one JSON object shaped by ``request.schema``.
+
+        The same resolution as an analysis (409 ``vision-provider-missing`` without one), its
+        own hourly limit per user (429 ``vision-quota``), the call recorded with kind
+        ``structured`` (tokens and cost, never the text). The answer's content is the caller's
+        to validate: this only guarantees a JSON object.
+        """
+        user, account = _ids(principal)
+        _check_structured(request)
+        if self.structured_factory is None:
+            raise ProviderMissing("structured answers are not available on this installation")
+        config = await self.resolve(principal)
+        now = self.clock()
+        used = await self.store.count_requests(
+            since=now - timedelta(hours=1), kind="structured", user_id=user
+        )
+        if used >= self.policy.structured_per_hour:
+            limit = self.policy.structured_per_hour
+            raise QuotaExceeded(f"at most {limit} structured answers per hour")
+        provider = self.structured_factory.create_structured(config)
+        started = time.monotonic()
+        outcome, detail = "ok", request.purpose
+        answer: StructuredAnswer | None = None
+        try:
+            answer = await provider.structured(
+                request.system, request.text, request.schema, request.name
+            )
+        except ProviderFailed as exc:
+            outcome, detail = "error", f"{request.purpose}: {exc.message}"[:500]
+            raise
+        finally:
+            usage = answer.usage if answer else None
+            latency = usage.latency_ms if usage else round((time.monotonic() - started) * 1000)
+            await self.store.record_request(
+                ProviderRequest(
+                    id=uuid4(),
+                    account_id=account,
+                    user_id=user,
+                    kind="structured",
+                    model=config.model,
+                    family=config.family,
+                    hosted=config.hosted,
+                    outcome=outcome,
+                    created_at=now,
+                    input_tokens=usage.input_tokens if usage else None,
+                    output_tokens=usage.output_tokens if usage else None,
+                    cost_usd=usage.cost_usd if usage else None,
+                    latency_ms=latency,
+                    detail=detail,
+                )
+            )
+            _log.info(
+                "structured answer",
+                user_id=str(user),
+                purpose=request.purpose,
+                model=config.model,
+                hosted=config.hosted,
+                outcome=outcome,
+            )
+        if answer is None:  # pragma: no cover - the call returned or raised above
+            raise ProviderFailed("the model did not answer")
+        return StructuredResult(
+            output=answer.output,
+            model=answer.model,
+            family=answer.family,
+            hosted=config.hosted,
+            latency_ms=answer.usage.latency_ms,
+            input_tokens=answer.usage.input_tokens,
+            output_tokens=answer.usage.output_tokens,
+            cost_usd=answer.usage.cost_usd,
+        )
+
     # --- secrets --------------------------------------------------------------------------
 
     def _encrypt(self, plaintext: bytes, aad: str) -> bytes:
@@ -398,6 +521,29 @@ def _ids(principal: Principal) -> tuple[UUID, UUID]:
 
 def _aad(user_id: UUID, account_id: UUID, what: str) -> str:
     return f"vision:{account_id}:{user_id}:{what}"
+
+
+def _check_structured(request: StructuredRequest) -> None:
+    if (
+        not request.purpose
+        or len(request.purpose) > 32
+        or not all(c.islower() or c.isdigit() or c == "_" for c in request.purpose)
+    ):
+        raise InvalidInput("purpose: 1 to 32 lower-case letters, digits or underscores")
+    if (
+        not request.name
+        or len(request.name) > 64
+        or not all(c.isalnum() or c in "_-" for c in request.name)
+    ):
+        raise InvalidInput("name: 1 to 64 letters, digits, '_' or '-'")
+    if not request.system.strip() or len(request.system) > STRUCTURED_SYSTEM_MAX:
+        raise InvalidInput(f"system: 1 to {STRUCTURED_SYSTEM_MAX} characters")
+    if not request.text.strip() or len(request.text) > STRUCTURED_TEXT_MAX:
+        raise InvalidInput(f"text: 1 to {STRUCTURED_TEXT_MAX} characters")
+    if request.schema.get("type") != "object":
+        raise InvalidInput("schema: the answer must be a JSON object (type object)")
+    if len(json.dumps(request.schema, separators=(",", ":"))) > STRUCTURED_SCHEMA_MAX:
+        raise InvalidInput(f"schema: at most {STRUCTURED_SCHEMA_MAX} bytes as JSON")
 
 
 def _check_headers(headers: dict[str, str]) -> dict[str, str]:

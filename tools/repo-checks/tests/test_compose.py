@@ -67,7 +67,10 @@ def test_e2e_override_adds_the_marker_and_the_relay_with_test_hooks(repo_root: P
         "fake-apple",
         "fake-wms",
         "telemetry",
+        "assistant",
     }
+    # Chat control (ADR 0075) only switched on: the phrase parser comes from stack.env.
+    assert override["services"]["assistant"] == {"profiles": {"!reset": []}}
     identity = override["services"]["identity"]
     assert identity["labels"] == [
         "traefik.http.middlewares.identity-ratelimit.ratelimit.average=300",

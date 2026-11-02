@@ -41,6 +41,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | GET | `/vision/providers` | any principal | Model families with examples and key variables; whether the installation model may be used |
 | GET, PUT, DELETE | `/vision/me/provider` | the caller | Own provider (key write-only: omitted keeps it, empty deletes it) and the effective provider |
 | POST | `/vision/me/provider/test` | the caller | A minimal vision call with a tiny generated image: model, latency, tokens, cost (hourly limit) |
+| POST | `/vision/me/provider/structured` | the caller | A text-only question (`purpose`, `system`, `text`, `schema`) to the caller's effective provider, answered as one JSON object (the interface optional modules such as the assistant use, ADR 0075): same resolution as an analysis (409 `vision-provider-missing`), own hourly limit (429 `vision-quota`), at most 2000 output tokens, cost accounting kind `structured`; text and answer are neither logged nor stored, the caller validates the answer. The fake family answers the smallest object the schema allows |
 | GET, PUT | `/vision/me/preferences` | the caller | Own preferences (a field left out keeps its value): `stereo_frames` (default true) and `auto_analysis` (opt-in to automatic analyses on errors, default off; enabling needs `ai_recover`), with the installation's `auto_analysis_available`, `auto_cooldown_minutes`, `auto_daily_per_mower` |
 | POST | `/vision/mowers/{id}/recover` | `can_drive` | Start AI assist (`task` `recover` or `find_dock`, base64 snapshots, each optionally with `camera`, `side` and `captured_at`); 202 with the proposal |
 | POST | `/vision/mowers/{id}/recover/upload` | `can_drive` | The same with `multipart/form-data` (`task`, `images` files) |
@@ -114,6 +115,7 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `MOWDECK_VISION_PROVIDER_TIMEOUT_SECONDS` | `90.0` | Timeout of one model call. |
 | `MOWDECK_VISION_PROVIDER_RETRIES` | `2` | Retries of a model call after a timeout, a connection error, 429 or 5xx. |
 | `MOWDECK_VISION_PROVIDER_TESTS_PER_HOUR` | `10` | Provider tests per user and hour. |
+| `MOWDECK_VISION_STRUCTURED_PER_HOUR` | `30` | Structured answers (`POST /me/provider/structured`) per user and hour. |
 | `MOWDECK_VISION_PROPOSAL_TTL_SECONDS` | `300` | How long a proposal waits for approval; images are deleted after this time too. |
 | `MOWDECK_VISION_MAX_ROUNDS` | `3` | Rounds (analysis, approval, execution) per assist session. |
 | `MOWDECK_VISION_MIN_CONFIDENCE` | `0.6` | Recommendations below this confidence are offered only marked `low_confidence` after the safety checks (next to the dock fallback or alone), never as a plain proposal. |
