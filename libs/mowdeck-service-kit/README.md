@@ -93,14 +93,14 @@ def main() -> None:
 1. Logging (`configure_logging`) for JSON lines on stdout, or console output in `dev`.
 2. Middleware: correlation id (outermost), generic 500 handler, HTTP metrics.
 3. Exception handlers rendering `application/problem+json`.
-4. Operational endpoints `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` (outside `/api/v1`).
+4. Operational endpoints `/healthz`, `/startupz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` (outside `/api/v1`). The health model ([ADR 0077](../../docs/adr/0077-liveness-readiness-and-routing.md)): `/healthz` is liveness and touches no dependency; `/readyz` runs every readiness check now (503 with the failing ones, and while draining); `/startupz` answers like `/readyz` until every check passed once and from then on like `/healthz`. Container healthchecks and the Kubernetes startup probe use `/startupz`, so a busy service or a dependency that fails later never takes a running container out of routing. The kit also evaluates the checks every `readiness_interval_seconds` (gauge `mowdeck_readiness_check_up{check}`, `mowdeck_service_started`, a log line when the result changes).
 5. Your routers under `/api/v1` (HTTP and WebSocket routes; the kit's middlewares pass `websocket` scopes through untouched); OpenAPI at `/api/v1/openapi.json`. There is no Swagger UI or ReDoc page (FastAPI loads them from a CDN); the interactive explorer is the web app's `/api-explorer`, self-hosted and off by default ([ADR 0072](../../docs/adr/0072-api-explorer-in-the-web-app.md)).
 6. OpenTelemetry instrumentation when `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 7. Lifespan: connect the bus (a `JetStreamBus` when `nats_enabled`, unless you pass `bus=`), add the `nats` readiness check, run `on_startup` hooks. On shutdown: mark the service as draining (`/readyz` returns 503), run `on_shutdown` hooks within `shutdown_grace_seconds`, then drain and close the bus, then flush traces.
 
 `run(app, settings)` serves the app with uvicorn (no access log config of its own, proxy headers, graceful shutdown timeout from the settings). Extra keyword arguments go to `uvicorn.Config`, for example `ws_ping_interval`, `ws_ping_timeout` and `ws_max_size` for WebSocket services; `server_class=` takes a `uvicorn.Server` subclass for services that must act before uvicorn closes the open connections on shutdown (Realtime closes its sockets with 1001 first).
 
-State lives on `app.state`: `settings`, `descriptor`, `bus`, `metrics_registry`, `readiness_checks`, `principal_resolver`, `draining`. Register extra readiness checks with `add_readiness_check(app, check)` (for example from an `on_startup` hook) and extra Prometheus metrics on `app.state.metrics_registry`.
+State lives on `app.state`: `settings`, `descriptor`, `bus`, `metrics_registry`, `readiness_checks`, `principal_resolver`, `draining`, `started` (true once every readiness check passed). Register extra readiness checks with `add_readiness_check(app, check)` (for example from an `on_startup` hook) and extra Prometheus metrics on `app.state.metrics_registry`.
 
 ## Settings reference
 
@@ -121,6 +121,9 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_NATS_MANAGE_STREAMS` | unset | Create and update the JetStream streams on connect; unset: only without a user (with credentials the `nats-streams` job does it) |
 | `MOWDECK_NATS_STREAM_WAIT_SECONDS` | `120` | How long a service that does not manage the streams waits for them on connect |
 | `MOWDECK_DATABASE_URL` | unset | PostgreSQL URL (secret; usually `MOWDECK_DATABASE_URL_FILE`) |
+| `MOWDECK_DATABASE_POOL_SIZE` | `5` | Connections the request pool keeps open |
+| `MOWDECK_DATABASE_MAX_OVERFLOW` | `5` | Connections opened beyond the pool under load (closed again when returned); pool + overflow + 1 readiness connection is the service's share of `max_connections` (budget: `docs/ops/compose.md`) |
+| `MOWDECK_READINESS_INTERVAL_SECONDS` | `30` | How often the service evaluates its own readiness checks (metric, log line on change); 0 turns it off |
 | `MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT` | unset | OTLP/HTTP collector, e.g. `http://otel-collector:4318`; tracing is off when unset |
 | `MOWDECK_CLIENT_IP_DEPTH` | unset | Trusted proxies in front of the gateway that set or append `X-Forwarded-For`; `client_address.client_address()` takes the entry that many places left of the gateway's own (unset: the leftmost entry). Compose and Helm pass `GATEWAY_CLIENT_IP_DEPTH`. Rate limits key `client_address.limiter_key()` of that address (IPv6 per /64, IPv4 unchanged); audit logs keep the whole address |
 | `MOWDECK_METRICS_ENABLED` | `true` | Serve Prometheus metrics at `/metrics` |
@@ -149,6 +152,8 @@ The field docstrings in `settings.py` are the source of this table and become th
 `configure_logging` installs the `redact_secrets` processor for every service, right before the renderer (also for standard library records). It masks the value of secret keys with `***` (`None` stays `None`), case-insensitively and at any depth of dicts, lists and tuples, including `connection_options`: `password`, `psk`, `noise_psk`, `secret`, `token`, `api_key`, `apikey`, `authorization`, `credential(s)`, `private_key`, `client_secret`, `refresh_token`, `access_token`, `*_password`, `*_secret`, `*_token` and `*_key` names containing `secret`, `api`, `private` or `encryption`. Ids such as `product_key` stay readable. Caller-owned dicts are copied, never changed.
 
 Only plain dicts, lists and tuples are inspected. Pydantic models and dataclasses are not converted, so never log a raw registration or credential model; log selected fields instead.
+
+Standard library records keep their `extra={...}` fields in the JSON line (structlog's `ExtraAdder`; uvicorn's `color_message` is dropped), so a library such as `mowdeck-authz` that logs `extra={"operation": "check", "error": "TimeoutError"}` shows the cause of a denied check. They pass the same masking.
 
 ## Event bus
 
@@ -213,6 +218,8 @@ engine = create_engine(settings)  # postgresql:// becomes postgresql+asyncpg://
 get_session = session_dependency(engine)  # commit on success, rollback on error
 app = create_app(settings, DESCRIPTOR, readiness_checks=[readiness_check_db(engine)])
 ```
+
+The pool holds `MOWDECK_DATABASE_POOL_SIZE` connections plus up to `MOWDECK_DATABASE_MAX_OVERFLOW` more (keyword arguments of `create_engine` override both). `readiness_check_db` runs `SELECT 1` on a connection of its own, opened for the check and closed after it, never on the request pool: a pool busy with requests is load, not a broken database (ADR 0077).
 
 Migrations are not part of the kit; the service template runs Alembic as a separate step before start.
 

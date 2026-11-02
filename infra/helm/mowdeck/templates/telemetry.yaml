@@ -3,6 +3,7 @@
 {{- $c := .Values.config }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
   "MOWDECK_CLIENT_IP_DEPTH" (include "mowdeck.clientIpDepth" .)
+  "MOWDECK_DATABASE_POOL_SIZE" "10"
   "MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS" $c.TELEMETRY_HEARTBEAT_HISTORY_SECONDS
   "MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS" $c.TELEMETRY_RETENTION_HISTORY_DAYS
   "MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS" $c.TELEMETRY_RETENTION_POSITIONS_DAYS

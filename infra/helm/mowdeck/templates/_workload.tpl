@@ -229,12 +229,16 @@ spec:
             {{- else }}
             {{- toYaml $ctx.Values.securityContext | nindent 12 }}
             {{- end }}
-          {{- with $ctx.Values.probes }}
+          {{- /* ADR 0077: started (/startupz: ready once), alive (/healthz), ready (/readyz).
+            nginx of the web app has /healthz only. */}}
           startupProbe:
-            {{- toYaml .startup | nindent 12 }}
+            {{- if .web }}
+            {{- toYaml (merge (dict "httpGet" (dict "path" "/healthz" "port" "http")) (omit $ctx.Values.probes.startup "httpGet")) | nindent 12 }}
+            {{- else }}
+            {{- toYaml $ctx.Values.probes.startup | nindent 12 }}
+            {{- end }}
           livenessProbe:
-            {{- toYaml .liveness | nindent 12 }}
-          {{- end }}
+            {{- toYaml $ctx.Values.probes.liveness | nindent 12 }}
           readinessProbe:
             {{- if .web }}
             httpGet: {path: /healthz, port: http}

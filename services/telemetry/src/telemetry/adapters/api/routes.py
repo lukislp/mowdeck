@@ -18,6 +18,7 @@ from mowdeck_service_kit import CurrentAccountId, CurrentPrincipal
 from telemetry.adapters.api.deps import (
     ManageMower,
     ServicesDep,
+    SharedReads,
     ViewMower,
     visible_mower_ids,
 )
@@ -182,7 +183,7 @@ async def get_mow_path(
     return MowPathOut.of(row)
 
 
-@router.get("/mowers/{mower_id}/widget")
+@router.get("/mowers/{mower_id}/widget", dependencies=[SharedReads])
 async def get_widget_state(
     mower_id: UUID,
     _: ViewMower,
@@ -268,7 +269,7 @@ async def get_heatmap(
     return MowerHeatmap.of(mower_id, result)
 
 
-@router.get("/mowers/{mower_id}/health")
+@router.get("/mowers/{mower_id}/health", dependencies=[SharedReads])
 async def get_health(
     mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
 ) -> MowerHealthOut:
@@ -420,7 +421,7 @@ async def get_report_summary(
     return ReportSummary.of(result.first, result.last, result.rows, result.truncated)
 
 
-@router.get("/mowers/{mower_id}/aerial")
+@router.get("/mowers/{mower_id}/aerial", dependencies=[SharedReads])
 async def get_aerial(
     mower_id: UUID, _: ViewMower, account_id: CurrentAccountId, services: ServicesDep
 ) -> AerialOut:

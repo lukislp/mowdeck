@@ -27,6 +27,9 @@ services:
       # Only containers of this Compose project: a second stack on the same host must not be
       # routed by this Traefik (router names collide). Set MOWDECK_TRAEFIK_PROJECT=<-p name>.
       - --providers.docker.constraints=Label(`com.docker.compose.project`,`${MOWDECK_TRAEFIK_PROJECT:-mowdeck}`)
+      # A service whose container is unhealthy keeps its routes and answers 503 (retry later)
+      # instead of disappearing from the router, which clients saw as 404 "not found" (ADR 0077).
+      - --providers.docker.allowEmptyServices=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       # Your own reverse proxy in front of this Traefik (comma separated IPs/CIDRs): only from these
@@ -162,6 +165,11 @@ services:
   postgres:
     image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:17.11-alpine}
     restart: unless-stopped
+    # Connection budget (docs/ops/compose.md, "Database connections"): every service pool holds
+    # up to MOWDECK_DATABASE_POOL_SIZE + MOWDECK_DATABASE_MAX_OVERFLOW (5 + 5, Telemetry 10 + 5)
+    # plus a short-lived readiness connection, OpenFGA up to 30: about 135 with every profile,
+    # below 200 with room for the one-shot jobs and psql.
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/compose/.env}
@@ -201,6 +209,9 @@ services:
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
       OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      # OpenFGA's own defaults, explicit because they count in the connection budget above.
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: "30"
+      OPENFGA_DATASTORE_MAX_IDLE_CONNS: "10"
       OPENFGA_HTTP_ADDR: 0.0.0.0:8080
       OPENFGA_GRPC_ADDR: 0.0.0.0:8081
       OPENFGA_PLAYGROUND_ENABLED: "false"
@@ -378,15 +389,20 @@ services:
       - traefik.http.routers.identity-jwks.entrypoints=web
       - traefik.http.routers.identity-jwks.service=identity
       - traefik.http.services.identity.loadbalancer.server.port=8000
-    # The Python services are checked every 2 s while starting (start_interval within
+    # The healthcheck of every Python service asks /startupz (ADR 0077): it passes once all
+    # readiness checks (database, OpenFGA, NATS, ...) passed once, so `up --wait` and
+    # depends_on still wait for a ready service, and from then on it only asks whether the
+    # process answers. A busy service or a dependency that fails later never makes the container
+    # unhealthy, which would take it out of Traefik's routing (404 for every request, as the load
+    # test showed); the service reports dependency trouble itself (/readyz, logs, metric
+    # mowdeck_readiness_check_up). Checked every 2 s while starting (start_interval within
     # start_period, so `up --wait` stays fast) and every 30 s after that: each check starts a
-    # Python interpreter, which at a 5 s interval cost an idle demo host about a third of its two
-    # cores (docs/ops/load-testing.md). Retries keep about the same time to "unhealthy".
+    # Python interpreter (docs/ops/load-testing.md).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -466,10 +482,10 @@ services:
       - traefik.http.routers.fleet.entrypoints=web
       - traefik.http.services.fleet.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -542,10 +558,10 @@ services:
       - traefik.http.routers.device-gateway.entrypoints=web
       - traefik.http.services.device-gateway.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 2
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -598,6 +614,8 @@ services:
       MOWDECK_NATS_USER: telemetry
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
+      # The busiest pool of the stack: most of a mower page (docs/ops/compose.md, budget).
+      MOWDECK_DATABASE_POOL_SIZE: "10"
       MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
@@ -634,10 +652,10 @@ services:
       - traefik.http.routers.telemetry.entrypoints=web
       - traefik.http.services.telemetry.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -697,10 +715,10 @@ services:
       - traefik.http.routers.realtime.entrypoints=web
       - traefik.http.services.realtime.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -799,10 +817,10 @@ services:
       - traefik.http.routers.notifications.entrypoints=web
       - traefik.http.services.notifications.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -880,10 +898,10 @@ services:
       - traefik.http.routers.scheduler.entrypoints=web
       - traefik.http.services.scheduler.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -959,10 +977,10 @@ services:
       - traefik.http.routers.entitlements.entrypoints=web
       - traefik.http.services.entitlements.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -1054,10 +1072,10 @@ services:
       - traefik.http.routers.vision.entrypoints=web
       - traefik.http.services.vision.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 5
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -1114,10 +1132,10 @@ services:
       # of the Device-Gateway (GATEWAY_RELAY_URL). Empty: the frame tap is off.
       MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 2
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -1284,10 +1302,10 @@ services:
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
       - traefik.http.services.billing.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
@@ -1363,10 +1381,10 @@ services:
       - traefik.http.routers.planner.entrypoints=web
       - traefik.http.services.planner.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 4
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     stop_grace_period: 20s
