@@ -84,11 +84,14 @@ def test_template_renders_a_service_without_database(repo_root: Path, tmp_path: 
     assert "uv sync --frozen --no-dev --no-editable --package reports" in dockerfile
     assert "USER 10001:10001" in dockerfile
     assert 'CMD ["python", "-m", "reports.main"]' in dockerfile
-    assert "/healthz" in dockerfile
+    assert "/startupz" in dockerfile  # health model, ADR 0077
 
     snippet = yaml.safe_load((service / "compose.snippet.yml").read_text("utf-8"))
     block = snippet["services"]["reports"]
     assert block["read_only"] is True
+    health = " ".join(block["healthcheck"]["test"])
+    assert "/startupz" in health
+    assert "/readyz" not in health
     assert "traefik.http.routers.reports.rule=PathPrefix(`/api/v1/reports`)" in block["labels"]
     # Kubernetes: the umbrella chart infra/helm/mowdeck, not per-service Helm values.
     assert not (service / "helm").exists()

@@ -141,6 +141,11 @@ class Tx(Protocol):
         """Take a lock held until the transaction ends; False if another holder has it."""
         ...
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every row of the account: schedules, runs, mower status, places,
+        capabilities, angles and rotation (demo purge, ADR 0076); returns the rows deleted."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""

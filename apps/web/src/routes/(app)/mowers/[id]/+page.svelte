@@ -61,6 +61,9 @@
   import JobCard from '#lib/components/JobCard.svelte';
   import LightToggle from '#lib/components/LightToggle.svelte';
   import AssistSheet from '#lib/components/AssistSheet.svelte';
+  import ChatControl from '#lib/components/ChatControl.svelte';
+  import { assistantEnabled } from '#lib/assistant/assistant.js';
+  import { registry } from '#lib/shell/registry.svelte.js';
   import LiveStatus from '#lib/components/LiveStatus.svelte';
   import MowSettings from '#lib/components/MowSettings.svelte';
   import PlanBanner from '#lib/components/PlanBanner.svelte';
@@ -218,6 +221,8 @@
   };
 
   const id = $derived(page.params.id ?? '');
+  // Chat control (ADR 0075): only where the optional assistant add-on announces its UI area.
+  const chatEnabled = $derived(assistantEnabled(registry.areas));
 
   let mower = $state<Mower | null>(null);
   let notFound = $state(false);
@@ -1786,6 +1791,16 @@
           />
         </div>
       </div>
+
+      {#if chatEnabled}
+        <ChatControl
+          mowerId={id}
+          ondone={() => {
+            void loadRecent(id);
+            if (mower) void loadNextSchedule(id, mower.group_ids);
+          }}
+        />
+      {/if}
 
       <div class="extras">
         {#if ms && hasReception(ms)}

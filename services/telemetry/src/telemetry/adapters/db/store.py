@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from telemetry.adapters.db import tables
+from telemetry.adapters.db.reads import read_connection
 from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
 from telemetry.domain.models import (
@@ -166,6 +167,26 @@ _THIN_SLICE = sa.text(
     sa.bindparam("turn_cos", type_=sa.Double()),
 )
 """One slice of the position thinning; mirrors :func:`telemetry.domain.thinning.keep_set`."""
+
+
+_ACCOUNT_TABLES = (
+    tables.mower_history,
+    tables.mower_positions,
+    tables.command_timeline,
+    tables.mower_snapshots,
+    tables.mower_health_daily,
+    tables.mower_health,
+    tables.blade_changes,
+    tables.mower_latest,
+    tables.mower_directory,
+)
+"""The tables of :class:`SqlStore` with an ``account_id`` column (the demo purge)."""
+
+
+_POSITION_COLUMNS = tuple(
+    tables.mower_positions.c[field.name] for field in dataclasses.fields(PositionRow)
+)
+"""The columns of ``mower_positions`` in the field order of :class:`PositionRow`."""
 
 
 def _latest(row: Any) -> LatestRow:
@@ -425,7 +446,7 @@ class SqlStore:
             yield _SqlTx(conn)
 
     async def directory_of(self, mower_id: UUID) -> DirectoryEntry | None:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.mower_directory).where(
                     tables.mower_directory.c.mower_id == mower_id
@@ -435,7 +456,7 @@ class SqlStore:
         return DirectoryEntry(**row._mapping) if row else None
 
     async def latest_of(self, account_id: UUID, mower_id: UUID) -> LatestRow | None:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.mower_latest).where(
                     tables.mower_latest.c.account_id == account_id,
@@ -458,7 +479,7 @@ class SqlStore:
         )
         if mower_ids is not None:
             statement = statement.where(tables.mower_latest.c.mower_id.in_(list(mower_ids)))
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(statement)
             return [_latest(row) for row in result.all()]
 
@@ -471,7 +492,7 @@ class SqlStore:
         step: timedelta | None,
         limit: int,
     ) -> list[HistoryPoint]:
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             if step is not None:
                 result = await conn.execute(
                     _BINNED_HISTORY,
@@ -516,9 +537,9 @@ class SqlStore:
         self, account_id: UUID, mower_id: UUID, start: datetime, end: datetime, limit: int
     ) -> list[PositionRow]:
         p = tables.mower_positions.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
-                sa.select(tables.mower_positions)
+                sa.select(*_POSITION_COLUMNS)
                 .where(
                     p.account_id == account_id,
                     p.mower_id == mower_id,
@@ -528,7 +549,9 @@ class SqlStore:
                 .order_by(p.observed_at.desc())
                 .limit(limit)
             )
-            rows = [PositionRow(**dict(row._mapping)) for row in result.all()]
+            # Positional construction: a track has up to tens of thousands of rows, and a dict
+            # per row (``row._mapping``) was the largest single cost of the mower page.
+            rows = [PositionRow(*row) for row in result.all()]
         rows.reverse()
         return rows
 
@@ -563,7 +586,7 @@ class SqlStore:
 
     async def commands(self, account_id: UUID, mower_id: UUID, limit: int) -> list[CommandEvent]:
         c = tables.command_timeline.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.command_timeline)
                 .where(c.account_id == account_id, c.mower_id == mower_id)
@@ -574,7 +597,7 @@ class SqlStore:
 
     async def snapshot_of(self, account_id: UUID, mower_id: UUID, kind: str) -> SnapshotRow | None:
         s = tables.mower_snapshots.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.mower_snapshots).where(
                     s.account_id == account_id, s.mower_id == mower_id, s.kind == kind
@@ -597,13 +620,13 @@ class SqlStore:
         )
         if mower_ids is not None:
             statement = statement.where(s.mower_id.in_(list(mower_ids)))
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(statement)
             return [SnapshotRow(**dict(row._mapping)) for row in result.all()]
 
     async def health_of(self, account_id: UUID, mower_id: UUID) -> HealthRow | None:
         h = tables.mower_health.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.mower_health).where(
                     h.account_id == account_id, h.mower_id == mower_id
@@ -616,7 +639,7 @@ class SqlStore:
         self, account_id: UUID, mower_id: UUID, first: date, last: date
     ) -> list[DailyRow]:
         d = tables.mower_health_daily.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.mower_health_daily)
                 .where(
@@ -648,7 +671,7 @@ class SqlStore:
         )
         if mower_ids is not None:
             statement = statement.where(d.mower_id.in_(list(mower_ids)))
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(statement)
             return [DailyRow(**dict(row._mapping)) for row in result.all()]
 
@@ -656,7 +679,7 @@ class SqlStore:
         self, account_id: UUID, mower_id: UUID, limit: int
     ) -> list[BladeChange]:
         b = tables.blade_changes.c
-        async with self.engine.connect() as conn:
+        async with read_connection(self.engine) as conn:
             result = await conn.execute(
                 sa.select(tables.blade_changes)
                 .where(b.account_id == account_id, b.mower_id == mower_id)
@@ -664,6 +687,38 @@ class SqlStore:
                 .limit(limit)
             )
             return [BladeChange(**dict(row._mapping)) for row in result.all()]
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """One transaction, one set based ``DELETE`` per table. The thinning watermark has no
+        account column: it goes for the account's mowers (directory, latest row, positions)
+        unless the directory gives the mower to another account."""
+        directory = tables.mower_directory.c
+        mine = sa.union(
+            sa.select(directory.mower_id).where(directory.account_id == account_id),
+            sa.select(tables.mower_latest.c.mower_id).where(
+                tables.mower_latest.c.account_id == account_id
+            ),
+            sa.select(tables.mower_positions.c.mower_id).where(
+                tables.mower_positions.c.account_id == account_id
+            ),
+        ).subquery()
+        elsewhere = sa.select(directory.mower_id).where(directory.account_id != account_id)
+        mark = tables.mower_positions_thinning.c
+        removed = 0
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sa.delete(tables.mower_positions_thinning).where(
+                    mark.mower_id.in_(sa.select(mine.c.mower_id)),
+                    mark.mower_id.not_in(elsewhere),
+                )
+            )
+            removed += result.rowcount
+            for table in _ACCOUNT_TABLES:
+                result = await conn.execute(
+                    sa.delete(table).where(table.c.account_id == account_id)
+                )
+                removed += result.rowcount
+        return removed
 
     @asynccontextmanager
     async def retention(self) -> AsyncIterator[RetentionScope | None]:

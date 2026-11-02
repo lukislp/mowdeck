@@ -147,6 +147,23 @@ class BusMowerView:
             if not watches:
                 del self._watches[mower_id]
 
+    def forget_account(self, account_id: UUID) -> set[UUID]:
+        """Drop the states, maps, capabilities, paths, commands, tracks and starts of the
+        account's mowers (known from their states and snapshots); open watches stay."""
+        mowers = {m for m, s in self._states.items() if s.state.account_id == account_id}
+        mowers |= {m for m, (owner, _) in self._maps.items() if owner == account_id}
+        mowers |= {m for m, (owner, _) in self._capabilities.items() if owner == account_id}
+        mowers |= {m for m, (owner, _, _) in self._paths.items() if owner == account_id}
+        for mower_id in mowers:
+            self._states.pop(mower_id, None)
+            self._maps.pop(mower_id, None)
+            self._capabilities.pop(mower_id, None)
+            self._paths.pop(mower_id, None)
+            self._commands.pop(mower_id, None)
+            self._tracks.pop(mower_id, None)
+            self._starts.pop(mower_id, None)
+        return mowers
+
     # --- feeding --------------------------------------------------------------------------
 
     def _push(self, mower_id: UUID, event: WatchEvent) -> None:

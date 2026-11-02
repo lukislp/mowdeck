@@ -37,6 +37,7 @@ from vision.domain.models import (
     ProviderRequest,
     RequestKind,
     StoredImage,
+    StructuredAnswer,
     UserPreferences,
     UserProvider,
 )
@@ -70,6 +71,26 @@ class ProviderFactory(Protocol):
 
     def create(self, config: ProviderConfig) -> VisionProvider:
         """A provider for ``config``."""
+        ...
+
+
+class StructuredProvider(Protocol):
+    """A model asked a text-only question with a JSON schema for its answer (ADR 0075).
+
+    Raises :class:`~vision.domain.errors.ProviderFailed` when no JSON object came back."""
+
+    async def structured(
+        self, system: str, text: str, schema: Mapping[str, Any], name: str
+    ) -> StructuredAnswer:
+        """The model's JSON object for ``text`` under ``system``, shaped by ``schema``."""
+        ...
+
+
+class StructuredFactory(Protocol):
+    """Builds the structured provider for a resolved configuration."""
+
+    def create_structured(self, config: ProviderConfig) -> StructuredProvider:
+        """A structured provider for ``config``."""
         ...
 
 
@@ -216,6 +237,13 @@ class Store(Protocol):
         """Proposals of a mower created since ``since`` (of one trigger, or any)."""
         ...
 
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0076):
+        proposals with their images and drive steps, provider requests, own providers,
+        preferences and opt-ins, and the error watch of its mowers. Returns the number of rows
+        removed."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class ObservedState:
@@ -289,6 +317,11 @@ class MowerView(Protocol):
 
     def monotonic(self) -> float:
         """The monotonic clock the ``received`` stamps use."""
+        ...
+
+    def forget_account(self, account_id: UUID) -> set[UUID]:
+        """Drop what is kept of the account's mowers (demo sandbox purge; open watches stay);
+        returns those mowers."""
         ...
 
 

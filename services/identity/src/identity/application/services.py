@@ -23,9 +23,10 @@ from identity.application.external import ExternalIdentityService
 from identity.application.onboarding import OnboardingService
 from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
-from identity.application.ports import OAuthClient, PasskeyCeremonies
+from identity.application.ports import OAuthClient, PasskeyCeremonies, SandboxProvisioner
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.roles import RoleService
+from identity.application.sandboxes import SandboxConfig, SandboxService
 from identity.application.security import SecurityService
 from identity.application.sessions import SessionService
 from identity.application.users import UserService
@@ -51,6 +52,14 @@ class Services:
     security: SecurityService = field(init=False)
     ip_limiter: TokenBucketLimiter | None = None
     ceremonies: PasskeyCeremonies | None = None
+    sandboxes: SandboxService | None = None
+    """Demo sandboxes (ADR 0076); None everywhere but a demo with sandboxes on."""
+
+    def enable_sandboxes(self, provisioner: SandboxProvisioner, config: SandboxConfig) -> None:
+        """Turn on the demo sandboxes ("Try the demo" gives every visitor an own account)."""
+        self.sandboxes = SandboxService(
+            self.deps, self.accounts, self.sessions, provisioner, config
+        )
 
     def __post_init__(self) -> None:
         limiter = self.ip_limiter or TokenBucketLimiter(per_minute=10, capacity=20)

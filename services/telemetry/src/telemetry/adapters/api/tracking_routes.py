@@ -19,7 +19,7 @@ from mowdeck_service_kit.client_address import client_address, limiter_key
 from mowdeck_service_kit.errors import NotFound
 from pydantic import BaseModel, Field
 
-from telemetry.adapters.api.deps import ControlMower, ServicesDep, ViewMower
+from telemetry.adapters.api.deps import ControlMower, ServicesDep, SharedReads, ViewMower
 from telemetry.adapters.api.schemas import AerialBounds
 from telemetry.application.tracking import PublicTrack, Tracking, TrackingView, TrackPoint
 from telemetry.application.tracking_map import BaseLayer
@@ -295,7 +295,7 @@ class PublicTrackOut(BaseModel):
         )
 
 
-@router.get("/mowers/{mower_id}/tracking")
+@router.get("/mowers/{mower_id}/tracking", dependencies=[SharedReads])
 async def get_tracking_status(
     mower_id: UUID,
     _: ViewMower,

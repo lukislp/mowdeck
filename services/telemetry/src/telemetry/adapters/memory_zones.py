@@ -97,6 +97,16 @@ class MemoryZoneStore:
             key=lambda d: (str(d.zone_id), d.day),
         )
 
+    async def purge_account(self, account_id: UUID) -> int:
+        before = len(self.zones) + len(self.presences) + len(self.days)
+        gone = {k for k, v in self.zones.items() if v.account_id == account_id}
+        self.zones = {k: v for k, v in self.zones.items() if k not in gone}
+        self.presences = {k: v for k, v in self.presences.items() if v.account_id != account_id}
+        self.days = {
+            k: v for k, v in self.days.items() if v.account_id != account_id and k[1] not in gone
+        }
+        return before - len(self.zones) - len(self.presences) - len(self.days)
+
     def drop_mower(self, mower_id: UUID) -> None:
         """Forget everything of a mower (the SQL store does this in ``drop_mower``)."""
         self.zones = {k: v for k, v in self.zones.items() if v.mower_id != mower_id}

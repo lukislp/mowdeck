@@ -40,6 +40,7 @@ from realtime.adapters.api.routes import router
 from realtime.adapters.auth import RejectAllTokens, verifier_from_env
 from realtime.adapters.authz import AuthzAccessChecker
 from realtime.adapters.bus.drive import BusDriveBackend
+from realtime.adapters.bus.presence import BusPresencePublisher
 from realtime.adapters.bus.subscriptions import RealtimeSubscriptions, subscribe_all
 from realtime.adapters.metrics import PrometheusMetrics
 from realtime.adapters.server import RealtimeServer
@@ -97,6 +98,8 @@ def build_app(
             )
         if background_tasks:
             tasks.append(asyncio.create_task(hub.run_rechecks(), name="realtime-recheck"))
+            if hub.presence is not None:
+                tasks.append(asyncio.create_task(hub.run_presence(), name="realtime-presence"))
 
     async def shutdown(app: FastAPI) -> None:
         hub: Hub = app.state.hub
@@ -152,6 +155,8 @@ def build_app(
             lambda: app.state.bus, timeout=settings.realtime_drive_request_timeout_seconds
         ),
         plans=plans,
+        # Demo sandboxes (ADR 0076): the Device-Gateway pauses accounts nobody watches.
+        presence=BusPresencePublisher(lambda: app.state.bus),
     )
     install_entitlements(app, plans)
     app.state.allowed_origins = settings.allowed_origins

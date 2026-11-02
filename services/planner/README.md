@@ -40,6 +40,7 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`); Trae
 | GET | `/api/v1/planner/templates/{name}` | a principal of the account | 404 if missing |
 | PUT | `/api/v1/planner/templates/{name}` | `spot_mowing`; `can_control` on the account | 201 created, 200 replaced; the chain is validated |
 | DELETE | `/api/v1/planner/templates/{name}` | `spot_mowing`; `can_control` on the account | 204 |
+| DELETE | `/api/v1/planner/demo/accounts/{account_id}` | demo seed secret (`X-MowDeck-Demo-Seed`); 404 outside demo mode | demo sandbox purge (ADR 0076), hidden from OpenAPI: the account's templates and mower facts; 200 `{deleted}`, 0 on a repeat |
 | GET | `/healthz`, `/readyz`, `/metrics`, `/.well-known/mowdeck-module` | none | readiness covers the database, NATS and OpenFGA |
 
 Errors: 422 `validation` for invalid settings (`errors` per setting), plans the validation chain refused (`errors` per finding), spots outside the map, too many vertices, too large areas or plans; 409 when the mower has sent no map yet or the template limit is reached; 503 when Telemetry does not answer the track query. Request bodies refuse unknown fields.

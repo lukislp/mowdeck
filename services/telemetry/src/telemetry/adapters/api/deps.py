@@ -7,6 +7,7 @@ accounts), so a foreign mower never reveals its existence. The queries still fil
 the account (third layer).
 """
 
+from collections.abc import AsyncIterator
 from typing import Annotated, ClassVar
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from mowdeck_service_kit.errors import (
     problem_response,
 )
 
+from telemetry.adapters.db.reads import shared_reads
 from telemetry.application.services import Services
 from telemetry.application.widget import BusyError
 from telemetry.domain.errors import (
@@ -132,6 +134,17 @@ class AerialUpstreamProblem(ServiceError):  # noqa: N818 - named like the other 
     status: ClassVar[int] = 502
     problem_type: ClassVar[str] = "aerial-source-failed"
     title: ClassVar[str] = "Aerial photo source failed"
+
+
+async def _shared_reads() -> AsyncIterator[None]:
+    async with shared_reads():
+        yield
+
+
+SharedReads = Depends(_shared_reads, scope="function")
+"""Route dependency: the request's reads share one pooled connection, checked out on the first
+read (:mod:`telemetry.adapters.db.reads`) and returned as soon as the route function returns,
+before the answer is serialised and sent. For GET routes that read several times."""
 
 
 def get_services(request: Request) -> Services:

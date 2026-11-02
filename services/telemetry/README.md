@@ -99,6 +99,8 @@ Every table carries `account_id`, taken from the message or the directory, never
 | `zone_days` | `(mower_id, zone_id, day)` | `seconds`, `mowing_seconds`, `entries` per UTC day; deleted with the zone (foreign key, cascade); migration `0013` |
 | `mower_snapshots` | `(mower_id, kind)` | `kind` `map`, `capabilities` or `path` (a cleared path is stored as the body `{}`, served as 404 `no-path`; no migration, the column is a string), `account_id`, `observed_at`, `received_at`, `revision` (ETag), `body` JSONB; index on `account_id`; migration `0003`. One table for both kinds (the design proposed two); deleted with the mower |
 
+**Connections.** Telemetry serves most of a mower page, so its pool is the largest of the stack: `MOWDECK_DATABASE_POOL_SIZE=10` in Compose and the chart (overflow 5; budget in `docs/ops/compose.md`). GET routes that read several times (zones and zone stats, tracking, aerial, health totals, widget) share one pooled connection for the whole request (`adapters/db/reads.py`: checked out on the first read, returned at the end; writes, streamed reads and advisory locks keep their own), so a request waits in the pool's queue once instead of once per query. The zone view reads the map snapshot and the latest state once for availability and anchor. A position track is read with only its columns and built without per-row validation (thousands of points per request).
+
 ## Health history
 
 The state consumer advances the health totals in the same transaction as the latest row (no batch recompute). Rules (module `telemetry.domain.health`):

@@ -54,10 +54,10 @@ services:
     # Every 2 s while starting, then every 30 s: each check starts a Python interpreter, which on
     # a small host costs real CPU (docs/ops/load-testing.md).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{{ http_port }}/readyz', timeout=2)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{{ http_port }}/startupz', timeout=8)"]
       interval: 30s
-      timeout: 3s
-      retries: 2
+      timeout: 10s
+      retries: 3
       start_period: 60s
       start_interval: 2s
     depends_on:

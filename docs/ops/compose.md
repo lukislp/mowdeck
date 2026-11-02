@@ -94,6 +94,7 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 | vision | `mowdeck/vision:dev`, built from the repository | via Traefik at `/api/v1/vision` |
 | camera-relay (profile `relay`) | `mowdeck/camera-relay:dev`, built from the repository (with ffmpeg) | none (internal: NATS requests `relay.camera.*` and MediaMTX's auth callback; [ADR 0045](../adr/0045-camera-relay.md)) |
 | agora-bridge (profile `agora`, with `relay`) | `mowdeck-local/agora-bridge:local`, built locally from `integrations/agora-bridge` (contains Agora's SDK, never pulled or published) | none (listens on camera-relay's loopback `127.0.0.1:7700`, shares its network namespace; [Agora source](#agora-source-profile-agora)) |
+| assistant (profile `assistant`) | `mowdeck/assistant:dev`, built from the repository | via Traefik at `/api/v1/assistant`; HTTP only, no NATS user and no database (chat control, [operations](assistant.md), [ADR 0075](../adr/0075-chat-control-assistant-add-on.md)) |
 | matter-server (profile `matter`) | `mowdeck/matter-server:dev`, built from the repository (Node 24, matter.js) | host network: UDP 5353 (mDNS) and one UDP port per mower from `MATTER_PORT_BASE`; admin API `MATTER_HTTP_PORT` (8790) via Traefik at `/api/v1/matter` ([Matter server](matter.md), [ADR 0063](../adr/0063-matter-server.md)) |
 | mediamtx (profile `relay`) | `bluenviron/mediamtx:1.21.2` (MIT) | via Traefik at `/media/whep/r/` (WHEP only, `/media/whep` stripped); `RELAY_ICE_BIND:RELAY_ICE_PORT` UDP and TCP (ICE media, default 8189) |
 | web | `mowdeck/web:dev`, built from `apps/web/Dockerfile` | via Traefik at `/` (the web app; router priority 1, behind every `/api/v1` route) |
@@ -101,6 +102,36 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 PostgreSQL creates the databases `identity`, `fleet`, `telemetry`, `scheduler`, `notifications`, `entitlements`, `billing`, `planner`, `vision`, `openfga`, each with a role of the same name.
 
 The complete operating notes are in the repository file `infra/compose/README.md`.
+
+## Health and routing
+
+Every MowDeck service answers three health endpoints ([ADR 0077](../adr/0077-liveness-readiness-and-routing.md)):
+
+| Endpoint | Answers | Used by |
+| --- | --- | --- |
+| `/healthz` | 200 while the process serves requests; touches no dependency | Kubernetes liveness probe |
+| `/startupz` | 503 until every readiness check passed once, then 200 like `/healthz` for the rest of the process's life | the Compose healthcheck, the image's `HEALTHCHECK`, the Kubernetes startup probe |
+| `/readyz` | the readiness checks now (database, OpenFGA, NATS, subscriptions, ...); 503 with the failing check, and while shutting down | operators, the Kubernetes readiness probe |
+
+So `docker compose up --wait`, `deploy.sh` and `depends_on: service_healthy` still wait until a service was ready, but once it runs, neither load nor a dependency that fails later makes its container unhealthy. That matters because Traefik's Docker provider routes only to healthy containers: under the load test a saturated Telemetry answered its old `/readyz` healthcheck too late, Docker marked it unhealthy and every Telemetry request got 404 for about 40 s at a time ([Load testing](load-testing.md)). Traefik also runs with `--providers.docker.allowEmptyServices=true`, so a service that does become unhealthy (a hung process) answers 503 instead of disappearing (404).
+
+Dependency trouble after the start shows up in the service itself: each service evaluates its readiness checks every `MOWDECK_READINESS_INTERVAL_SECONDS` (default 30, 0 turns it off), logs `service not ready` with the failing checks (and `service ready again`) and exports `mowdeck_readiness_check_up{check}` on `/metrics`. By hand: `docker compose exec telemetry python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8000/readyz').read())"`; a failing check answers 503 with its name and error. The database check uses a connection of its own, never the request pool, so a busy pool does not count as a broken database.
+
+## Database connections
+
+PostgreSQL runs with `max_connections=200` (`command` of the `postgres` service). Every service may open at most its pool (`MOWDECK_DATABASE_POOL_SIZE`, default 5) plus overflow (`MOWDECK_DATABASE_MAX_OVERFLOW`, default 5), plus one short-lived connection per readiness check:
+
+| Client | Connections at most |
+| --- | ---: |
+| Telemetry (pool 10 + overflow 5 + readiness 1; most of a mower page) | 16 |
+| Identity, Fleet, Notifications, Scheduler, Entitlements, Planner, Vision (5 + 5 + 1 each) | 77 |
+| Billing (profile `billing`) | 11 |
+| OpenFGA (`OPENFGA_DATASTORE_MAX_OPEN_CONNS`) | 30 |
+| One-shot jobs (migrations, one each, only at `up`) | 10 |
+| Reserved for superusers (`psql`, backups) | 3 |
+| **Together** | **147** |
+
+That leaves about 50 for a replica or a larger pool. A service that needs more sets its two variables in its `environment`; raise `max_connections` with it (`tools/repo-checks/tests/test_compose.py` checks that the budget fits). The load test peaked at 92 connections. Kubernetes: every replica counts again; the chart sets `postgresql.cloudnativepg.maxConnections` (default 200).
 
 ## Image sources
 
@@ -203,7 +234,7 @@ The Phase 2 gate for the web app is a Playwright suite (`tests/e2e-web`): `pnpm 
 
 The Device-Gateway holds the mower connections. It loads the mowers from Fleet when it starts and follows Fleet's `mower.registered`, `mower.updated` and `mower.removed` events; the stack seeds no mower. `MOWDECK_SIM_TIME_SCALE` (30 in `.env.example`) speeds up the simulation. `GET /api/v1/device-gateway/mowers` shows the connection status of the account's mowers. After every connect the gateway publishes the mower's capabilities and map to the stream `DEVICE` (only when they changed) and reads the map again after a job ends; Telemetry stores them for the web app.
 
-The service runs as non-root with a read-only root file system (tmpfs at `/tmp`); its healthcheck uses `/readyz`. Details: `services/device-gateway/README.md`.
+The service runs as non-root with a read-only root file system (tmpfs at `/tmp`); its healthcheck uses `/startupz` ([Health and routing](#health-and-routing)). Details: `services/device-gateway/README.md`.
 
 ## Camera relay (profile `relay`)
 

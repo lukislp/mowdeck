@@ -14,7 +14,8 @@ export interface ScheduleFormState {
   name: string;
   targetType: 'mower' | 'group';
   targetId: string;
-  kind: 'weekly' | 'every_n_days';
+  /** `once`: a single run on `anchorDate` (a one-off start, e.g. from chat control). */
+  kind: 'weekly' | 'every_n_days' | 'once';
   days: Weekday[];
   /** `HH:MM` wall-clock time in the schedule's time zone. */
   startTime: string;
@@ -152,7 +153,7 @@ export function fromSchedule(schedule: Schedule): ScheduleFormState {
     name: schedule.name,
     targetType: schedule.target_type === 'group' ? 'group' : 'mower',
     targetId: schedule.target_id,
-    kind: schedule.kind === 'every_n_days' ? 'every_n_days' : 'weekly',
+    kind: schedule.kind === 'every_n_days' || schedule.kind === 'once' ? schedule.kind : 'weekly',
     days: schedule.days_of_week.filter(isWeekday),
     startTime: clockTime(schedule.start_time),
     anchorDate: schedule.anchor_date ?? localDate(new Date()),
@@ -214,7 +215,9 @@ export function validateForm(state: ScheduleFormState): FormIssues {
           ? null
           : { code: 'format' },
     );
-    set('interval_days', checkInteger(state.intervalDays, LIMITS.intervalDays));
+    if (state.kind === 'every_n_days') {
+      set('interval_days', checkInteger(state.intervalDays, LIMITS.intervalDays));
+    }
   }
   set('duration', checkInteger(state.duration, LIMITS.duration));
   if (state.targetType === 'group' && state.areaIds.length) set('areas', { code: 'group_areas' });
@@ -253,7 +256,7 @@ export function toBody(state: ScheduleFormState): ScheduleIn {
     days_of_week: weekly ? WEEKDAYS.filter((d) => state.days.includes(d)) : [],
     start_time: state.startTime,
     anchor_date: weekly ? null : state.anchorDate,
-    interval_days: weekly ? null : int(state.intervalDays, 1),
+    interval_days: state.kind === 'every_n_days' ? int(state.intervalDays, 1) : null,
     duration_minutes: int(state.duration, 120),
     area_ids: state.targetType === 'group' ? [] : [...state.areaIds],
     ...mowBody(state.mow),
@@ -303,6 +306,7 @@ const FIELD_OF_MESSAGE: [RegExp, FormField][] = [
   [/^name must/, 'name'],
   [/at least one day of the week/, 'days'],
   [/needs anchor_date/, 'anchor_date'],
+  [/must start in the future/, 'anchor_date'],
   [/^interval_days/, 'interval_days'],
   [/^duration_minutes/, 'duration'],
   [/area_ids/, 'areas'],
