@@ -117,6 +117,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_REALTIME_DRIVE_MAX_RATE_HZ` | `10` | Joystick frames per second and session forwarded to the mower; more are dropped |
 | `MOWDECK_REALTIME_DRIVE_TTL_MS` | `1000` | Dead-man timeout of every frame (`ManualDrive.ttl_ms`, 100 to 2000) |
 | `MOWDECK_REALTIME_DRIVE_REQUEST_TIMEOUT_SECONDS` | `2` | Timeout of `fleet.drive.start` and `fleet.drive.stop` |
+| `MOWDECK_REALTIME_PRESENCE_SECONDS` | `30` | Demo mode only ([ADR 0076](../../docs/adr/0076-demo-sandboxes.md)): keep-alive interval of `presence.accounts` (core NATS), which Realtime also publishes on the first and the last socket of an account, so the Device-Gateway rests the mowers nobody watches |
 | `MOWDECK_REALTIME_ALLOWED_ORIGINS` | empty | Comma separated allowed `Origin` values; empty allows all (authentication is never a cookie). A refused socket is logged at info level with its origin (`websocket refused: origin not allowed`) |
 
 ## Metrics

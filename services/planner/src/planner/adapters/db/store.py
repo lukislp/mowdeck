@@ -118,6 +118,15 @@ class SqlTx:
         )
         return bool(result.rowcount)
 
+    async def purge_account(self, account_id: UUID) -> int:
+        deleted = 0
+        for table in (tables.templates, tables.mower_facts):
+            result = await self._conn.execute(
+                sa.delete(table).where(table.c.account_id == account_id)
+            )
+            deleted += int(result.rowcount)
+        return deleted
+
 
 class SqlStore:
     """``Store`` on an async engine."""

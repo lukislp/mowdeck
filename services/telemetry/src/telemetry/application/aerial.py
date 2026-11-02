@@ -159,6 +159,10 @@ class MissLimiter:
         hits.append(now)
         return None
 
+    def forget(self, account_id: UUID) -> None:
+        """Drop the window of an account (demo sandbox purge)."""
+        self._hits.pop(account_id, None)
+
 
 class Aerial:
     """Serves aerial tiles for the area around a mower's map."""
@@ -181,6 +185,10 @@ class Aerial:
         self._limiter = MissLimiter(config.misses_per_minute, now)
         self._gate = asyncio.Semaphore(concurrency)
         self._zone_points = zone_points
+
+    def forget_account(self, account_id: UUID) -> None:
+        """Drop what is kept in memory per account (demo sandbox purge)."""
+        self._limiter.forget(account_id)
 
     @property
     def enabled(self) -> bool:

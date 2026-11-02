@@ -1,6 +1,6 @@
 # Public demo
 
-A demo installation lets anybody try MowDeck without an account: a click on **Try the demo** signs the visitor in to a prepared account with three simulated mowers and a week of history. No real mower, manufacturer account, push service or AI provider is reachable, nothing can be registered, and the whole demo is deleted and rebuilt every few hours. Design and the complete list of what the demo refuses: [ADR 0068](../adr/0068-public-demo-mode.md).
+A demo installation lets anybody try MowDeck without an account: a click on **Try the demo** signs the visitor in to an own sandbox account with three simulated mowers and a week of history ([ADR 0076](../adr/0076-demo-sandboxes.md); with `DEMO_SANDBOXES=false` all visitors share one prepared account instead). No real mower, manufacturer account, push service or AI provider is reachable, nothing can be registered, and the whole demo is deleted and rebuilt every few hours. Design and the complete list of what the demo refuses: [ADR 0068](../adr/0068-public-demo-mode.md).
 
 Run a demo only as its **own stack**: its own host or VM if possible, its own Compose project, database, volumes, network and secrets. Never on top of, next to the data of, or with the secrets of an installation with real mowers.
 
@@ -10,15 +10,38 @@ Run a demo only as its **own stack**: its own host or VM if possible, its own Co
 - Seven days of history per mower (`DEMO_HISTORY_DAYS`): tracks, coverage and missed spots, Wi-Fi, mobile and RTK heatmaps, the health history and battery statistics.
 - A weekly schedule per mower with angle rotation; static, dry weather.
 - Everything that works on simulated mowers: start, pause, resume, dock, emergency stop, manual driving with the camera test pattern, spot mowing, path previews, mowing defaults, area names, device settings, firmware update, sites and groups, schedules, the in-app notification inbox, theft tracking and the AI assistant with a built-in demo model.
-- A band above every page ("Demo · simulated mowers, shared with every visitor, resets every 6 h"), "Demo" in front of every page title and a demo badge on the sign-in page. None of them can be dismissed. Every response of the API carries `X-MowDeck-Demo: 1`.
+- A band above every page ("Demo · your own sandbox with simulated mowers, deleted 30 min after your last visit"; in the shared mode "shared with every visitor, resets every 6 h"), "Demo" in front of every page title and a demo badge on the sign-in page. None of them can be dismissed. Every response of the API carries `X-MowDeck-Demo: 1`.
 
 - The interactive API explorer at `/api-explorer` ([ADR 0072](../adr/0072-api-explorer-in-the-web-app.md)), linked from the band ("Try the API live") and the sign-in page: every service's OpenAPI document in Scalar (self-hosted, nothing from a CDN), "Test Request" with the visitor's demo session. `docker-compose.demo.yml` turns it on (`MOWDECK_WEB_API_EXPLORER=true`); the API docs point visitors to `/api-explorer` of the demo, so once the demo has its public address, link that address in the README and the portfolio.
 
-All visitors share the one demo account: they see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count, and the account's audit log (`GET /accounts/{id}/audit`, one click away in the API explorer) only show the visitor's own login session, and the audit log leaves out every address, so nobody sees another visitor's browser, network or times.
+Every visitor works in an own sandbox (next section): nobody sees another visitor's mowers, commands, schedules or inbox. In the shared mode (`DEMO_SANDBOXES=false`) all visitors share the one demo account and see each other's commands live. Not each other's sign-ins, though: the security center's session list, its security events and its session count, and the account's audit log (`GET /accounts/{id}/audit`, one click away in the API explorer) only show the visitor's own login session, and the audit log leaves out every address, so nobody sees another visitor's browser, network or times.
 
 Live updates (the WebSocket of `/api/v1/realtime/ws`) are limited per login session instead of per user, since every visitor is the same user: 10 sockets per visitor session, 20 per client address (`DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS`, IPv6 per /64) and 500 for the whole demo (`DEMO_REALTIME_MAX_CONNECTIONS`). One visitor cannot take the live view from the others.
 
 Names visitors type in (sites, groups, area names, zones, schedules) lose control and format characters such as right-to-left overrides and zero-width spaces, so nobody can spoof a label the other visitors read; a name of nothing but blanks and joiners counts as empty, and a planner template name with such characters is refused.
+
+## Sandboxes
+
+With `DEMO_SANDBOXES=true` (the default of `docker-compose.demo.yml`) every visitor gets an own account ([ADR 0076](../adr/0076-demo-sandboxes.md)):
+
+- **Pool.** Identity keeps `DEMO_SANDBOX_POOL` sandboxes ready (mowers, schedules, a week of history); "Try the demo" claims one in a few milliseconds. A burst beyond the pool gets sandboxes made on the spot (about a second, no history).
+- **Limits.** At most `DEMO_SANDBOX_MAX` sandboxes at once; the next visitor sees "the demo is full" with a countdown and is let in automatically when one is free. One address may start `DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` sandboxes an hour.
+- **Resting mowers.** The simulated mowers of a sandbox only run while its visitor has the app open (a live socket); otherwise they rest and cost no CPU. A command (also a scheduled start) wakes them for two minutes.
+- **Lifetime.** A sandbox is deleted `DEMO_SANDBOX_IDLE_MINUTES` after the visitor's last visit (the app keeps it alive while a tab is open), right after a logout, and at the latest `DEMO_RESET_HOURS` after it was claimed. The deletion runs in every service and is retried until it is complete; the periodic reset stays the safety net. A visitor who comes back later gets a fresh sandbox without an error; the tour is not shown again in the same browser.
+
+Measured cost ([ADR 0076](../adr/0076-demo-sandboxes.md#measurements)): a resting sandbox about 0 % CPU and 1 MiB; a watched one with a mower mowing about 5 to 8 % of one CPU core and 1 to 2 MiB, most of it telemetry processing. On the 2-vCPU demo VPS that is room for 20 to 25 watched sandboxes at once; the default cap of 40 assumes about half of the claimed sandboxes are watched at any time. To measure on your host:
+
+```bash
+# a demo stack with sandboxes on the e2e settings (lifted limits), then:
+uv run python tools/repo-checks/scripts/demo_sandbox_cost.py --base http://localhost:8680 --project mowdeck-sbx --sandboxes 20
+```
+
+How many sandboxes exist and in which state:
+
+```bash
+docker compose -p mowdeck-demo exec postgres psql -U postgres -d identity \
+  -c "select state, purge_reason, count(*) from demo_sandboxes group by 1, 2"
+```
 
 ## What the demo refuses
 
@@ -142,10 +165,15 @@ In `infra/compose/demo/demo.env` (read after `../.env.example`):
 | --- | --- | --- |
 | `DEMO_SEED_TOKEN` | (required) | Secret of the seed job; Traefik strips its header from every outside request |
 | `DEMO_RESET_HOURS` | `6` | Shown in the banner; run the timer below at the same interval |
-| `DEMO_HISTORY_DAYS` | `7` | Days of simulated history per mower (1 to 31) |
+| `DEMO_HISTORY_DAYS` | `7` | Days of simulated history per mower (1 to 31); in a pool sandbox too |
 | `DEMO_SIM_TIME_SCALE` | `3` | Simulated seconds per real second of the live mowers |
 | `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `1200`, `600` | Requests per client address at the gateway; the web app's files count too, so the burst must hold a first visit with an empty cache (a few hundred requests) |
-| `DEMO_USERNAME` | `demo` | The shared demo user |
+| `DEMO_SANDBOXES` | `true` | A sandbox per visitor ([ADR 0076](../adr/0076-demo-sandboxes.md)); `false`: the one shared demo user |
+| `DEMO_SANDBOX_MAX` | `40` | Sandboxes visitors hold at once; one more visitor sees "the demo is full" with a countdown (see [Sandboxes](#sandboxes)) |
+| `DEMO_SANDBOX_POOL` | `2` | Ready sandboxes (with history) kept for the next visitors |
+| `DEMO_SANDBOX_IDLE_MINUTES` | `30` | A sandbox is deleted this long after its last visit (also shown in the band) |
+| `DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` | `6` | Sandboxes one client address (IPv6: its /64) may start an hour |
+| `DEMO_USERNAME` | `demo` | The shared demo user (only with `DEMO_SANDBOXES=false`) |
 | `DEMO_REALTIME_MAX_CONNECTIONS` | `500` | Live-update sockets of the whole demo (per Realtime instance) |
 | `DEMO_REALTIME_MAX_CONNECTIONS_PER_ADDRESS` | `20` | Live-update sockets per client address; each visitor's login session has at most 10 |
 

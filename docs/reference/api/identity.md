@@ -475,7 +475,7 @@ Set a temporary password of a sub-user (must be changed at the next login). Step
 
 **Demo Session**
 
-"Try the demo": a session of the prepared demo user without credentials (the same tokens and cookie as `POST /session`). 404 outside demo mode and while the demo is not seeded; rate limited per address.
+"Try the demo": a session without credentials (the same tokens and cookie as `POST /session`). With demo sandboxes (ADR 0076) in a sandbox account of the visitor's own, otherwise as the prepared shared demo user. 404 outside demo mode and while the shared demo is not seeded; 429 when the address asked too often; 503 `demo-full` with `Retry-After` when every sandbox is taken.
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |

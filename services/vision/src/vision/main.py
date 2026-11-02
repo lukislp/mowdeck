@@ -39,6 +39,7 @@ from mowdeck_service_kit.entitlements import (
 )
 
 from vision.adapters.api.demo import DEMO_POLICY
+from vision.adapters.api.demo import router as demo_router
 from vision.adapters.api.deps import install_error_mapping
 from vision.adapters.api.routes import router
 from vision.adapters.authz import AuthzDriveChecker
@@ -51,6 +52,7 @@ from vision.adapters.providers.factory import DefaultProviderFactory
 from vision.adapters.providers.llm import load_litellm
 from vision.application.assist import AssistConfig, VisionService
 from vision.application.auto import AutoAnalysis, AutoSettings
+from vision.application.demo import DemoPurge
 from vision.application.executor import DriveConfig, Executor
 from vision.application.ports import Clock, ProviderFactory, SecretBox, Store
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
@@ -223,6 +225,7 @@ def build_app(
         app.state.vision_service = service
         app.state.provider_service = providers
         app.state.auto_analysis = auto
+        app.state.vision_demo = DemoPurge(store_ref, mower_view, auto.forget_mowers)
         app.state.auto_settings = AutoSettings(
             store=store_ref, entitlements=plans, clock=now, config=auto_limits
         )
@@ -277,7 +280,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router],
+        routers=[router, demo_router],
         readiness_checks=[readiness_check_db(engine)] if engine is not None else [],
         on_startup=[startup],
         on_shutdown=[shutdown],
