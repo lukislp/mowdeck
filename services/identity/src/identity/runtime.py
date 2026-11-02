@@ -27,6 +27,7 @@ from identity.adapters.apple import AppleOAuthClient
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
+from identity.adapters.demo_sandbox import HttpSandboxProvisioner
 from identity.adapters.github import GitHubOAuthClient
 from identity.adapters.modules import HttpModuleSource
 from identity.adapters.webauthn import PyWebAuthnCeremonies
@@ -34,7 +35,14 @@ from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
 from identity.application.keys import KeyManager
-from identity.application.ports import Clock, ModuleSource, OAuthClient, PasswordHasher, Store
+from identity.application.ports import (
+    Clock,
+    ModuleSource,
+    OAuthClient,
+    PasswordHasher,
+    SandboxProvisioner,
+    Store,
+)
 from identity.application.services import Services, build_services
 from identity.application.sync import AuthzSync
 from identity.application.work import UnitOfWork
@@ -66,6 +74,8 @@ class Runtime:
     """Tests: a fake GitHub (``httpx.MockTransport``) behind the configured endpoints."""
     apple_transport: httpx.AsyncBaseTransport | None = None
     """Tests: a fake Apple (``httpx.MockTransport``) behind the configured endpoints."""
+    provisioner: SandboxProvisioner | None = None
+    """Demo sandboxes (ADR 0076): fills and empties them; the HTTP provisioner unless given."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
     keys: KeyManager = field(init=False)
@@ -135,7 +145,20 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
+        if self.settings.sandboxes_enabled:
+            self.services.enable_sandboxes(
+                self.provisioner or self.http_provisioner(), self.settings.sandbox_config()
+            )
         return self.services
+
+    def http_provisioner(self) -> HttpSandboxProvisioner:
+        """The demo sandboxes' provisioner on the services' HTTP APIs (needs the seed secret)."""
+        secret = self.settings.demo_seed_token
+        return HttpSandboxProvisioner(
+            seed_token=secret.get_secret_value().strip() if secret else "",
+            url_template=self.settings.identity_demo_service_url,
+            history_days=self.settings.identity_demo_sandbox_history_days,
+        )
 
     def oauth_clients(self) -> list[tuple[OAuthClient, str]]:
         """The configured login providers with their callback URLs (ADR 0051, 0052)."""

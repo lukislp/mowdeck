@@ -805,11 +805,19 @@ class MowerService:
             item = await work.tx.mowers.get(id=mower_id, account_id=account_id)
             if item is None:
                 raise NotFoundError("mower not found")
-            memberships = await work.tx.mower_groups.find(mower_id=mower_id)
-            await work.tx.mower_groups.delete(mower_id=mower_id)
-            await work.tx.area_names.delete(mower_id=mower_id)
-            await work.tx.mower_links.delete(mower_id=mower_id)
-            await work.tx.mowers.delete(id=mower_id)
-            work.delete(*mower_tuples(item, [m.group_id for m in memberships]))
-            await work.audit(actor, "mower.removed", account_id, "mower", mower_id)
-            work.emit(MOWER_REMOVED, account_id, registration(item))
+            await self.remove_in(work, actor, item)
+
+    @staticmethod
+    async def remove_in(work: Work, actor: Actor, item: Mower) -> int:
+        """Remove ``item`` with its memberships, area names, links and tuples in ``work``;
+        ``mower.removed`` is published after the commit. Returns the rows deleted."""
+        mower_id = item.id
+        memberships = await work.tx.mower_groups.find(mower_id=mower_id)
+        deleted = await work.tx.mower_groups.delete(mower_id=mower_id)
+        deleted += await work.tx.area_names.delete(mower_id=mower_id)
+        deleted += await work.tx.mower_links.delete(mower_id=mower_id)
+        deleted += await work.tx.mowers.delete(id=mower_id)
+        work.delete(*mower_tuples(item, [m.group_id for m in memberships]))
+        await work.audit(actor, "mower.removed", item.account_id, "mower", mower_id)
+        work.emit(MOWER_REMOVED, item.account_id, registration(item))
+        return deleted
