@@ -25,7 +25,7 @@ mower (minimum interval, photos per 24 hours) on top of the alarm cooldowns.
 """
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Literal
@@ -129,6 +129,11 @@ class Fanout:
         for task in list(self._captures):
             task.cancel()
         await self.drain()
+
+    def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
+        """Drop the photo budget of these mowers (demo sandbox purge)."""
+        for mower_id in mower_ids:
+            self._photo_log.pop(mower_id, None)
 
     async def prune_images(self) -> int:
         """Delete the photos past their retention."""

@@ -22,6 +22,30 @@ describe('DemoBanner', () => {
     expect(screen.queryByTestId('demo-api-explorer')).toBeNull();
   });
 
+  it('keeps the shared text without sandboxes', () => {
+    render(DemoBanner, { props: { resetHours: 6, href: 'https://example.org/src' } });
+    const band = screen.getByTestId('demo-banner');
+    expect(band).toHaveAttribute('data-mode', 'shared');
+    expect(band).not.toHaveTextContent(/sandbox/i);
+  });
+
+  it("says it is the visitor's own sandbox and when it is deleted", () => {
+    render(DemoBanner, {
+      props: { resetHours: 6, href: 'https://example.org/src', idleMinutes: 30 },
+    });
+    const band = screen.getByTestId('demo-banner');
+    expect(band).toHaveAttribute('data-mode', 'sandbox');
+    const long = band.querySelector('.long');
+    const short = band.querySelector('.short');
+    expect(long).toHaveTextContent(/sandbox/i);
+    expect(long).toHaveTextContent(/30 min/);
+    expect(long).toHaveTextContent(/6 h/);
+    expect(long).not.toHaveTextContent(/geteilt|shared/i);
+    expect(short).toHaveTextContent(/sandbox/i);
+    expect(short).toHaveTextContent(/30 min/);
+    expect(band.querySelector('button')).toBeNull();
+  });
+
   it('links the API explorer when the demo has it', () => {
     render(DemoBanner, {
       props: { resetHours: 6, href: 'https://example.org/src', explorer: true },
@@ -40,6 +64,9 @@ describe('DemoBanner', () => {
     await fireEvent.click(screen.getByTestId('demo-api-explorer'));
     await waitFor(() => expect(navigatePath).toHaveBeenCalledWith('/api-explorer'));
     expect(session.tryDemo).toHaveBeenCalledOnce();
+    // A started demo marks this browser as a visitor (ADR 0076: a lost sandbox restarts).
+    expect(localStorage.getItem('mowdeck.demo.visitor')).toBe('1');
+    localStorage.removeItem('mowdeck.demo.visitor');
   });
 
   it('just follows the link when already signed in', async () => {

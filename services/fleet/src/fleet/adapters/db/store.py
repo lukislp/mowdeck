@@ -8,6 +8,7 @@ import dataclasses
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,9 @@ from fleet.domain.models import (
     MowerLink,
     Site,
 )
+
+AUDIT_PURGE_SETTING = "mowdeck.audit_purge"
+"""Transaction-local setting that lets the audit log's trigger admit a ``DELETE``."""
 
 
 class SqlTable[T]:
@@ -206,6 +210,15 @@ class SqlTx:
             text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": key}
         )
         return bool(result.scalar_one())
+
+    async def purge_audit(self, account_id: UUID) -> int:
+        """Delete the account's audit rows. The append-only trigger lets a ``DELETE`` pass only
+        while ``mowdeck.audit_purge`` is ``on`` in this transaction (migration 0014)."""
+        switch = text("SELECT set_config(:name, :value, true)")
+        await self.conn.execute(switch, {"name": AUDIT_PURGE_SETTING, "value": "on"})
+        deleted = await self.audit.delete(account_id=account_id)
+        await self.conn.execute(switch, {"name": AUDIT_PURGE_SETTING, "value": ""})
+        return deleted
 
 
 class SqlStore:

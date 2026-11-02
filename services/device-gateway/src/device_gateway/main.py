@@ -42,6 +42,7 @@ from device_gateway.adapters.bus.errors import subscribe_error_lexicons
 from device_gateway.adapters.bus.firmware import subscribe_firmware_checks
 from device_gateway.adapters.bus.fleet import BusCredentialSource, BusFleetDirectory
 from device_gateway.adapters.bus.path_preview import subscribe_path_previews
+from device_gateway.adapters.bus.presence import PresenceSubscription, subscribe_presence
 from device_gateway.adapters.bus.publisher import BusPublisher
 from device_gateway.adapters.bus.subscriptions import (
     CommandSubscription,
@@ -60,6 +61,7 @@ from device_gateway.application.ports import (
     ConnectionProvider,
     FleetDirectory,
 )
+from device_gateway.application.presence import PresenceTracker
 from device_gateway.application.session import SessionTiming
 from device_gateway.domain.rules import Shard
 from device_gateway.module import DESCRIPTOR
@@ -151,8 +153,16 @@ def build_app(
             ),
             snapshotters=frames,
             snapshot_timeout_seconds=settings.capture_timeout_seconds,
+            presence=(
+                PresenceTracker(wake_seconds=settings.sim_wake_seconds)
+                if demo and settings.sim_pause_unwatched
+                else None
+            ),
         )
         app.state.gateway = gateway
+        if demo and settings.sim_pause_unwatched:
+            # Before the mowers register: an announcement that arrives first is not lost.
+            app.state.presence = await subscribe_presence(active_bus, gateway)
         registry_events: Subscription = await subscribe_registry_events(active_bus, gateway)
         app.state.registry_events = registry_events
         app.state.photo_requests = await subscribe_photo_requests(
@@ -230,6 +240,9 @@ def build_app(
         path_previews: Subscription | None = getattr(app.state, "path_previews", None)
         if path_previews is not None:
             await path_previews.unsubscribe()
+        presence: PresenceSubscription | None = getattr(app.state, "presence", None)
+        if presence is not None:
+            await presence.stop()
         for name in ("camera_releases", "bridge_scans", "firmware_checks", "tracking_leases"):
             subscription: Subscription | None = getattr(app.state, name, None)
             if subscription is not None:

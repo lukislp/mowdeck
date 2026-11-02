@@ -243,3 +243,10 @@ class Store(Protocol):
     def retention(self) -> AbstractAsyncContextManager[RetentionScope | None]:
         """Try to become the replica that deletes; yields None when another one is."""
         ...
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0076):
+        directory, latest states, history, positions, command timeline, snapshots, health
+        totals, day rows, blade changes and the thinning watermarks of its mowers. Returns the
+        number of rows removed (0 when nothing was left)."""
+        ...

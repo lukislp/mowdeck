@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from notifications.adapters.db import tables
-from notifications.application.ports import Tx
+from notifications.application.ports import AccountPurge, Tx
 from notifications.domain.geofence import Fence, MowerFence
 from notifications.domain.live_activity import ActivityDevice, ActivityRun, LiveActivity
 from notifications.domain.models import (
@@ -40,6 +40,25 @@ from notifications.domain.models import (
     QuietHours,
     TargetKind,
 )
+
+_ACCOUNT_TABLES = (
+    tables.deliveries,
+    tables.inbox,
+    tables.notification_images,
+    tables.alarm_silences,
+    tables.live_activities,
+    tables.live_activity_devices,
+    tables.push_subscriptions,
+    tables.apns_devices,
+    tables.ntfy_targets,
+    tables.test_requests,
+    tables.preferences,
+    tables.mower_geofence,
+    tables.mower_watch,
+    tables.mower_directory,
+)
+"""Every table with an ``account_id`` column (the demo purge); ``maintenance_window`` is the
+installation's and has none."""
 
 
 def _watch(row: Any) -> MowerWatch:
@@ -1057,6 +1076,23 @@ class SqlStore:
                 )
             )
             return bool(result.rowcount)
+
+    async def purge_account(self, account_id: UUID) -> AccountPurge:
+        """One transaction, one set based ``DELETE`` per table; the tables that name mowers
+        return them."""
+        removed = 0
+        mowers: set[UUID] = set()
+        async with self.engine.begin() as conn:
+            for table in _ACCOUNT_TABLES:
+                statement = sa.delete(table).where(table.c.account_id == account_id)
+                if "mower_id" in table.c:
+                    result = await conn.execute(statement.returning(table.c.mower_id))
+                    found = [row[0] for row in result]
+                    mowers.update(m for m in found if m is not None)
+                    removed += len(found)
+                else:
+                    removed += (await conn.execute(statement)).rowcount
+        return AccountPurge(deleted=removed, mower_ids=frozenset(mowers))
 
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         async with self.engine.begin() as conn:

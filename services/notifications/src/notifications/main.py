@@ -48,6 +48,7 @@ from mowdeck_service_kit.entitlements import (
 from mowdeck_service_kit.health import ReadinessCheck
 
 from notifications.adapters.api.demo import DEMO_POLICY
+from notifications.adapters.api.demo import router as demo_router
 from notifications.adapters.api.deps import install_error_mapping
 from notifications.adapters.api.routes import router
 from notifications.adapters.authz import AuthzViewChecker
@@ -271,7 +272,7 @@ def build_app(
     app = create_app(
         settings,
         DESCRIPTOR,
-        routers=[router],
+        routers=[router, demo_router],
         readiness_checks=[
             *([readiness_check_db(engine)] if engine is not None else []),
             ReadinessCheck(name="subscriptions", check=subscriptions_active),

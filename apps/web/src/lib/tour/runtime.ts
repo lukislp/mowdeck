@@ -1,8 +1,9 @@
 /**
  * The guided tour (ADR 0073) wired to the app: the context from Fleet, Telemetry, the session
  * and the module registry; the outcome per user in Identity (next to the setup tour's choices,
- * `#lib/onboarding`) or, in the shared demo account, per browser; the position of a running tour
- * per tab, so a reload continues it.
+ * `#lib/onboarding`) or, in the shared demo account, per browser (with demo sandboxes, ADR 0076:
+ * both, the browser's first; `./stores`); the position of a running tour per tab, so a reload
+ * continues it.
  */
 import { goto } from '$app/navigation';
 
@@ -22,11 +23,15 @@ import {
   type TourOutcome,
   type TourStepId,
 } from './steps';
+import { pickStore } from './stores';
 import { Tour, type TourResume, type TourStore } from './tour.svelte';
 
 /** Device switch: `off` never starts the tour by itself here (wall displays, the e2e suite). */
 export const AUTOSTART_KEY = 'mowdeck.tour.autostart';
-/** The outcome in the demo, per browser (every visitor shares one demo user). */
+/**
+ * The outcome in the demo, per browser: the only store with the shared demo user, and the first
+ * one with demo sandboxes (a visitor's next sandbox is a new user).
+ */
 export const DEMO_OUTCOME_KEY = 'mowdeck.tour.demo';
 /** The step of a running tour, per tab. */
 export const RESUME_KEY = 'mowdeck.tour.run';
@@ -105,6 +110,7 @@ async function readContext(): Promise<TourContext> {
     canManage: session.has('fleet.manage'),
     modules,
     demo: demo.active,
+    sandbox: demo.config?.sandbox !== undefined,
   };
 }
 
@@ -131,11 +137,16 @@ const userStore: TourStore = {
   },
 };
 
-/** Demo or user store, decided when it is used (the demo config loads with the app). */
-const store: TourStore = {
-  load: () => (demo.active ? demoStore : userStore).load(),
-  save: (outcome, context) => (demo.active ? demoStore : userStore).save(outcome, context),
-};
+/**
+ * Demo, sandbox or user store, decided when it is used (the demo config loads with the app). In a
+ * demo with sandboxes (ADR 0076) every visitor has an own user again: the outcome goes to Identity
+ * and to this browser, and the browser's outcome wins, so a returning visitor whose deleted
+ * sandbox was replaced by a fresh one does not get the tour again.
+ */
+const store: TourStore = pickStore(
+  () => (demo.config?.sandbox ? 'sandbox' : demo.active ? 'shared-demo' : 'user'),
+  { user: userStore, browser: demoStore },
+);
 
 const resume: TourResume = {
   read: () => {

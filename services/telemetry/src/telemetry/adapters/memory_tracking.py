@@ -84,6 +84,20 @@ class MemoryTrackingStore:
             self._drop(session_id)
         return len(old)
 
+    async def purge_account(self, account_id: UUID) -> int:
+        before = len(self.sessions) + len(self.links) + len(self.photos)
+        gone = {k for k, v in self.sessions.items() if v.account_id == account_id}
+        self.sessions = {k: v for k, v in self.sessions.items() if k not in gone}
+        self.links = {
+            k: v
+            for k, v in self.links.items()
+            if v.account_id != account_id and v.session_id not in gone
+        }
+        self.photos = [
+            p for p in self.photos if p.account_id != account_id and p.session_id not in gone
+        ]
+        return before - len(self.sessions) - len(self.links) - len(self.photos)
+
     async def add_link(self, link: TrackingLink) -> None:
         self.links[link.id] = link
 

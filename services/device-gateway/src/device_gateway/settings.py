@@ -52,6 +52,15 @@ class Settings(ServiceSettings):
     sim_tick_seconds: float = Field(default=1.0, gt=0, le=60)
     """Real seconds between two simulation steps of a simulated mower."""
 
+    sim_pause_unwatched: bool = True
+    """Demo mode only (``MOWDECK_DEMO_MODE``, ADR 0076): the mowers of an account with no live
+    socket (Realtime's ``presence.accounts``) rest, so idle demo sandboxes cost no CPU. Ignored
+    outside demo mode, where every mower always runs."""
+
+    sim_wake_seconds: float = Field(default=120, gt=0, le=3600)
+    """Demo mode: how long a request (a command, a photo, a scheduled start) wakes the mowers of
+    an unwatched account."""
+
     fleet_request_timeout_seconds: float = Field(default=2.0, gt=0, le=60)
     """Timeout of the ``fleet.mowers.list`` request."""
 

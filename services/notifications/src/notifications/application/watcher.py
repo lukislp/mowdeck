@@ -13,7 +13,7 @@ writes at most one command time per mower every few seconds (the rules work with
 Map snapshots become the mower's geofence; snapshots older than the stored one are ignored.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -77,6 +77,11 @@ class Watcher:
         self._clock = clock
         self._recorded: dict[tuple[UUID, bool], datetime] = {}
         self._window: tuple[datetime, MaintenanceWindow | None] | None = None
+
+    def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
+        """Drop the command throttle of these mowers (demo sandbox purge)."""
+        gone = set(mower_ids)
+        self._recorded = {k: v for k, v in self._recorded.items() if k[0] not in gone}
 
     async def _maintenance(self, now: datetime) -> MaintenanceWindow | None:
         """The maintenance window, read at most every :data:`WINDOW_CACHE`."""

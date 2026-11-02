@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
+from telemetry.application.demo import DemoPurge
 from telemetry.application.errors import ErrorExplanations
 from telemetry.application.health import Health
 from telemetry.application.ingest import Ingest
@@ -32,6 +33,8 @@ class Services:
     """Vendor error codes in plain words (ADR 0067), wired at startup."""
     zones: Zones | None = None
     """Virtual zones (ADR 0070); None without a zone store."""
+    demo: DemoPurge | None = None
+    """The demo sandbox purge (ADR 0076), wired at startup."""
 
 
 def build_services(
