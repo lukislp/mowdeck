@@ -87,6 +87,27 @@ async def test_scheduler_api_crud_round_trip() -> None:
     assert deleted.status_code == 204 and gone.status_code == 404
 
 
+async def test_scheduler_api_once_runs_a_single_time_in_the_future() -> None:
+    async with harness() as h:
+        owner = await h.owner()
+        mower_id = await h.register(owner)
+        target = {"target_type": "mower", "target_id": str(mower_id), "days_of_week": []}
+        created = await h.create(
+            owner, **target, kind="once", anchor_date="2026-10-11", start_time="08:00"
+        )
+        past = await h.create(
+            owner, **target, kind="once", anchor_date="2020-01-01", start_time="08:00"
+        )
+        no_day = await h.create(owner, **target, kind="once", start_time="08:00")
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["kind"] == "once" and body["anchor_date"] == "2026-10-11"
+    assert body["next_run_at"] == "2026-10-11T06:00:00Z"
+    assert past.status_code == 422
+    assert "future" in past.json()["detail"]
+    assert no_day.status_code == 422
+
+
 async def test_scheduler_api_validation() -> None:
     async with harness() as h:
         owner = await h.owner()

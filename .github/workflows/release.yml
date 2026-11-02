@@ -295,6 +295,7 @@ jobs:
           - {image: billing, context: ., file: services/billing/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
           - {image: planner, context: ., file: services/planner/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
           - {image: vision, context: ., file: services/vision/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
+          - {image: assistant, context: ., file: services/assistant/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
           - {image: camera-relay, context: ., file: services/camera-relay/Dockerfile, kind: python, licenses: "AGPL-3.0-only AND Apache-2.0"}
           - {image: matter-server, context: ., file: services/matter-server/Dockerfile, kind: node, licenses: "AGPL-3.0-only AND Apache-2.0 AND MIT"}
           - {image: web, context: ., file: apps/web/Dockerfile, kind: web, licenses: "AGPL-3.0-only AND Apache-2.0", flags: --web}
@@ -412,6 +413,7 @@ jobs:
           - {image: billing, context: ., file: services/billing/Dockerfile, kind: python}
           - {image: planner, context: ., file: services/planner/Dockerfile, kind: python}
           - {image: vision, context: ., file: services/vision/Dockerfile, kind: python}
+          - {image: assistant, context: ., file: services/assistant/Dockerfile, kind: python}
           - {image: camera-relay, context: ., file: services/camera-relay/Dockerfile, kind: python}
           - {image: matter-server, context: ., file: services/matter-server/Dockerfile, kind: node}
           - {image: web, context: ., file: apps/web/Dockerfile, kind: web}
