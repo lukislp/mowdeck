@@ -17,8 +17,13 @@ from mowdeck_service_kit.errors import ServiceUnavailable
 from pydantic import BaseModel, Field
 
 from telemetry.adapters.api.deps import ServicesDep
+from telemetry.application.ingest import StateOutcome
+from telemetry.domain.errors import AccountMismatchError
 
 router = APIRouter(prefix="/telemetry/demo", tags=["telemetry: demo"])
+
+HISTORY_BATCH = 200
+"""States of the simulated history stored per transaction."""
 
 
 class DemoMowerIn(BaseModel):
@@ -60,10 +65,14 @@ async def demo_history(
             end=now,
             days=body.days,
         )
-        for state in states:
-            offered += 1
-            if await services.ingest.record_state(state):
-                stored += 1
+        # In batches through the normal ingestion (ADR 0078): a week is thousands of states.
+        for start in range(0, len(states), HISTORY_BATCH):
+            outcomes = await services.ingest.record_states(states[start : start + HISTORY_BATCH])
+            for outcome in outcomes:
+                if isinstance(outcome, AccountMismatchError):
+                    raise outcome
+                offered += 1
+                stored += outcome is StateOutcome.STORED
     return DemoHistoryOut(states=offered, stored=stored)
 
 

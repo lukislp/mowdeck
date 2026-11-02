@@ -121,6 +121,7 @@ nav:
       - adr/0075-chat-control-assistant-add-on.md
       - adr/0076-demo-sandboxes.md
       - adr/0077-liveness-readiness-and-routing.md
+      - adr/0078-batched-state-ingestion.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

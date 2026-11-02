@@ -65,7 +65,7 @@ Permission defined by this service (module descriptor): `telemetry.view`, an acc
 
 | Direction | Subject | Consumer | Purpose |
 | --- | --- | --- | --- |
-| consumed | `telemetry.mower.*` (`MowerState`, stream `TELEMETRY`) | durable and queue group `telemetry-states` | latest, history, positions |
+| consumed | `telemetry.mower.*` (`MowerState`, stream `TELEMETRY`) | durable and queue group `telemetry-states`, in batches | latest, history, positions, health, virtual zones; one transaction per batch (see [Batched ingestion](#batched-ingestion)) |
 | consumed | `command.result.mower.*` (`CommandResult`, stream `COMMANDS`) | durable and queue group `telemetry-results` | command timeline (account from the directory) |
 | consumed | `device.mower.>` (`MowerMapSnapshot`, `MowerCapabilitiesSnapshot`, `MowerPathSnapshot`, stream `DEVICE`) | durable and queue group `telemetry-device` | newest map, capabilities and mow path per mower (an older `observed_at` never replaces a newer one) |
 | consumed | `event.mower.*` (`mower.registered|updated|removed`, stream `EVENTS`) | durable and queue group `telemetry-mowers` | mower directory; removal purges the mower's rows |
@@ -75,6 +75,10 @@ Permission defined by this service (module descriptor): `telemetry.view`, an acc
 | produced | `event.telemetry.blade_hours.threshold` (`telemetry.blade_hours.threshold`, `BladeHoursThreshold`, stream `EVENTS`) | Notifications | the blade hours since the last blade change crossed the mower's threshold (its own, else `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD`); published once per blade change, after the commit (a failed publish is logged, not retried) |
 
 Handler rules: malformed payloads, payloads whose subject names another mower and states of a foreign account are dropped with a warning (never redelivered). A command result for a mower missing from the directory is redelivered and dropped with a warning on the `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS`-th delivery. A snapshot whose account differs from the directory entry of its mower is dropped with a warning; an older snapshot never replaces a newer one. Manual drive frames (ten per second) produce command results whose correlation id starts with `drive:`; their `accepted` results are not stored, so they do not flood the timeline (rejected, failed and expired ones are).
+
+### Batched ingestion
+
+States are stored in batches ([ADR 0078](../../docs/adr/0078-batched-state-ingestion.md)): the kit's batch subscription hands over every state that arrived while the previous batch was written, plus what comes within `MOWDECK_TELEMETRY_INGEST_BATCH_WAIT_SECONDS` (0.2 s), at most `MOWDECK_TELEMETRY_INGEST_BATCH_MAX` (64). One transaction per batch reads the directory, the latest rows and the health totals of its mowers once (locked in mower id order), applies the write rules state by state in arrival order in memory, and writes one statement per table: every history and position row, the last latest row, health totals and day totals per mower. The result is exactly what the same states one by one would store; the stored latest state lags the stream by at most the wait. Each state is acknowledged only after the commit, so a crash loses nothing (JetStream redelivers, and a redelivered state changes nothing); a state of a foreign account is dropped alone; a database failure redelivers the whole batch. Shutdown stores and acknowledges what was already received. The demo history import (`POST /telemetry/demo/history`) stores 200 states per transaction the same way.
 
 ## Error lexicon
 
@@ -179,6 +183,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_TELEMETRY_STATES_LIMIT` | `200` | Most mowers in the account state list |
 | `MOWDECK_TELEMETRY_STALE_AFTER_SECONDS` | `60` | A mower is reported `stale` (offline) when its last link heartbeat (`state.heartbeat_at`, else `observed_at`) is older than this (six missed heartbeats) or the state says `connected: false`; old values of a connected mower are not stale (ADR 0040) |
 | `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS` | `3` | Deliveries of a result for an unknown mower before it is dropped |
+| `MOWDECK_TELEMETRY_INGEST_BATCH_MAX` | `64` | Most states stored in one transaction ([Batched ingestion](#batched-ingestion)); `1` stores each state on its own |
+| `MOWDECK_TELEMETRY_INGEST_BATCH_WAIT_SECONDS` | `0.2` | How long a batch waits for more states after its first one; the stored latest state lags the stream by at most this; `0` batches only what queued up meanwhile |
 | `MOWDECK_TELEMETRY_FLEET_TIMEOUT_SECONDS` | `5` | Timeout of the `fleet.mowers.list` seed request |
 | `MOWDECK_TELEMETRY_FLEET_RETRY_MAX_SECONDS` | `30` | Upper bound of the backoff between seed attempts |
 | `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD` | `50` | Default blade hours since the last blade change after which `telemetry.blade_hours.threshold` is published once (again after the next blade reset); a mower's own threshold (`PUT .../health/blade-threshold`) and, without one, the mower's own warning (when it reports its own blade counter) replace it |

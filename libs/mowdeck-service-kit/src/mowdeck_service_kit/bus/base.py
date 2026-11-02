@@ -13,9 +13,18 @@ Delivery semantics (identical for both implementations):
 * Subscribers sharing a ``queue`` (or ``durable``) name form a group: each message goes to one
   member. Without a group every subscriber receives every message.
 * New subscriptions start with new messages; they do not replay history.
+* A batch subscription (:meth:`EventBus.subscribe_batch`, stream subjects only) hands the
+  handler every message that arrived while the previous batch was being handled (up to
+  ``max_batch``, optionally lingering ``max_wait_seconds`` for more), in delivery order. The
+  handler answers one outcome per message; each message is acknowledged only after the handler
+  returned, so a crash loses nothing (JetStream redelivers what was not acknowledged). Raising
+  from a batch handler naks the whole batch. Unsubscribing settles the messages already
+  received before it returns.
 """
 
-from collections.abc import Awaitable, Callable, Mapping
+import asyncio
+import contextlib
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -116,6 +125,12 @@ class PublishResult:
 
 MessageHandler = Callable[[BusMessage], Awaitable[None]]
 
+Outcome = Literal["ack", "nak", "term"]
+"""What happens to a delivered message: acknowledged, redelivered later, or discarded."""
+
+BatchHandler = Callable[[list[BusMessage]], Awaitable[Sequence[Outcome]]]
+"""Handles a batch of messages and answers one :data:`Outcome` per message, in order."""
+
 
 @runtime_checkable
 class Subscription(Protocol):
@@ -149,13 +164,33 @@ class EventBus(Protocol):
         durable: str | None = None,
         queue: str | None = None,
         last_per_subject: bool = False,
+        acknowledge: bool = True,
     ) -> Subscription:
         """Call ``handler`` for every message on ``subject`` (wildcards allowed).
 
         Stream subjects deliver new messages only; with ``last_per_subject`` a new consumer
         starts with the newest stored message of every matching subject (JetStream
         ``DeliverPolicy.LAST_PER_SUBJECT``), for last-value streams such as ``DEVICE``.
+        ``acknowledge=False`` (only without ``durable`` and ``queue``) is for live views of a
+        stream, such as a fan-out to sockets or a "latest value" cache: the server sends each
+        message once and expects no acknowledgement (JetStream ``AckPolicy.NONE``), so a failing
+        handler gets no redelivery, and the server and the client save one message per
+        delivery (ADR 0078).
         """
+        ...
+
+    async def subscribe_batch(
+        self,
+        subject: str,
+        handler: BatchHandler,
+        *,
+        durable: str | None = None,
+        queue: str | None = None,
+        max_batch: int = 64,
+        max_wait_seconds: float = 0.0,
+    ) -> Subscription:
+        """Call ``handler`` with batches of the messages on a stream ``subject`` (see the module
+        documentation); ``durable``/``queue`` as for :meth:`subscribe`."""
         ...
 
     async def request(
@@ -179,9 +214,6 @@ class EventBus(Protocol):
         ...
 
 
-Outcome = Literal["ack", "nak", "term"]
-
-
 async def dispatch(handler: MessageHandler, message: BusMessage) -> Outcome:
     """Run ``handler`` in the message's correlation scope and map the result to an outcome.
 
@@ -202,6 +234,195 @@ async def dispatch(handler: MessageHandler, message: BusMessage) -> Outcome:
             )
             return "nak"
     return "ack"
+
+
+async def dispatch_batch(handler: BatchHandler, messages: list[BusMessage]) -> list[Outcome]:
+    """Run a batch handler; one outcome per message.
+
+    :class:`DropMessage` from the handler terminates the whole batch, any other exception naks
+    it (logged). A handler answering the wrong number of outcomes naks the batch too.
+    """
+    try:
+        outcomes = list(await handler(messages))
+    except DropMessage as exc:
+        _log.warning(
+            "batch dropped by handler",
+            subject=messages[0].subject,
+            size=len(messages),
+            reason=str(exc),
+        )
+        return ["term"] * len(messages)
+    except Exception:
+        _log.exception("batch handler failed", subject=messages[0].subject, size=len(messages))
+        return ["nak"] * len(messages)
+    if len(outcomes) != len(messages):
+        _log.error(
+            "batch handler answered the wrong number of outcomes",
+            subject=messages[0].subject,
+            size=len(messages),
+            outcomes=len(outcomes),
+        )
+        return ["nak"] * len(messages)
+    return outcomes
+
+
+def check_acknowledge(acknowledge: bool, durable: str | None, queue: str | None) -> None:
+    """Raise ``ValueError`` for an unacknowledged durable or queue consumer: shared consumers
+    distribute work, and work must not get lost when a handler fails."""
+    if not acknowledge and (durable is not None or queue is not None):
+        msg = "acknowledge=False is for live views only, not for durable or queue consumers"
+        raise ValueError(msg)
+
+
+def check_batch_limits(max_batch: int, max_wait_seconds: float) -> None:
+    """Raise ``ValueError`` for a batch size below 1 or a negative or long linger (> 5 s)."""
+    if max_batch < 1:
+        msg = "max_batch must be at least 1"
+        raise ValueError(msg)
+    if not 0 <= max_wait_seconds <= MAX_BATCH_WAIT_SECONDS:
+        msg = f"max_wait_seconds must be between 0 and {MAX_BATCH_WAIT_SECONDS:g}"
+        raise ValueError(msg)
+
+
+MAX_BATCH_WAIT_SECONDS = 5.0
+"""Longest linger of a batch subscription (well below the acknowledgement wait)."""
+
+
+class _Stop:
+    """Marks the end of a :class:`BatchWorker`'s queue."""
+
+
+_STOP = _Stop()
+
+
+class BatchWorker[T]:
+    """Collects delivered messages and hands them to a batch handler, one batch at a time.
+
+    ``put`` (from the transport's delivery callback) never waits; the worker takes everything
+    queued (up to ``max_batch``), lingers up to ``max_wait_seconds`` for more, runs the handler
+    and then settles each message with its outcome, in delivery order. Batches never overlap,
+    so messages of one subscription are handled in the order they arrived.
+    :meth:`stop` lets the worker handle and settle everything queued before it, within a time
+    limit; what is not settled then is redelivered by the server.
+    """
+
+    def __init__(
+        self,
+        handler: BatchHandler,
+        *,
+        to_message: Callable[[T], BusMessage],
+        settle: Callable[[T, BusMessage, Outcome], Awaitable[None]],
+        max_batch: int,
+        max_wait_seconds: float,
+        name: str,
+    ) -> None:
+        check_batch_limits(max_batch, max_wait_seconds)
+        self._handler = handler
+        self._to_message = to_message
+        self._settle = settle
+        self._max_batch = max_batch
+        self._max_wait = max_wait_seconds
+        self._name = name
+        self._queue: asyncio.Queue[T | _Stop] = asyncio.Queue()
+        self._task: asyncio.Task[None] | None = None
+        self.batches = 0
+        """Batches handled so far (tests, metrics)."""
+
+    def start(self) -> None:
+        """Start the worker task (once)."""
+        if self._task is None:
+            self._task = asyncio.create_task(self._run(), name=f"batch-{self._name}")
+
+    def put(self, item: T) -> None:
+        """Queue a delivered message."""
+        self._queue.put_nowait(item)
+
+    @property
+    def queued(self) -> int:
+        """Messages waiting for the next batch."""
+        return self._queue.qsize()
+
+    async def stop(self, timeout_seconds: float) -> None:
+        """Handle and settle what was queued, then end the worker. Idempotent."""
+        task = self._task
+        if task is None or task.done():
+            return
+        self._queue.put_nowait(_STOP)
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                await asyncio.shield(task)
+        except TimeoutError:
+            _log.warning(
+                "batch worker did not finish in time, the server redelivers the rest",
+                subscription=self._name,
+                queued=self._queue.qsize(),
+            )
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _next(self, deadline: float) -> T | _Stop | None:
+        """The next queued item, waiting until ``deadline`` at most; None when none came."""
+        try:
+            return self._queue.get_nowait()
+        except asyncio.QueueEmpty:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return None
+        try:
+            async with asyncio.timeout(remaining):
+                return await self._queue.get()
+        except TimeoutError:
+            return None
+
+    async def _run(self) -> None:
+        loop = asyncio.get_running_loop()
+        while True:
+            first = await self._queue.get()
+            if isinstance(first, _Stop):
+                return
+            items: list[T] = [first]
+            stopping = False
+            deadline = loop.time() + self._max_wait
+            while len(items) < self._max_batch:
+                item = await self._next(deadline)
+                if item is None:
+                    break
+                if isinstance(item, _Stop):
+                    stopping = True
+                    break
+                items.append(item)
+            await self._handle(items)
+            if stopping:
+                return
+
+    async def _handle(self, items: list[T]) -> None:
+        messages = [self._to_message(item) for item in items]
+        outcomes = await dispatch_batch(self._handler, messages)
+        self.batches += 1
+        for item, message, outcome in zip(items, messages, outcomes, strict=True):
+            try:
+                await self._settle(item, message, outcome)
+            except Exception as exc:
+                _log.warning("settling a message failed", subject=message.subject, error=repr(exc))
+
+
+class BatchNakError(Exception):
+    """A batch handler asked for the redelivery of a message (the single-message adapter)."""
+
+
+def one_at_a_time(handler: BatchHandler) -> MessageHandler:
+    """A batch handler as a :data:`MessageHandler` that hands it batches of one message (the
+    in-memory bus, which delivers synchronously inside ``publish``)."""
+
+    async def handle(message: BusMessage) -> None:
+        outcome = (await dispatch_batch(handler, [message]))[0]
+        if outcome == "term":
+            raise DropMessage("dropped by the batch handler")
+        if outcome == "nak":
+            raise BatchNakError("the batch handler asked for a redelivery")
+
+    return handle
 
 
 def encode_payload(payload: bytes | BaseModel) -> bytes:

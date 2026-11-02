@@ -59,7 +59,7 @@ Creating a schedule needs the plan feature `schedules` (403 `urn:mowdeck:problem
 | produced | `event.scheduler.schedule.disabled` | JetStream `EVENTS` | `EventEnvelope[ScheduleDisabled]` | the owner lost `can_control`, or the target was removed |
 | request | `fleet.targets.resolve` | core NATS (Fleet) | `ResolveTargetRequest` / `ResolveTargetReply` | the target's mowers, time zone and site coordinates |
 | request | `fleet.commands.issue` | core NATS (Fleet) | `IssueCommandRequest` / `IssueCommandReply` | `start_mow` and `return_to_dock` on behalf of the owner (or the caller of a manual run) |
-| consumed | `telemetry.mower.*` | JetStream, durable and queue `scheduler-states` | `MowerState` | latest activity (busy check) and position |
+| consumed | `telemetry.mower.*` | JetStream, durable and queue `scheduler-states` | `MowerState` | latest activity (busy check) and position; an activity change is written at once, an unchanged activity at most every 30 s or after a move of 100 m (the follow-up and the weather need no more; one write per state was most of the Scheduler's work per state, `docs/ops/load-testing.md`) |
 | consumed | `device.mower.>` | JetStream `DEVICE`, durable and queue `scheduler-device` | `MowerMapSnapshot` | map origin (location) and area ids; capability snapshots are ignored here |
 | consumed | `device.mower.*.capabilities` | JetStream `DEVICE`, durable and queue `scheduler-capabilities`, newest message per subject first | `MowerCapabilitiesSnapshot` | what a schedule may set for the mower (check when saved, fit at fire time) |
 | consumed | `event.identity.grants.changed` | JetStream, every instance | `GrantsChanged` | drops cached decisions, so a revoked right stops the next firing |

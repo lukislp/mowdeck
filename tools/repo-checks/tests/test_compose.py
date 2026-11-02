@@ -346,6 +346,16 @@ def test_demo_publishes_only_the_gateway_http_port(repo_root: Path) -> None:
         assert not any(line.startswith(f"{variable}=") for line in example), variable
 
 
+def test_demo_simulator_state_period_is_off_unless_set(repo_root: Path) -> None:
+    """The demo's simulated mowers report once a simulation step unless
+    DEMO_SIM_STATE_PERIOD_SECONDS asks for fewer reports (docs/ops/load-testing.md)."""
+    compose_dir = _compose_dir(repo_root)
+    text = (compose_dir / "docker-compose.demo.yml").read_text("utf-8")
+    demo = yaml.load(text, Loader=_ComposeLoader)["services"]  # noqa: S506
+    environment = demo["device-gateway"]["environment"]
+    assert environment["MOWDECK_SIM_STATE_PERIOD_SECONDS"] == "${DEMO_SIM_STATE_PERIOD_SECONDS:-0}"
+
+
 def test_every_rate_limit_counts_the_configured_client_entry(repo_root: Path) -> None:
     """Every Traefik rate limit of every Compose file counts the X-Forwarded-For entry of
     GATEWAY_CLIENT_IP_DEPTH (default 0: the TCP peer, as without a source criterion), so

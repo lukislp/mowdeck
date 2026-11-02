@@ -3,6 +3,7 @@
 from mowdeck_service_kit.bus.base import (
     MSG_ID_HEADER,
     PRIORITY_HEADER,
+    BatchHandler,
     BusError,
     BusMessage,
     BusNotConnectedError,
@@ -10,6 +11,7 @@ from mowdeck_service_kit.bus.base import (
     EventBus,
     MessageHandler,
     NoRespondersError,
+    Outcome,
     PublishResult,
     RequestTimeoutError,
     Subscription,
@@ -23,6 +25,7 @@ from mowdeck_service_kit.bus.memory import InMemoryBus
 __all__ = [
     "MSG_ID_HEADER",
     "PRIORITY_HEADER",
+    "BatchHandler",
     "BusError",
     "BusMessage",
     "BusNotConnectedError",
@@ -32,6 +35,7 @@ __all__ = [
     "JetStreamBus",
     "MessageHandler",
     "NoRespondersError",
+    "Outcome",
     "PublishResult",
     "RequestTimeoutError",
     "Subscription",

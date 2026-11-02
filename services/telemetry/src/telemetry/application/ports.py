@@ -47,6 +47,36 @@ class ThinResult:
     deleted: int
 
 
+@dataclass(frozen=True, slots=True)
+class IngestRows:
+    """What the ingestion of a batch of states reads first, for every mower of the batch."""
+
+    owners: dict[UUID, UUID]
+    """The directory's account per mower (mowers the directory does not know are missing)."""
+    latest: dict[UUID, LatestRow]
+    """The latest row per mower, locked against concurrent writers. Its ``state`` document may
+    be left empty: the write rules read only the keys and fingerprints."""
+    health: dict[UUID, HealthRow]
+    """The health totals per mower, locked against concurrent writers."""
+
+
+@dataclass(slots=True)
+class StateWrites:
+    """Everything a batch of states writes, applied by :meth:`Tx.write_states` at once."""
+
+    history: list[HistoryRow]
+    positions: list[PositionRow]
+    latest: dict[UUID, LatestRow]
+    """The last latest row per mower (the batch's earlier ones are superseded)."""
+    health: dict[UUID, HealthRow]
+    daily: dict[tuple[UUID, date], DailyRow]
+
+    @classmethod
+    def empty(cls) -> "StateWrites":
+        """Nothing to write yet."""
+        return cls(history=[], positions=[], latest={}, health={}, daily={})
+
+
 class RetentionTarget(StrEnum):
     """The tables the retention job trims."""
 
@@ -112,6 +142,18 @@ class Tx(Protocol):
 
     async def add_blade_change(self, change: BladeChange) -> None:
         """Record a blade change."""
+        ...
+
+    async def ingest_rows(self, mower_ids: Collection[UUID]) -> IngestRows:
+        """Directory accounts, latest rows and health totals of these mowers; the latest rows
+        and the health totals locked (in mower id order, so concurrent batches never
+        deadlock)."""
+        ...
+
+    async def write_states(self, writes: StateWrites) -> None:
+        """Apply what a batch of states writes: history and positions appended (repeated keys
+        ignored), latest rows upserted (never over a newer ``observed_at``), health and daily
+        totals upserted (the caller holds the row locks)."""
         ...
 
 

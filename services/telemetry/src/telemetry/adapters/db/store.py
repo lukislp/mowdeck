@@ -16,12 +16,20 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_service_kit import get_logger
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from telemetry.adapters.db import tables
 from telemetry.adapters.db.reads import read_connection
-from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
+from telemetry.application.ports import (
+    IngestRows,
+    RetentionScope,
+    RetentionTarget,
+    StateWrites,
+    ThinResult,
+    Tx,
+)
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
 from telemetry.domain.models import (
     CommandEvent,
@@ -189,6 +197,79 @@ _POSITION_COLUMNS = tuple(
 """The columns of ``mower_positions`` in the field order of :class:`PositionRow`."""
 
 
+def _upsert_statement(
+    table: sa.Table, row_type: type, keys: tuple[str, ...], *, newer_only: bool = False
+) -> Any:
+    """``INSERT ... ON CONFLICT (keys) DO UPDATE SET <field> = excluded.<field>`` for every
+    other field of ``row_type`` (a dataclass whose fields are columns), built once and executed
+    with one parameter dict per row (:func:`_fields`).
+
+    Building the statement per message (``values(...)``, ``excluded``) was a large share of the
+    ingestion's CPU (docs/ops/load-testing.md, "Ingestion cost"); a prebuilt statement also hits
+    SQLAlchemy's compiled cache at once. Columns that are no field keep their stored value.
+    ``newer_only`` keeps a newer stored row (``WHERE observed_at <= excluded.observed_at``)."""
+    insert = pg_insert(table)
+    names = [f.name for f in dataclasses.fields(row_type) if f.name not in keys]
+    return insert.on_conflict_do_update(
+        index_elements=list(keys),
+        set_={name: insert.excluded[name] for name in names},
+        where=table.c.observed_at <= insert.excluded.observed_at if newer_only else None,
+    )
+
+
+def _insert_new(table: sa.Table, keys: tuple[str, ...]) -> Any:
+    """``INSERT ... ON CONFLICT (keys) DO NOTHING``, built once (redeliveries change nothing)."""
+    return pg_insert(table).on_conflict_do_nothing(index_elements=list(keys))
+
+
+_PUT_LATEST = _upsert_statement(tables.mower_latest, LatestRow, ("mower_id",), newer_only=True)
+_PUT_HEALTH = _upsert_statement(tables.mower_health, HealthRow, ("mower_id",))
+_PUT_DAILY = _upsert_statement(tables.mower_health_daily, DailyRow, ("mower_id", "day"))
+_PUT_SNAPSHOT = _upsert_statement(
+    tables.mower_snapshots, SnapshotRow, ("mower_id", "kind"), newer_only=True
+)
+_ADD_HISTORY = _insert_new(tables.mower_history, ("mower_id", "observed_at"))
+_ADD_POSITION = _insert_new(tables.mower_positions, ("mower_id", "observed_at"))
+_ADD_COMMAND_EVENT = _insert_new(tables.command_timeline, ("command_id", "status"))
+_ADD_BLADE_CHANGE = _insert_new(tables.blade_changes, ("id",))
+
+_IDS = sa.bindparam("ids", type_=ARRAY(sa.Uuid()))
+_MOWER = sa.bindparam("mower_id", type_=sa.Uuid())
+
+_OWNERS = sa.select(tables.mower_directory.c.mower_id, tables.mower_directory.c.account_id).where(
+    tables.mower_directory.c.mower_id == sa.any_(_IDS)
+)
+_LATEST_KEYS = tuple(c for c in tables.mower_latest.columns if c.name != "state")
+_LATEST_LOCKED = (
+    sa.select(*_LATEST_KEYS)
+    .where(tables.mower_latest.c.mower_id == sa.any_(_IDS))
+    .order_by(tables.mower_latest.c.mower_id)
+    .with_for_update()
+)
+"""The latest rows of a batch's mowers, locked, without the stored state document: the write
+rules need only the keys and fingerprints, and decoding the documents was the largest cost of
+reading them."""
+_HEALTH_LOCKED = (
+    sa.select(tables.mower_health)
+    .where(tables.mower_health.c.mower_id == sa.any_(_IDS))
+    .order_by(tables.mower_health.c.mower_id)
+    .with_for_update()
+)
+_LATEST_ONE = (
+    sa.select(tables.mower_latest).where(tables.mower_latest.c.mower_id == _MOWER).with_for_update()
+)
+_HEALTH_ONE = (
+    sa.select(tables.mower_health).where(tables.mower_health.c.mower_id == _MOWER).with_for_update()
+)
+_DIRECTORY_ACCOUNT = sa.select(tables.mower_directory.c.account_id).where(
+    tables.mower_directory.c.mower_id == _MOWER
+)
+_DAILY = sa.select(tables.mower_health_daily).where(
+    tables.mower_health_daily.c.mower_id == _MOWER,
+    tables.mower_health_daily.c.day == sa.bindparam("day", type_=sa.Date()),
+)
+
+
 def _latest(row: Any) -> LatestRow:
     return LatestRow(**dict(row._mapping))
 
@@ -198,75 +279,55 @@ class _SqlTx:
         self._conn = conn
 
     async def latest(self, mower_id: UUID) -> LatestRow | None:
-        result = await self._conn.execute(
-            sa.select(tables.mower_latest)
-            .where(tables.mower_latest.c.mower_id == mower_id)
-            .with_for_update()
-        )
-        row = result.first()
+        row = (await self._conn.execute(_LATEST_ONE, {"mower_id": mower_id})).first()
         return _latest(row) if row else None
 
     async def put_latest(self, row: LatestRow) -> None:
-        values = {
-            "mower_id": row.mower_id,
-            "account_id": row.account_id,
-            "observed_at": row.observed_at,
-            "received_at": row.received_at,
-            "activity": row.activity,
-            "battery_percent": row.battery_percent,
-            "state": row.state,
-            "history_written_at": row.history_written_at,
-            "history_fingerprint": row.history_fingerprint,
-            "position_fingerprint": row.position_fingerprint,
-        }
-        insert = pg_insert(tables.mower_latest).values(**values)
-        await self._conn.execute(
-            insert.on_conflict_do_update(
-                index_elements=[tables.mower_latest.c.mower_id],
-                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
-                where=tables.mower_latest.c.observed_at <= insert.excluded.observed_at,
-            )
-        )
+        await self._conn.execute(_PUT_LATEST, _fields(row))
 
     async def add_history(self, row: HistoryRow) -> None:
-        await self._conn.execute(
-            pg_insert(tables.mower_history)
-            .values(**_fields(row))
-            .on_conflict_do_nothing(index_elements=["mower_id", "observed_at"])
-        )
+        await self._conn.execute(_ADD_HISTORY, _fields(row))
 
     async def add_position(self, row: PositionRow) -> None:
-        await self._conn.execute(
-            pg_insert(tables.mower_positions)
-            .values(**_fields(row))
-            .on_conflict_do_nothing(index_elements=["mower_id", "observed_at"])
-        )
+        await self._conn.execute(_ADD_POSITION, _fields(row))
 
     async def add_command_event(self, event: CommandEvent) -> None:
-        await self._conn.execute(
-            pg_insert(tables.command_timeline)
-            .values(**_fields(event))
-            .on_conflict_do_nothing(index_elements=["command_id", "status"])
-        )
+        await self._conn.execute(_ADD_COMMAND_EVENT, _fields(event))
 
     async def put_snapshot(self, row: SnapshotRow) -> None:
-        values = _fields(row)
-        insert = pg_insert(tables.mower_snapshots).values(**values)
-        await self._conn.execute(
-            insert.on_conflict_do_update(
-                index_elements=["mower_id", "kind"],
-                set_={k: insert.excluded[k] for k in values if k not in ("mower_id", "kind")},
-                where=tables.mower_snapshots.c.observed_at <= insert.excluded.observed_at,
-            )
-        )
+        await self._conn.execute(_PUT_SNAPSHOT, _fields(row))
 
     async def directory_account(self, mower_id: UUID) -> UUID | None:
-        result = await self._conn.execute(
-            sa.select(tables.mower_directory.c.account_id).where(
-                tables.mower_directory.c.mower_id == mower_id
-            )
+        result = await self._conn.execute(_DIRECTORY_ACCOUNT, {"mower_id": mower_id})
+        account: UUID | None = result.scalar_one_or_none()
+        return account
+
+    async def ingest_rows(self, mower_ids: Collection[UUID]) -> IngestRows:
+        ids = sorted(set(mower_ids))
+        if not ids:
+            return IngestRows(owners={}, latest={}, health={})
+        params = {"ids": ids}
+        owners = await self._conn.execute(_OWNERS, params)
+        latest = await self._conn.execute(_LATEST_LOCKED, params)
+        health = await self._conn.execute(_HEALTH_LOCKED, params)
+        return IngestRows(
+            owners=dict(owners.all()),
+            latest={row.mower_id: LatestRow(**row._mapping, state={}) for row in latest.all()},
+            health={row.mower_id: HealthRow(**dict(row._mapping)) for row in health.all()},
         )
-        return result.scalar_one_or_none()
+
+    async def write_states(self, writes: StateWrites) -> None:
+        """One statement per table, many rows each (``executemany``)."""
+        batches: tuple[tuple[Any, list[Any]], ...] = (
+            (_ADD_HISTORY, writes.history),
+            (_ADD_POSITION, writes.positions),
+            (_PUT_LATEST, list(writes.latest.values())),
+            (_PUT_HEALTH, list(writes.health.values())),
+            (_PUT_DAILY, list(writes.daily.values())),
+        )
+        for statement, rows in batches:
+            if rows:
+                await self._conn.execute(statement, [_fields(row) for row in rows])
 
     async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
         insert = pg_insert(tables.mower_directory).values(**_fields(entry))
@@ -311,46 +372,21 @@ class _SqlTx:
             await self._conn.execute(sa.delete(table).where(table.c.mower_id == mower_id))
 
     async def health(self, mower_id: UUID) -> HealthRow | None:
-        result = await self._conn.execute(
-            sa.select(tables.mower_health)
-            .where(tables.mower_health.c.mower_id == mower_id)
-            .with_for_update()
-        )
-        row = result.first()
+        row = (await self._conn.execute(_HEALTH_ONE, {"mower_id": mower_id})).first()
         return HealthRow(**dict(row._mapping)) if row else None
 
     async def put_health(self, row: HealthRow) -> None:
-        await _upsert(self._conn, tables.mower_health, _fields(row), ["mower_id"])
+        await self._conn.execute(_PUT_HEALTH, _fields(row))
 
     async def daily(self, mower_id: UUID, day: date) -> DailyRow | None:
-        d = tables.mower_health_daily.c
-        result = await self._conn.execute(
-            sa.select(tables.mower_health_daily).where(d.mower_id == mower_id, d.day == day)
-        )
-        row = result.first()
+        row = (await self._conn.execute(_DAILY, {"mower_id": mower_id, "day": day})).first()
         return DailyRow(**dict(row._mapping)) if row else None
 
     async def put_daily(self, row: DailyRow) -> None:
-        await _upsert(self._conn, tables.mower_health_daily, _fields(row), ["mower_id", "day"])
+        await self._conn.execute(_PUT_DAILY, _fields(row))
 
     async def add_blade_change(self, change: BladeChange) -> None:
-        await self._conn.execute(
-            pg_insert(tables.blade_changes)
-            .values(**_fields(change))
-            .on_conflict_do_nothing(index_elements=["id"])
-        )
-
-
-async def _upsert(
-    conn: AsyncConnection, table: sa.Table, values: dict[str, Any], keys: list[str]
-) -> None:
-    insert = pg_insert(table).values(**values)
-    await conn.execute(
-        insert.on_conflict_do_update(
-            index_elements=keys,
-            set_={k: insert.excluded[k] for k in values if k not in keys},
-        )
-    )
+        await self._conn.execute(_ADD_BLADE_CHANGE, _fields(change))
 
 
 def _fields(row: Any) -> dict[str, Any]:

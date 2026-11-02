@@ -33,10 +33,15 @@ from mowdeck_service_kit import get_logger
 from notifications.application.context import NotificationsConfig
 from notifications.application.fanout import Fanout
 from notifications.application.live_activity import LiveActivities
-from notifications.application.ports import Clock, Store
+from notifications.application.ports import Clock, StateContext, Store, Tx
 from notifications.domain.errors import AccountMismatchError
 from notifications.domain.geofence import Fence, MowerFence
-from notifications.domain.models import DirectoryEntry, MaintenanceWindow, NotificationEvent
+from notifications.domain.models import (
+    DirectoryEntry,
+    MaintenanceWindow,
+    MowerWatch,
+    NotificationEvent,
+)
 from notifications.domain.rules import (
     check_offline,
     observe_blade_hours,
@@ -53,6 +58,9 @@ _log = get_logger("notifications.watcher")
 
 WINDOW_CACHE = timedelta(seconds=2)
 """How long a replica reuses the maintenance window it read (states come every 10 s per mower)."""
+
+FENCE_CACHE_SIZE = 4096
+"""Most parsed geofences a replica keeps (cleared when full)."""
 
 COMMAND_RESOLUTION = timedelta(seconds=5)
 """A replica skips a command less than this newer than the last one it recorded for the mower
@@ -77,11 +85,14 @@ class Watcher:
         self._clock = clock
         self._recorded: dict[tuple[UUID, bool], datetime] = {}
         self._window: tuple[datetime, MaintenanceWindow | None] | None = None
+        self._fences: dict[UUID, tuple[datetime, Fence]] = {}
+        """Parsed geofences by mower with the ``observed_at`` they were stored with."""
 
     def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
         """Drop the command throttle of these mowers (demo sandbox purge)."""
         gone = set(mower_ids)
         self._recorded = {k: v for k, v in self._recorded.items() if k[0] not in gone}
+        self._fences = {k: v for k, v in self._fences.items() if k not in gone}
 
     async def _maintenance(self, now: datetime) -> MaintenanceWindow | None:
         """The maintenance window, read at most every :data:`WINDOW_CACHE`."""
@@ -91,6 +102,21 @@ class Watcher:
         window = await self._store.maintenance_window()
         self._window = (now, window)
         return window
+
+    async def _fence(self, tx: Tx, mower_id: UUID, context: StateContext) -> Fence | None:
+        """The mower's parsed geofence, parsed once per stored version (``observed_at``)."""
+        if context.fence_at is None:
+            return None
+        cached = self._fences.get(mower_id)
+        if cached is not None and cached[0] == context.fence_at:
+            return cached[1]
+        stored = await tx.geofence(mower_id)
+        if stored is None:
+            return None
+        if len(self._fences) >= FENCE_CACHE_SIZE:
+            self._fences.clear()
+        self._fences[mower_id] = (stored.observed_at, stored.fence)
+        return stored.fence
 
     async def _check_account(self, mower_id: UUID, account_id: UUID, what: str) -> None:
         entry = await self._store.directory_entry(mower_id)
@@ -102,26 +128,71 @@ class Watcher:
         """Apply a state; returns the derived events (already fanned out).
 
         The gateway's offline state after a lost link (``connected = false``, ADR 0040) proves
-        no contact and is skipped: ``mower.disconnected`` drives the offline timer.
+        no contact and is skipped: ``mower.disconnected`` drives the offline timer. Raises
+        :class:`AccountMismatchError` when the state names another account than the directory.
         """
-        if not state.connected:
-            return []
-        await self._check_account(state.mower_id, state.account_id, "state")
-        stored = await self._store.geofence(state.mower_id)
-        fence = (
-            stored.fence if stored is not None and stored.account_id == state.account_id else None
-        )
-        now = self._clock()
-        window = await self._maintenance(now)
+        results, events = await self._apply_states([state])
+        if isinstance(results[0], AccountMismatchError):
+            raise results[0]
+        return events
+
+    async def on_states(self, states: Sequence[MowerState]) -> list[AccountMismatchError | None]:
+        """Apply a batch of states, each exactly as :meth:`on_state` would one after the other;
+        one result per state (an :class:`AccountMismatchError` for a state that was skipped).
+
+        One transaction for the batch (ADR 0078): each mower's directory account, geofence key
+        and watch are read once (the watches locked in mower id order, so concurrent batches
+        never deadlock), the rules run state by state in memory, each changed watch is written
+        once. The derived events are fanned out after the commit, in order.
+        """
+        results, _ = await self._apply_states(states)
+        return results
+
+    async def _apply_states(
+        self, states: Sequence[MowerState]
+    ) -> tuple[list[AccountMismatchError | None], list[NotificationEvent]]:
+        results: list[AccountMismatchError | None] = []
+        events: list[NotificationEvent] = []
+        applied: list[MowerState] = []
+        live = [s for s in states if s.connected]
+        if not live:
+            return [None] * len(states), []
         async with self._store.transaction() as tx:
-            watch, events = observe_state(
-                await tx.watch(state.mower_id), state, now, self._config.rules, fence, window
-            )
-            await tx.put_watch(watch)
+            mowers = sorted({s.mower_id for s in live})
+            contexts = {m: await tx.state_context(m) for m in mowers}
+            watches = {m: await tx.watch(m) for m in mowers}
+            changed: dict[UUID, MowerWatch] = {}
+            for state in states:
+                if not state.connected:
+                    results.append(None)
+                    continue
+                context = contexts[state.mower_id]
+                if context.owner is not None and context.owner != state.account_id:
+                    results.append(
+                        AccountMismatchError("the state's account differs from the mower directory")
+                    )
+                    continue
+                now = self._clock()
+                window = await self._maintenance(now)
+                fence = (
+                    await self._fence(tx, state.mower_id, context)
+                    if context.fence_account == state.account_id
+                    else None
+                )
+                watch, derived = observe_state(
+                    watches[state.mower_id], state, now, self._config.rules, fence, window
+                )
+                watches[state.mower_id] = changed[state.mower_id] = watch
+                events.extend(derived)
+                applied.append(state)
+                results.append(None)
+            for watch in changed.values():
+                await tx.put_watch(watch)
         await self._fanout.dispatch(events)
         if self._live is not None:
-            await self._live.on_state(state)
-        return events
+            for state in applied:
+                await self._live.on_state(state)
+        return results, events
 
     async def on_connection(
         self, mower_id: UUID, account_id: UUID, *, connected: bool, at: datetime
@@ -178,6 +249,7 @@ class Watcher:
                 snapshot.mower_id,
                 {a.id: a.name for a in snapshot.map.areas if a.name},
             )
+        self._fences.pop(snapshot.mower_id, None)
         fence = Fence.from_map(snapshot.map)
         if fence is None:
             _log.info(

@@ -70,7 +70,7 @@ A browser client: open the socket, send `auth`, wait for `ready`, send `subscrib
 
 | Direction | Subject | Kind | Payload | Notes |
 | --- | --- | --- | --- | --- |
-| consumed | `telemetry.mower.*` | JetStream `TELEMETRY`, ephemeral push consumer, deliver new, no queue group | `MowerState` | every instance gets every state |
+| consumed | `telemetry.mower.*` | JetStream `TELEMETRY`, ephemeral push consumer, deliver new, no queue group, no acknowledgements (`AckPolicy.NONE`, ADR 0078) | `MowerState` | every instance gets every state; a state the fan-out could not handle is not redelivered (the next one follows) |
 | consumed | `command.result.mower.*` | JetStream `COMMANDS`, ephemeral, deliver new, no queue group | `CommandResult` | |
 | consumed | `event.identity.grants.changed` | JetStream `EVENTS`, ephemeral | `EventEnvelope[GrantsChanged]` | drops cached decisions of the subjects, then re-checks their sockets (subscriptions and drive sessions) |
 | consumed | `event.notifications.>` | JetStream `EVENTS`, ephemeral, deliver new | `EventEnvelope[NotificationSent]` (`notifications.sent`), `EventEnvelope[NotificationRaised]` (`notifications.raised`) | `notification` to the person, or to the account's API tokens with `notifications.view`; other types ignored |

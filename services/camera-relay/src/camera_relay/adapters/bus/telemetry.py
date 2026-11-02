@@ -87,6 +87,7 @@ async def subscribe_mower_states(
         ALL_TELEMETRY,
         telemetry_handler(reports, clock, stale_after=stale_after),
         last_per_subject=True,
+        acknowledge=False,  # the next state replaces a lost one (ADR 0078)
     )
     _log.info("reading mower states for the relay's limits", subject=ALL_TELEMETRY)
     return subscription

@@ -76,6 +76,9 @@ def test_the_map_and_the_code_agree(gen: ModuleType, repo_root: Path) -> None:
     assert ("publish", "event.identity.session.new_device") in used["identity"]
     assert ("consume", "event.identity.grants.changed") in used["billing"]
     assert ("publish", "entitlements.check") in used["planner"]
+    # Batch subscriptions (ADR 0078) consume like subscriptions.
+    assert ("consume", "telemetry.mower.*") in used["telemetry"]
+    assert ("consume", "telemetry.mower.*") in used["notifications"]
 
 
 def test_drift_reports_both_directions(gen: ModuleType) -> None:

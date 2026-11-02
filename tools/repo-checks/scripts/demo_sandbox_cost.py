@@ -15,8 +15,14 @@ Three phases, each sampled with ``docker stats`` every few seconds over ``--seco
 3. **active**: the same visitors with a live socket each, subscribed to their three mowers, and
    one of them mowing per sandbox (a ``start`` command), like a visitor watching the demo.
 
-Prints the mean CPU (percent of one core) and memory of every container per phase and the
-difference per sandbox. The numbers in ADR 0076 and docs/ops/demo.md came from this script.
+Prints the mean CPU (percent of one core) and memory of every container per phase, the
+difference per sandbox and service, and per phase the database's write rate (transactions and
+rows written a second per database, WAL bytes a second, from ``pg_stat_database`` and
+``pg_stat_wal`` through ``docker exec`` into the stack's ``postgres`` container) and the NATS
+message rate (``/varz``, asked from a throwaway curl container on the stack's network).
+``--hold`` keeps the watched sandboxes running that many seconds after the measurement, e.g. to
+attach a profiler. The numbers in ADR 0076, docs/ops/demo.md and docs/ops/load-testing.md came
+from this script.
 """
 
 import argparse
@@ -80,21 +86,116 @@ def sample(project: str) -> dict[str, tuple[float, float]]:
     return found
 
 
-async def measure(project: str, seconds: float) -> dict[str, tuple[float, float]]:
-    """Mean CPU and memory per service over ``seconds``."""
+_PG_COUNTERS = (
+    "SELECT datname, xact_commit, tup_inserted, tup_updated, tup_deleted"
+    " FROM pg_stat_database WHERE datname IS NOT NULL"
+    " UNION ALL SELECT '~wal', wal_bytes::bigint, wal_records, 0, 0 FROM pg_stat_wal"
+)
+
+
+def pg_counters(project: str) -> dict[str, tuple[int, int, int, int]]:
+    """Cumulative ``{database: (commits, inserted, updated, deleted)}`` and ``~wal``:
+    ``(bytes, records, 0, 0)``; empty when the database cannot be asked."""
+    done = subprocess.run(  # noqa: S603 - fixed arguments, the project name is checked
+        [  # noqa: S607
+            "docker",
+            "exec",
+            f"{project}-postgres-1",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-AtF,",
+            "-c",
+            _PG_COUNTERS,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    found: dict[str, tuple[int, int, int, int]] = {}
+    for line in done.stdout.splitlines():
+        name, *numbers = line.split(",")
+        if len(numbers) == 4:
+            a, b, c, d = (int(n) for n in numbers)
+            found[name] = (a, b, c, d)
+    return found
+
+
+CURL_IMAGE = "curlimages/curl:8.11.1"
+
+
+def nats_messages(project: str) -> int | None:
+    """NATS's cumulative ``in_msgs`` (``/varz`` on the stack's network), None when unknown."""
+    done = subprocess.run(  # noqa: S603 - fixed arguments, the project name is checked
+        [  # noqa: S607
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            project,
+            CURL_IMAGE,
+            "-s",
+            "http://nats:8222/varz",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        return int(json.loads(done.stdout)["in_msgs"])
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        return None
+
+
+@dataclass
+class Phase:
+    """What one phase measured: CPU and memory per service, and the write rates."""
+
+    services: dict[str, tuple[float, float]]
+    seconds: float
+    pg: dict[str, tuple[float, float, float, float]]
+    """Per second: ``{database: (commits, inserted, updated, deleted)}``, ``~wal`` in bytes."""
+    nats_per_second: float | None
+
+
+async def measure(project: str, seconds: float) -> Phase:
+    """Mean CPU and memory per service over ``seconds``, and the write rates meanwhile."""
     rows: list[dict[str, tuple[float, float]]] = []
-    deadline = time.monotonic() + seconds
+    pg_before = await asyncio.to_thread(pg_counters, project)
+    nats_before = await asyncio.to_thread(nats_messages, project)
+    started = time.monotonic()
+    deadline = started + seconds
     while time.monotonic() < deadline:
         rows.append(await asyncio.to_thread(sample, project))
         await asyncio.sleep(2)
+    pg_after = await asyncio.to_thread(pg_counters, project)
+    nats_after = await asyncio.to_thread(nats_messages, project)
+    took = time.monotonic() - started
     services = sorted({s for row in rows for s in row})
-    return {
-        s: (
-            statistics.fmean(r[s][0] for r in rows if s in r),
-            statistics.fmean(r[s][1] for r in rows if s in r),
-        )
-        for s in services
-    }
+    pg: dict[str, tuple[float, float, float, float]] = {}
+    for name, (a, b, c, d) in pg_after.items():
+        if name in pg_before:
+            a0, b0, c0, d0 = pg_before[name]
+            pg[name] = ((a - a0) / took, (b - b0) / took, (c - c0) / took, (d - d0) / took)
+    nats = (
+        (nats_after - nats_before) / took
+        if nats_after is not None and nats_before is not None
+        else None
+    )
+    return Phase(
+        services={
+            s: (
+                statistics.fmean(r[s][0] for r in rows if s in r),
+                statistics.fmean(r[s][1] for r in rows if s in r),
+            )
+            for s in services
+        },
+        seconds=took,
+        pg=pg,
+        nats_per_second=nats,
+    )
 
 
 async def enter(base: str) -> Visitor:
@@ -148,13 +249,37 @@ async def watch(base: str, visitor: Visitor) -> None:
             print(f"  start refused: {started.status_code} {started.text[:200]}", flush=True)
 
 
-def report(name: str, rows: dict[str, tuple[float, float]]) -> tuple[float, float]:
+def report(name: str, phase: Phase) -> tuple[float, float]:
+    rows = phase.services
     cpu = sum(c for c, _ in rows.values())
     mem = sum(m for _, m in rows.values())
     print(f"\n{name}: CPU {cpu:.1f} % of one core, memory {mem:.0f} MiB")
     for service, (c, m) in sorted(rows.items(), key=lambda item: -item[1][0]):
         print(f"  {service:<16} {c:6.1f} %  {m:7.1f} MiB")
+    if phase.pg:
+        wal = phase.pg.get("~wal")
+        print("  database writes per second (commits, rows inserted / updated / deleted):")
+        for db, (commits, ins, upd, dele) in sorted(phase.pg.items()):
+            if db != "~wal" and commits >= 0.05:
+                print(f"    {db:<16} {commits:7.1f}  {ins:7.1f} / {upd:7.1f} / {dele:7.1f}")
+        if wal is not None:
+            print(f"    WAL              {wal[0] / 1024:7.1f} KiB/s, {wal[1]:7.1f} records/s")
+    if phase.nats_per_second is not None:
+        print(f"  NATS messages in  {phase.nats_per_second:7.1f} /s")
     return cpu, mem
+
+
+def per_sandbox(base: Phase, active: Phase, n: int) -> None:
+    """The difference per sandbox and service between the baseline and a phase."""
+    print("\nper watched sandbox and service (percent of one core):")
+    services = sorted(
+        active.services,
+        key=lambda s: -(active.services[s][0] - base.services.get(s, (0.0, 0.0))[0]),
+    )
+    for service in services:
+        delta = (active.services[service][0] - base.services.get(service, (0.0, 0.0))[0]) / n
+        if abs(delta) >= 0.01:
+            print(f"  {service:<16} {delta:6.2f} %")
 
 
 async def main() -> int:
@@ -163,27 +288,45 @@ async def main() -> int:
     parser.add_argument("--project", default="mowdeck-sbx", type=str)
     parser.add_argument("--sandboxes", type=int, default=10)
     parser.add_argument("--seconds", type=float, default=60)
+    parser.add_argument("--hold", type=float, default=0, help="seconds to keep watching after")
     args = parser.parse_args()
     if not args.project.replace("-", "").replace("_", "").isalnum():
         parser.error("invalid project name")
 
     print("baseline ...", flush=True)
-    base_cpu, base_mem = report("baseline", await measure(args.project, args.seconds))
+    baseline = await measure(args.project, args.seconds)
+    base_cpu, base_mem = report("baseline", baseline)
     print(f"\ncreating {args.sandboxes} sandboxes ...", flush=True)
     visitors = [await enter(args.base) for _ in range(args.sandboxes)]
     await asyncio.sleep(10)
     idle_cpu, idle_mem = report("idle", await measure(args.project, args.seconds))
     print(f"\nopening {args.sandboxes} sockets ...", flush=True)
-    await asyncio.gather(*(watch(args.base, v) for v in visitors))
+    # The first socket alone: a fresh Realtime fetches Identity's JWKS on the first sign-in, and
+    # sign-ins racing that first fetch are refused (4401), which would leave mowers resting.
+    await watch(args.base, visitors[0])
+    for _ in range(100):  # until its "ready" (Realtime has the keys) or 10 s
+        if visitors[0].received:
+            break
+        await asyncio.sleep(0.1)
+    await asyncio.gather(*(watch(args.base, v) for v in visitors[1:]))
     await asyncio.sleep(10)
-    active_cpu, active_mem = report("active", await measure(args.project, args.seconds))
-    frames = sum(v.received for v in visitors)
+    frames_before = sum(v.received for v in visitors)
+    active = await measure(args.project, args.seconds)
+    active_cpu, active_mem = report("active", active)
+    frames = sum(v.received for v in visitors) - frames_before
     n = args.sandboxes
+    per_sandbox(baseline, active, n)
     print(
         f"\nper sandbox: idle {(idle_cpu - base_cpu) / n:.2f} % CPU, "
         f"{(idle_mem - base_mem) / n:.1f} MiB; active {(active_cpu - base_cpu) / n:.2f} % CPU, "
-        f"{(active_mem - base_mem) / n:.1f} MiB; {frames} realtime frames received"
+        f"{(active_mem - base_mem) / n:.1f} MiB; "
+        f"{frames / active.seconds:.1f} realtime frames a second received while active, "
+        f"{sum(1 for v in visitors if v.received > 3)} of {n} live views received states",
+        flush=True,
     )
+    if args.hold > 0:
+        print(f"\nholding the watched sandboxes for {args.hold:.0f} s ...", flush=True)
+        await asyncio.sleep(args.hold)
     for visitor in visitors:
         if visitor.socket is not None:
             await visitor.socket.close()

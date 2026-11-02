@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID, uuid4
 
-from notifications.application.ports import AccountPurge, Tx
+from notifications.application.ports import AccountPurge, StateContext, Tx
 from notifications.domain.geofence import MowerFence
 from notifications.domain.live_activity import ActivityDevice, LiveActivity
 from notifications.domain.models import (
@@ -81,6 +81,18 @@ class _Data:
 class _MemoryTx:
     def __init__(self, data: _Data) -> None:
         self._data = data
+
+    async def state_context(self, mower_id: UUID) -> StateContext:
+        entry = self._data.directory.get(mower_id)
+        fence = self._data.geofences.get(mower_id)
+        return StateContext(
+            owner=entry.account_id if entry is not None else None,
+            fence_account=fence.account_id if fence is not None else None,
+            fence_at=fence.observed_at if fence is not None else None,
+        )
+
+    async def geofence(self, mower_id: UUID) -> MowerFence | None:
+        return self._data.geofences.get(mower_id)
 
     async def watch(self, mower_id: UUID) -> MowerWatch | None:
         return self._data.watches.get(mower_id)

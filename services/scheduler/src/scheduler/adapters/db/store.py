@@ -51,6 +51,23 @@ def _values(item: Any) -> dict[str, Any]:
     return {f.name: getattr(item, f.name) for f in dataclasses.fields(item)}
 
 
+def _put_status_statement() -> Any:
+    """The status upsert (never over a newer observation), built once: it runs for states."""
+    insert = pg_insert(tables.mower_status)
+    return insert.on_conflict_do_update(
+        index_elements=[tables.mower_status.c.mower_id],
+        set_={
+            f.name: insert.excluded[f.name]
+            for f in dataclasses.fields(MowerStatus)
+            if f.name != "mower_id"
+        },
+        where=tables.mower_status.c.observed_at < insert.excluded.observed_at,
+    )
+
+
+_PUT_STATUS = _put_status_statement()
+
+
 class SqlTx:
     """``Tx`` on one connection."""
 
@@ -145,15 +162,7 @@ class SqlTx:
         return [_run(row) for row in result]
 
     async def put_status(self, status: MowerStatus) -> bool:
-        values = _values(status)
-        insert = pg_insert(tables.mower_status).values(**values)
-        result = await self._conn.execute(
-            insert.on_conflict_do_update(
-                index_elements=[tables.mower_status.c.mower_id],
-                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
-                where=tables.mower_status.c.observed_at < insert.excluded.observed_at,
-            )
-        )
+        result = await self._conn.execute(_PUT_STATUS, _values(status))
         return bool(result.rowcount)
 
     async def get_status(self, mower_id: UUID) -> MowerStatus | None:

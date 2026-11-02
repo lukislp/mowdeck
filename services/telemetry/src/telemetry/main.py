@@ -8,9 +8,10 @@ Principals: with ``MOWDECK_AUTH_JWKS_URL`` set, bearer access tokens issued by I
 verified locally against its JWKS (``mowdeck-auth``); without it every request is 401.
 Authorization: OpenFGA (``MOWDECK_OPENFGA_*``) through ``mowdeck-authz``.
 
-Startup: wire the use cases, subscribe (states, command results, mower events), seed the mower
-directory from Fleet in the background and start the retention job. Shutdown: stop the tasks,
-unsubscribe, close OpenFGA and the database. Readiness: the bus (kit), the subscriptions, the
+Startup: wire the use cases, subscribe (states in batches, command results, mower events), seed
+the mower directory from Fleet in the background and start the retention job. Shutdown: stop
+the tasks, unsubscribe (the state batches already received are stored and acknowledged first),
+close OpenFGA and the database. Readiness: the bus (kit), the subscriptions, the
 database and OpenFGA.
 """
 
@@ -187,6 +188,8 @@ def build_app(
                 services.ingest,
                 unknown_mower_attempts=settings.telemetry_unknown_mower_attempts,
                 queries=services.queries,
+                batch_max=settings.telemetry_ingest_batch_max,
+                batch_wait_seconds=settings.telemetry_ingest_batch_wait_seconds,
             )
         if active_bus is not None and tracking is not None:
             subscriptions.append(await subscribe_notifications(active_bus, tracking))
