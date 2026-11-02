@@ -35,7 +35,10 @@ def test_openapi_documents_cover_the_web_app_routes(repo_root: Path) -> None:
         "billing.json",
         "planner.json",
         "vision.json",
+        "assistant.json",
     }
+    assert '"/api/v1/assistant/mowers/{mower_id}/proposals"' in documents["assistant.json"]
+    assert '"/api/v1/vision/me/provider/structured"' in documents["vision.json"]
     assert '"/api/v1/scheduler/schedules/{schedule_id}/run-now"' in documents["scheduler.json"]
     assert '"/api/v1/identity/ui-areas"' in documents["identity.json"]
     assert '"/api/v1/telemetry/mowers/{mower_id}/map"' in documents["telemetry.json"]

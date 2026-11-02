@@ -29,9 +29,11 @@ config:
   SOURCE_URL: https://github.com/lukislp/mowdeck
   # One proxy in front of the controller: the services and the rate limit below get the depth.
   GATEWAY_CLIENT_IP_DEPTH: "1"
-# Billing, the camera relay and the Matter server are off by default; the CI render enables them
-# so their templates are linted and checked.
+# Billing, the camera relay, the Matter server and the assistant are off by default; the CI render
+# enables them so their templates are linted and checked.
 services:
+  assistant:
+    enabled: true
   billing:
     enabled: true
   cameraRelay:

@@ -239,6 +239,7 @@ jobs:
       # its stack configuration, the report script and that every k6 scenario loads.
       - run: docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.demo.yml -f tests/load/docker-compose.load.yml --env-file infra/compose/.env.example --env-file tests/load/load.env config -q
       - run: node --test tests/load/report.test.mjs
+      - run: bash -n tests/load/vps/ladder.sh && bash -n tests/load/vps/sample.sh
       - name: k6 scenarios load
         run: |
           for scenario in tests/load/scenarios/*.js; do
@@ -435,6 +436,17 @@ jobs:
           tags: mowdeck/vision:ci
           cache-from: type=gha,scope=vision
           cache-to: type=gha,mode=max,scope=vision
+      - name: Build assistant image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/assistant/Dockerfile
+          build-args: *python-build-args
+          platforms: linux/amd64
+          push: false
+          tags: mowdeck/assistant:ci
+          cache-from: type=gha,scope=assistant
+          cache-to: type=gha,mode=max,scope=assistant
       - name: Build camera-relay image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:

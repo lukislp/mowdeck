@@ -40,6 +40,12 @@ describe('recurrenceSummary', () => {
       'Täglich ab 12.10.2026 07:00, 2 h',
     );
   });
+
+  it('describes a one-off schedule with its day', () => {
+    const once = { ...weekly, kind: 'once', days_of_week: [], anchor_date: '2026-11-02' };
+    expect(recurrenceSummary(once, 'de')).toBe('Einmal am 02.11.2026 07:00, 90 min');
+    expect(recurrenceSummary(once, 'en')).toBe('Once on Nov 2, 2026 07:00, 90 min');
+  });
 });
 
 describe('daysSummary', () => {

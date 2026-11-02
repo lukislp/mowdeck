@@ -40,6 +40,9 @@ flowchart LR
     vision["vision"]
     web["web"]
   end
+  subgraph sg_assistant["Profile assistant (opt-in)"]
+    assistant["assistant"]
+  end
   subgraph sg_billing["Profile billing (opt-in)"]
     billing["billing"]
   end
@@ -63,6 +66,7 @@ flowchart LR
   traefik -->|"/api/v1/telemetry"| telemetry
   traefik -->|"/api/v1/vision"| vision
   traefik -->|"/"| web
+  traefik -.->|"/api/v1/assistant"| assistant
   traefik -.->|"/api/v1/billing<br/>+1 exact path"| billing
   traefik -.->|"/api/v1/matter"| matter_server
   traefik -.->|"/media/whep/r/"| mediamtx
@@ -71,6 +75,7 @@ flowchart LR
 
 | Service | Path prefixes | Exact paths | Profile |
 |---|---|---|---|
+| `assistant` | `/api/v1/assistant` | - | assistant |
 | `billing` | `/api/v1/billing` | `/api/v1/billing/webhooks/stripe` | billing |
 | `device-gateway` | `/api/v1/device-gateway` | - | always |
 | `entitlements` | `/api/v1/entitlements` | - | always |
@@ -95,19 +100,22 @@ Services are grouped by what they depend on: a database, NATS, OpenFGA and the t
 
 ```mermaid
 flowchart LR
-  subgraph g0["NATS"]
+  subgraph g0["JWKS"]
+    assistant["assistant"]
+  end
+  subgraph g1["NATS"]
     camera_relay["camera-relay"]
   end
-  subgraph g1["NATS + JWKS"]
+  subgraph g2["NATS + JWKS"]
     device_gateway["device-gateway"]
   end
-  subgraph g2["NATS + OpenFGA + JWKS"]
+  subgraph g3["NATS + OpenFGA + JWKS"]
     realtime["realtime"]
   end
-  subgraph g3["PostgreSQL + NATS + OpenFGA"]
+  subgraph g4["PostgreSQL + NATS + OpenFGA"]
     identity["identity"]
   end
-  subgraph g4["PostgreSQL + NATS + OpenFGA + JWKS"]
+  subgraph g5["PostgreSQL + NATS + OpenFGA + JWKS"]
     billing["billing"]
     entitlements["entitlements"]
     fleet["fleet"]
@@ -121,19 +129,20 @@ flowchart LR
   NATS{{"NATS JetStream<br/>events, commands, telemetry"}}
   OpenFGA["OpenFGA<br/>authorization"]
   JWKS(["identity<br/>/.well-known/jwks.json"])
-  g0 --> NATS
+  g0 --> JWKS
   g1 --> NATS
-  g1 --> JWKS
   g2 --> NATS
-  g2 --> OpenFGA
   g2 --> JWKS
-  g3 --> PostgreSQL
   g3 --> NATS
   g3 --> OpenFGA
+  g3 --> JWKS
   g4 --> PostgreSQL
   g4 --> NATS
   g4 --> OpenFGA
-  g4 --> JWKS
+  g5 --> PostgreSQL
+  g5 --> NATS
+  g5 --> OpenFGA
+  g5 --> JWKS
 ```
 
 Services that call other services over HTTP (configured by URL):
@@ -262,6 +271,7 @@ flowchart LR
   p_fleet["fleet"]
   p_identity["identity"]
   p_notifications["notifications"]
+  p_realtime["realtime"]
   p_scheduler["scheduler"]
   p_telemetry["telemetry"]
   p_vision["vision"]
@@ -279,6 +289,7 @@ flowchart LR
   p_fleet -->|"event.* (type chosen at runtime)"| s_EVENTS
   p_identity -->|"event.* (type chosen at runtime)<br/>event.identity.grants.changed"| s_EVENTS
   p_notifications -->|"event.* (type chosen at runtime)"| s_EVENTS
+  p_realtime -->|"event.presence.accounts"| s_EVENTS
   p_scheduler -->|"event.* (type chosen at runtime)"| s_EVENTS
   p_telemetry -->|"event.* (type chosen at runtime)<br/>event.tracking.ended<br/>event.tracking.started"| s_EVENTS
   p_vision -->|"event.* (type chosen at runtime)"| s_EVENTS
@@ -397,6 +408,7 @@ flowchart LR
 | `event.identity.grants.changed` | EVENTS | identity | realtime |
 | `event.mower.>` | EVENTS | - | device-gateway, notifications, telemetry |
 | `event.notifications.>` | EVENTS | - | realtime, telemetry |
+| `event.presence.accounts` | EVENTS | realtime | - |
 | `event.telemetry.>` | EVENTS | - | notifications |
 | `event.tracking.>` | EVENTS | - | notifications |
 | `event.tracking.ended` | EVENTS | telemetry | - |
@@ -421,6 +433,7 @@ flowchart LR
 | `gateway.mower.*.path.preview` | core | fleet | device-gateway |
 | `gateway.mower.*.photo` | core | fleet, notifications, telemetry, vision | device-gateway |
 | `gateway.mower.*.tracking` | core | telemetry | device-gateway |
+| `presence.accounts` | core | - | device-gateway |
 | `relay.camera.attach` | core | fleet | camera-relay |
 | `relay.camera.detach` | core | fleet | camera-relay |
 | `relay.camera.renew` | core | fleet | camera-relay |
@@ -435,6 +448,10 @@ Operations per OpenAPI tag of each service, from the documents the web app's typ
 
 ```mermaid
 flowchart LR
+  subgraph assistant["assistant"]
+    direction TB
+    assistant_assistant["assistant<br/>2 operations"]
+  end
   subgraph billing["billing"]
     direction TB
     billing_billing["billing<br/>6 operations"]
@@ -490,12 +507,14 @@ flowchart LR
   end
   subgraph vision["vision"]
     direction TB
-    vision_vision["vision<br/>16 operations"]
+    vision_vision["vision<br/>17 operations"]
   end
 ```
 
 | Service | Tag | Operations | Paths |
 |---|---|---|---|
+| `assistant` | `assistant` | 2 | 2 |
+| `assistant` | `operations` | 1 | 1 |
 | `billing` | `billing` | 6 | 6 |
 | `billing` | `operations` | 1 | 1 |
 | `device-gateway` | `device-gateway` | 1 | 1 |
@@ -530,7 +549,7 @@ flowchart LR
 | `telemetry` | `tracking` | 13 | 11 |
 | `telemetry` | `zones` | 5 | 3 |
 | `vision` | `operations` | 1 | 1 |
-| `vision` | `vision` | 16 | 13 |
+| `vision` | `vision` | 17 | 14 |
 
 The tag `operations` holds the probe endpoints every service exposes.
 
@@ -554,8 +573,8 @@ flowchart LR
   subgraph pg[PostgreSQL]
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
-    db_fleet[("fleet<br/>13 migrations")]
-    db_identity[("identity<br/>9 migrations")]
+    db_fleet[("fleet<br/>14 migrations")]
+    db_identity[("identity<br/>10 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]
@@ -573,4 +592,4 @@ flowchart LR
   vision -->|owns| db_vision
 ```
 
-Services without a database: `agora-bridge`, `camera-relay`, `device-gateway`, `matter-server`, `realtime`, `web`.
+Services without a database: `agora-bridge`, `assistant`, `camera-relay`, `device-gateway`, `matter-server`, `realtime`, `web`.
