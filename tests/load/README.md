@@ -5,7 +5,9 @@ host (two CPU cores, about 7 GB) and measures it. How to run it, the results and
 recommendations are in [docs/ops/load-testing.md](../../docs/ops/load-testing.md).
 
 Never point it at the public demo, a home installation or any other real server: the runner only
-talks to the stack it starts itself, inside that stack's own Docker network.
+talks to the stack it starts itself, inside that stack's own Docker network. The demo host's
+operator measures that host with `vps/` instead, on the host itself (docs/ops/load-testing.md,
+"Measuring the real demo host").
 
 | File | Content |
 | --- | --- |
@@ -18,6 +20,9 @@ talks to the stack it starts itself, inside that stack's own Docker network.
 | `scenarios/rest-mix.js` | (b) signed-in users clicking through the app |
 | `scenarios/command-burst.js` | (c) start, pause, resume, dock at a rising rate |
 | `scenarios/rate-limits.js` | (d) the per-address limits, measured on their own |
+| `scenarios/sandbox-visitor.js` | (e) sandbox visitors (ADR 0076) who stay for a level, then log out |
+| `vps/ladder.sh` | on the demo host: `sandbox-visitor` level by level, k6 in the proxy's network namespace, with a watchdog |
+| `vps/sample.sh` | on the demo host: host, container and sandbox numbers as CSV while the ladder runs |
 
 ```bash
 node tests/load/load.mjs up                 # build and start mowdeck-load at 127.0.0.1:8590

@@ -43,6 +43,8 @@ const k6Image =
 const k6Cpus = env.LOAD_K6_CPUSET ?? '2-5';
 const statsInterval = Number(env.LOAD_STATS_INTERVAL_SECONDS ?? '10') * 1000;
 const scenarios = ['rate-limits', 'demo-visitor', 'rest-mix', 'command-burst'];
+// Not part of `run`: made for the real demo host (tests/load/vps), runnable here with `k6`.
+const known = [...scenarios, 'sandbox-visitor'];
 
 function fail(message) {
   console.error(`load: ${message}`);
@@ -203,7 +205,7 @@ function resultsDir(label) {
 
 /** Runs one k6 scenario while sampling the stack; returns {status, summary, stats}. */
 async function k6(scenario, k6Args = [], extraEnv = {}, label = scenario) {
-  if (!scenarios.includes(scenario)) fail(`unknown scenario ${scenario} (${scenarios.join(', ')})`);
+  if (!known.includes(scenario)) fail(`unknown scenario ${scenario} (${known.join(', ')})`);
   const dir = resultsDir(label);
   const list = containers();
   if (!list.length) fail(`${project} is not running (node tests/load/load.mjs up)`);
@@ -347,7 +349,7 @@ if (!name || !(name in commands)) {
       'usage: node tests/load/load.mjs <command>',
       '',
       '  up | down | ps | logs [service] | stats',
-      `  k6 <scenario> [k6 args]   ${scenarios.join(', ')}`,
+      `  k6 <scenario> [k6 args]   ${known.join(', ')}`,
       '  sweep                     demo visitors at LOAD_LEVELS (default 25,...,500)',
       '  run                       up, LOAD_SCENARIOS (default all four), down',
       '',

@@ -1,5 +1,7 @@
-// Shared helpers of the k6 scenarios (tests/load/scenarios). Only ever pointed at the throwaway
-// stack of tests/load/load.mjs: BASE_URL is the stack's gateway inside its own Docker network.
+// Shared helpers of the k6 scenarios (tests/load/scenarios). Pointed at the throwaway stack of
+// tests/load/load.mjs (BASE_URL is the stack's gateway inside its own Docker network) or, by
+// tests/load/vps/ladder.sh, at the demo host's gateway from inside its TLS proxy's network
+// namespace (docs/ops/load-testing.md, "Measuring the real demo host").
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
@@ -9,6 +11,8 @@ import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 export const BASE = __ENV.BASE_URL || 'http://traefik';
 export const ORIGIN = __ENV.ORIGIN || 'http://localhost:8590';
 const WS_BASE = BASE.replace(/^http/, 'ws');
+/** Sent as X-Forwarded-Proto when set (the demo host's proxy sends `https`). */
+const FORWARDED_PROTO = __ENV.LOAD_FORWARDED_PROTO || '';
 
 export const wsConnectSuccess = new Rate('ws_connect_success');
 export const wsSessionsWithState = new Rate('ws_sessions_with_state');
@@ -33,11 +37,19 @@ export class Visitor {
   constructor(address) {
     this.address = address;
     this.token = null;
+    this.refreshToken = null;
     this.expiresAt = 0;
   }
 
+  /** What the visitor's proxy adds to every request (also the socket's handshake). */
+  proxyHeaders() {
+    const h = { 'X-Forwarded-For': this.address };
+    if (FORWARDED_PROTO) h['X-Forwarded-Proto'] = FORWARDED_PROTO;
+    return h;
+  }
+
   headers(extra = {}) {
-    const h = { 'X-Forwarded-For': this.address, ...extra };
+    const h = { ...this.proxyHeaders(), ...extra };
     if (this.token) h.Authorization = `Bearer ${this.token}`;
     return h;
   }
@@ -63,20 +75,34 @@ export class Visitor {
     );
   }
 
-  /** "Try the demo": a new login session of the shared demo user, as the web app asks for it. */
-  signIn() {
+  /**
+   * "Try the demo": a new login session (in the sandbox demo: of a new sandbox), as the web app
+   * asks for it. `keepRefresh` also takes the refresh token from the body instead of the cookie
+   * only, so that `refreshIfDue` and `logout` work without the cookie (the refresh cookie is
+   * `Secure` on the demo host, and k6 talks plain HTTP to the gateway there). With it, returns
+   * `{ok, status, duration}`; without it, whether a session started.
+   */
+  signIn({ keepRefresh = false, expected = [200] } = {}) {
     http.cookieJar().clear(BASE);
     this.token = null;
-    const res = this.post('/api/v1/identity/demo/session', {}, 'POST /identity/demo/session', {
-      'X-Requested-With': 'mowdeck-web',
-      'X-Mowdeck-Refresh': 'cookie-only',
-    });
+    this.refreshToken = null;
+    const extra = { 'X-Requested-With': 'mowdeck-web' };
+    if (!keepRefresh) extra['X-Mowdeck-Refresh'] = 'cookie-only';
+    const res = note(
+      http.post(`${BASE}/api/v1/identity/demo/session`, '{}', {
+        headers: this.headers({ ...extra, 'Content-Type': 'application/json' }),
+        tags: { name: 'POST /identity/demo/session', kind: 'api' },
+        responseCallback: http.expectedStatuses(...expected),
+      }),
+    );
     const ok = check(res, { 'demo session 200': (r) => r.status === 200 });
-    if (!ok) return false;
+    const outcome = { ok, status: res.status, duration: res.timings.duration };
+    if (!ok) return keepRefresh ? outcome : false;
     const body = res.json();
     this.token = body.access_token;
+    this.refreshToken = body.refresh_token || null;
     this.expiresAt = Date.now() + (body.expires_in || 600) * 1000;
-    return true;
+    return keepRefresh ? outcome : true;
   }
 
   /** Refreshes the access token 60 s before it expires, as the web app does. */
@@ -84,15 +110,36 @@ export class Visitor {
     if (!this.token || Date.now() < this.expiresAt - 60_000) return true;
     const res = this.post(
       '/api/v1/identity/session/refresh',
-      undefined,
+      this.refreshToken ? { refresh_token: this.refreshToken } : undefined,
       'POST /identity/session/refresh',
-      { 'X-Requested-With': 'mowdeck-web', 'X-Mowdeck-Refresh': 'cookie-only' },
+      this.refreshToken
+        ? { 'X-Requested-With': 'mowdeck-web' }
+        : { 'X-Requested-With': 'mowdeck-web', 'X-Mowdeck-Refresh': 'cookie-only' },
     );
-    if (res.status !== 200) return this.signIn();
+    if (res.status !== 200) {
+      // A sandbox visitor must not silently claim a second sandbox.
+      if (this.refreshToken) return false;
+      return this.signIn();
+    }
     const body = res.json();
     this.token = body.access_token;
+    if (body.refresh_token) this.refreshToken = body.refresh_token;
     this.expiresAt = Date.now() + (body.expires_in || 600) * 1000;
     return true;
+  }
+
+  /** Ends the login session (a sandbox is then deleted by the next sweep, ADR 0076). */
+  logout() {
+    if (!this.refreshToken) return false;
+    const res = this.post(
+      '/api/v1/identity/session/logout',
+      { refresh_token: this.refreshToken },
+      'POST /identity/session/logout',
+      { 'X-Requested-With': 'mowdeck-web' },
+    );
+    this.token = null;
+    this.refreshToken = null;
+    return check(res, { 'logout 204': (r) => r.status === 204 });
   }
 }
 
@@ -222,7 +269,12 @@ export function mowerPage(visitor, id) {
       'GET',
       `${BASE}/api/v1/telemetry/mowers/${id}/state`,
       null,
-      p('GET /telemetry/mowers/{id}/state'),
+      // A sandbox made on the spot (ADR 0076) has no state until its mowers wake; the web app
+      // shows the mower without one.
+      {
+        ...p('GET /telemetry/mowers/{id}/state'),
+        responseCallback: http.expectedStatuses(200, 404),
+      },
     ],
     [
       'POST',
@@ -292,8 +344,9 @@ export function mowerPage(visitor, id) {
 /**
  * Holds the live view (ADR 0018) for `holdMs`: auth, subscribe, application pings every 25 s,
  * the inbox poll every 60 s. Records whether the socket became ready and received states.
+ * `onReady` (optional) runs once, 5 s after the socket is ready (a sandbox's mowers wake then).
  */
-export function liveView(visitor, mowerIds, holdMs) {
+export function liveView(visitor, mowerIds, holdMs, onReady = null) {
   const started = Date.now();
   let ready = false;
   let states = 0;
@@ -302,7 +355,7 @@ export function liveView(visitor, mowerIds, holdMs) {
   const res = ws.connect(
     `${WS_BASE}/api/v1/realtime/ws`,
     {
-      headers: { Origin: ORIGIN, 'X-Forwarded-For': visitor.address },
+      headers: { Origin: ORIGIN, ...visitor.proxyHeaders() },
       tags: { name: 'WS /realtime/ws' },
     },
     (socket) => {
@@ -324,6 +377,7 @@ export function liveView(visitor, mowerIds, holdMs) {
               mower_ids: mowerIds.slice(0, 200),
             }),
           );
+          if (onReady) socket.setTimeout(onReady, 5_000);
         } else if (msg.type === 'state') {
           states += 1;
           wsStateMessages.add(1);
@@ -361,6 +415,7 @@ export const ENDPOINTS = [
   'GET /identity/login-methods',
   'POST /identity/demo/session',
   'POST /identity/session/refresh',
+  'POST /identity/session/logout',
   'GET /identity/me',
   'GET /identity/ui-areas',
   'GET /identity/me/platform',
@@ -409,10 +464,49 @@ export const apiThresholds = {
   checks: ['rate>0.99'],
 };
 
-/** Text summary on stdout and the full summary as JSON for tests/load/report.mjs. */
+/** Columns of `levelRow` (tests/load/vps/ladder.sh collects one row per level). */
+export const LEVEL_HEADER =
+  'vus,requests_per_s,api_p95_ms,api_p99_ms,static_p95_ms,failed_pct,checks_pct,ws_ready_pct,' +
+  'ws_with_state_pct,ws_ready_p95_ms,claim_p95_ms,sandboxes_claimed,sandboxes_full,' +
+  'sandboxes_refused,sandboxes_lost,sandboxes_released,mow_started,rate_limited';
+
+/** One CSV row of the headline numbers of a run (empty where a metric is missing). */
+export function levelRow(data) {
+  const m = data.metrics || {};
+  const v = (name, key, scale = 1) => {
+    const value = m[name] && m[name].values ? m[name].values[key] : undefined;
+    return typeof value === 'number' ? String(Math.round(value * scale * 10) / 10) : '';
+  };
+  return [
+    v('vus_max', 'max'),
+    v('http_reqs', 'rate'),
+    v('http_req_duration{kind:api}', 'p(95)'),
+    v('http_req_duration{kind:api}', 'p(99)'),
+    v('http_req_duration{kind:static}', 'p(95)'),
+    v('http_req_failed', 'rate', 100),
+    v('checks', 'rate', 100),
+    v('ws_connect_success', 'rate', 100),
+    v('ws_sessions_with_state', 'rate', 100),
+    v('ws_ready_time', 'p(95)'),
+    v('sandbox_claim_time', 'p(95)'),
+    v('sandbox_claimed', 'count'),
+    v('sandbox_full', 'count'),
+    v('sandbox_refused', 'count'),
+    v('sandbox_lost', 'count'),
+    v('sandbox_released', 'count'),
+    v('mow_started', 'count'),
+    v('rate_limited', 'count'),
+  ].join(',');
+}
+
+/**
+ * Text summary on stdout, the full summary as JSON for tests/load/report.mjs (SUMMARY_FILE) and
+ * the headline numbers as a CSV file of LEVEL_HEADER and one row (SUMMARY_ROW_FILE).
+ */
 export function summary(data) {
   const out = { stdout: textSummary(data, { indent: ' ', enableColors: false }) };
   if (__ENV.SUMMARY_FILE) out[__ENV.SUMMARY_FILE] = JSON.stringify(data, null, 2);
+  if (__ENV.SUMMARY_ROW_FILE) out[__ENV.SUMMARY_ROW_FILE] = `${LEVEL_HEADER}\n${levelRow(data)}\n`;
   return out;
 }
 
