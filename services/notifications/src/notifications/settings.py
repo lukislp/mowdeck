@@ -55,6 +55,13 @@ class Settings(ServiceSettings):
     notifications_disconnect_grace_seconds: float = Field(default=30, ge=0)
     """``mower.disconnected`` becomes ``mower_offline`` after this long without a reconnect."""
 
+    notifications_state_batch_max: int = Field(default=64, ge=1, le=500)
+    """Most states whose rules run in one transaction (ADR 0078); 1: one at a time."""
+
+    notifications_state_batch_wait_seconds: float = Field(default=0.2, ge=0, le=2)
+    """How long a batch of states waits for more after its first one (ADR 0078); the rules
+    notice a state at most this much later."""
+
     notifications_cooldown_seconds: float = Field(default=300, ge=0)
     """At most one notification of one kind per mower within this time."""
 

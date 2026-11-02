@@ -8,13 +8,14 @@ the meantime is skipped.
 """
 
 import dataclasses
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from datetime import date
 from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -123,6 +124,22 @@ class SqlZoneStore:
                 .order_by(_Z.created_at, _Z.id)
             )
             return [_zone(r) for r in result]
+
+    async def zones_for_many(self, mower_ids: Collection[UUID]) -> dict[UUID, list[VirtualZone]]:
+        found: dict[UUID, list[VirtualZone]] = {}
+        if not mower_ids:
+            return found
+        async with read_connection(self.engine) as conn:
+            result = await conn.execute(
+                sa.select(tables.virtual_zones)
+                .where(_Z.mower_id == sa.any_(sa.bindparam("ids", type_=ARRAY(sa.Uuid()))))
+                .order_by(_Z.created_at, _Z.id),
+                {"ids": list(mower_ids)},
+            )
+            for row in result:
+                zone = _zone(row)
+                found.setdefault(zone.mower_id, []).append(zone)
+        return found
 
     async def add_zone(self, zone: VirtualZone, limit: int) -> bool:
         async with self.engine.begin() as conn:

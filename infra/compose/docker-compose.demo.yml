@@ -66,6 +66,10 @@ services:
 
   openfga:
     ports: !reset []
+    environment:
+      # info logs every check (grpc_req_complete with its body): on two cores that cost CPU and
+      # disk (docs/ops/load-testing.md); warnings and errors still reach the log.
+      OPENFGA_LOG_LEVEL: ${OPENFGA_LOG_LEVEL:-warn}
 
   identity:
     environment:
@@ -113,6 +117,10 @@ services:
       MOWDECK_RELAY_URL: ""
       # Live mowers a little faster than real time, so visitors see them move.
       MOWDECK_SIM_TIME_SCALE: ${DEMO_SIM_TIME_SCALE:-3}
+      # Seconds between two periodic state reports of a simulated mower; 0: every simulation
+      # step (one a second). Every report is processed by several services: 2 roughly halves
+      # the cost of a watched sandbox for a less smooth marker (docs/ops/load-testing.md).
+      MOWDECK_SIM_STATE_PERIOD_SECONDS: ${DEMO_SIM_STATE_PERIOD_SECONDS:-0}
     # The history is written before any live state exists (demo/seed.py).
     depends_on:
       demo-seed:

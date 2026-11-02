@@ -17,7 +17,7 @@ service's inbox when the service subscribes to it.
 
 import asyncio
 import secrets
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,13 +41,17 @@ from nats.js.api import (
 from pydantic import BaseModel
 
 from mowdeck_service_kit.bus.base import (
+    BatchHandler,
+    BatchWorker,
     BusError,
     BusMessage,
     BusNotConnectedError,
     MessageHandler,
     NoRespondersError,
+    Outcome,
     PublishResult,
     RequestTimeoutError,
+    check_acknowledge,
     dispatch,
     encode_payload,
     outgoing_headers,
@@ -96,6 +100,38 @@ class _NatsSubscriptionHandle:
             _log.debug("unsubscribe ignored", error=repr(exc))
 
 
+@dataclass(eq=False)
+class _BatchSubscriptionHandle:
+    """A batch subscription: unsubscribing stops new deliveries, then lets the worker settle
+    what it already received (within ``stop_timeout``)."""
+
+    subscription: JetStreamContext.PushSubscription
+    worker: BatchWorker[Msg]
+    stop_timeout: float
+    on_close: Callable[["_BatchSubscriptionHandle"], None]
+
+    async def unsubscribe(self) -> None:
+        try:
+            await self.subscription.unsubscribe()
+        except nats.errors.Error as exc:  # already closed or draining
+            _log.debug("unsubscribe ignored", error=repr(exc))
+        await self.worker.stop(self.stop_timeout)
+        self.on_close(self)
+
+
+def _bus_message(msg: Msg) -> BusMessage:
+    try:
+        attempt = msg.metadata.num_delivered or 1
+    except nats.errors.Error:  # no JetStream reply subject (a consumer without acks)
+        attempt = 1
+    return BusMessage(
+        subject=msg.subject,
+        data=msg.data,
+        headers=dict(msg.headers or {}),
+        delivery_attempt=attempt,
+    )
+
+
 class JetStreamBus:
     """:class:`~mowdeck_service_kit.bus.EventBus` implementation on NATS JetStream."""
 
@@ -136,6 +172,7 @@ class JetStreamBus:
         self.drain_timeout_seconds = drain_timeout_seconds
         self._nc: NatsClient | None = None
         self._js: JetStreamContext | None = None
+        self._batches: set[_BatchSubscriptionHandle] = set()
 
     def __repr__(self) -> str:
         return f"JetStreamBus(servers={self.servers!r}, name={self.name!r}, user={self.user!r})"
@@ -257,7 +294,10 @@ class JetStreamBus:
         return next((s for s in self.streams if s.captures(subject)), None)
 
     async def close(self) -> None:
-        """Drain subscriptions and pending publishes, then close. Idempotent."""
+        """Settle what batch subscriptions received, drain subscriptions and pending publishes,
+        then close. Idempotent."""
+        for handle in list(self._batches):
+            await handle.unsubscribe()
         nc, self._nc, self._js = self._nc, None, None
         if nc is None or nc.is_closed:
             return
@@ -306,16 +346,25 @@ class JetStreamBus:
         durable: str | None = None,
         queue: str | None = None,
         last_per_subject: bool = False,
+        acknowledge: bool = True,
     ) -> _NatsSubscriptionHandle:
-        """Subscribe; stream subjects get a JetStream push consumer with manual acks."""
+        """Subscribe; stream subjects get a JetStream push consumer with manual acks, or
+        without acknowledgements (``AckPolicy.NONE``) for ``acknowledge=False``."""
         stream = self._stream_for(subject)
+        check_acknowledge(acknowledge, durable, queue)
         if stream is None:
             if durable is not None or last_per_subject:
                 msg = f"durable and last-per-subject consumers need a stream subject: {subject!r}"
                 raise ValueError(msg)
             return await self._subscribe_core(subject, handler, queue)
         return await self._subscribe_stream(
-            stream, subject, handler, durable, queue, last_per_subject=last_per_subject
+            stream,
+            subject,
+            handler,
+            durable,
+            queue,
+            last_per_subject=last_per_subject,
+            acknowledge=acknowledge,
         )
 
     async def _consumer(
@@ -325,16 +374,26 @@ class JetStreamBus:
         durable: str | None,
         queue: str | None,
         deliver_policy: DeliverPolicy,
+        *,
+        acknowledge: bool = True,
     ) -> ConsumerConfig:
         """Create the push consumer (or move an existing durable one into this inbox)."""
         js = self._jetstream()
-        config = ConsumerConfig(
-            ack_policy=AckPolicy.EXPLICIT,
-            ack_wait=self.ack_wait_seconds,
-            max_deliver=self.max_deliver,
-            deliver_policy=deliver_policy,
-            deliver_group=queue,
-            filter_subject=subject,
+        config = (
+            ConsumerConfig(
+                ack_policy=AckPolicy.EXPLICIT,
+                ack_wait=self.ack_wait_seconds,
+                max_deliver=self.max_deliver,
+                deliver_policy=deliver_policy,
+                deliver_group=queue,
+                filter_subject=subject,
+            )
+            if acknowledge
+            else ConsumerConfig(
+                ack_policy=AckPolicy.NONE,
+                deliver_policy=deliver_policy,
+                filter_subject=subject,
+            )
         )
         if durable is None:
             # An ephemeral consumer, named so that the subject based API (and with it the
@@ -371,6 +430,7 @@ class JetStreamBus:
         queue: str | None,
         *,
         last_per_subject: bool = False,
+        acknowledge: bool = True,
     ) -> _NatsSubscriptionHandle:
         if queue and durable and durable != queue:
             msg = f"a queue subscription uses the queue as durable name: {queue!r} != {durable!r}"
@@ -378,28 +438,19 @@ class JetStreamBus:
         durable = durable or queue
 
         async def callback(msg: Msg) -> None:
-            message = BusMessage(
-                subject=msg.subject,
-                data=msg.data,
-                headers=dict(msg.headers or {}),
-                delivery_attempt=msg.metadata.num_delivered or 1,
-            )
+            message = _bus_message(msg)
             outcome = await dispatch(handler, message)
+            if not acknowledge:
+                return  # AckPolicy.NONE: the server forgot the message when it sent it
             try:
-                if outcome == "ack":
-                    await msg.ack()
-                elif outcome == "term":
-                    await msg.term()
-                elif message.delivery_attempt >= self.max_deliver:
-                    _log.error("message exhausted redeliveries", subject=msg.subject)
-                    await msg.term()
-                else:
-                    await msg.nak(delay=self.nak_delay_seconds)
+                await self._settle(msg, message, outcome)
             except nats.errors.Error as exc:
                 _log.warning("ack failed", subject=msg.subject, error=repr(exc))
 
         deliver_policy = DeliverPolicy.LAST_PER_SUBJECT if last_per_subject else DeliverPolicy.NEW
-        config = await self._consumer(stream, subject, durable, queue, deliver_policy)
+        config = await self._consumer(
+            stream, subject, durable, queue, deliver_policy, acknowledge=acknowledge
+        )
         name = config.name or durable
         if name is None:  # pragma: no cover - the server always names a consumer
             msg = "the server returned a consumer without a name"
@@ -408,6 +459,69 @@ class JetStreamBus:
             stream=stream.name, config=config, consumer=name, cb=callback, manual_ack=True
         )
         return _NatsSubscriptionHandle(subscription)
+
+    async def _settle(self, msg: Msg, message: BusMessage, outcome: Outcome) -> None:
+        """Acknowledge, terminate or nak (with delay; terminate after ``max_deliver``)."""
+        if outcome == "ack":
+            await msg.ack()
+        elif outcome == "term":
+            await msg.term()
+        elif message.delivery_attempt >= self.max_deliver:
+            _log.error("message exhausted redeliveries", subject=msg.subject)
+            await msg.term()
+        else:
+            await msg.nak(delay=self.nak_delay_seconds)
+
+    async def subscribe_batch(
+        self,
+        subject: str,
+        handler: BatchHandler,
+        *,
+        durable: str | None = None,
+        queue: str | None = None,
+        max_batch: int = 64,
+        max_wait_seconds: float = 0.0,
+    ) -> "_BatchSubscriptionHandle":
+        """A push consumer as :meth:`subscribe` whose deliveries a :class:`BatchWorker` hands to
+        ``handler`` in batches; each message is settled after its batch was handled.
+
+        The server keeps at most the consumer's ``max_ack_pending`` (1000) messages unsettled,
+        which bounds the worker's queue.
+        """
+        stream = self._stream_for(subject)
+        if stream is None:
+            msg = f"batch subscriptions need a stream subject: {subject!r}"
+            raise ValueError(msg)
+        if queue and durable and durable != queue:
+            msg = f"a queue subscription uses the queue as durable name: {queue!r} != {durable!r}"
+            raise ValueError(msg)
+        durable = durable or queue
+        worker: BatchWorker[Msg] = BatchWorker(
+            handler,
+            to_message=_bus_message,
+            settle=self._settle,
+            max_batch=max_batch,
+            max_wait_seconds=max_wait_seconds,
+            name=durable or subject,
+        )
+
+        async def callback(msg: Msg) -> None:
+            worker.put(msg)
+
+        config = await self._consumer(stream, subject, durable, queue, DeliverPolicy.NEW)
+        name = config.name or durable
+        if name is None:  # pragma: no cover - the server always names a consumer
+            msg = "the server returned a consumer without a name"
+            raise BusError(msg)
+        worker.start()
+        subscription = await self._jetstream().subscribe_bind(
+            stream=stream.name, config=config, consumer=name, cb=callback, manual_ack=True
+        )
+        handle = _BatchSubscriptionHandle(
+            subscription, worker, self.drain_timeout_seconds, self._batches.discard
+        )
+        self._batches.add(handle)
+        return handle
 
     async def _subscribe_core(
         self, subject: str, handler: MessageHandler, queue: str | None

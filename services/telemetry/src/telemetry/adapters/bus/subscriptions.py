@@ -1,7 +1,7 @@
 """Subscriptions of telemetry.
 
 * ``telemetry.mower.*`` (JetStream ``TELEMETRY``, durable and queue group ``telemetry-states``):
-  latest state, history, position track.
+  latest state, history, position track; in batches, one transaction each (ADR 0078).
 * ``command.result.mower.*`` (JetStream ``COMMANDS``, durable ``telemetry-results``): the
   command timeline; the account comes from the mower directory.
 * ``device.mower.>`` (JetStream ``DEVICE``, durable ``telemetry-device``): the newest map and
@@ -46,15 +46,17 @@ from mowdeck_contracts.v1.subjects import (
 )
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import (
+    BatchHandler,
     BusMessage,
     DropMessage,
     EventBus,
     MessageHandler,
+    Outcome,
     Subscription,
 )
 from pydantic import ValidationError
 
-from telemetry.application.ingest import Ingest
+from telemetry.application.ingest import Ingest, StateOutcome
 from telemetry.application.queries import Queries
 from telemetry.domain.errors import AccountMismatchError, InvalidQueryError, UnknownMowerError
 
@@ -81,28 +83,52 @@ def _subject_mower(message: BusMessage) -> UUID:
         raise DropMessage(f"unexpected subject {message.subject!r}") from exc
 
 
-def state_handler(ingest: Ingest) -> MessageHandler:
-    """Store a state."""
+def _decode_state(message: BusMessage) -> MowerState | str:
+    """The state of a message, or why it is dropped."""
+    try:
+        state = message.model(MowerState)
+    except ValidationError as exc:
+        return f"invalid mower state: {exc.error_count()} errors"
+    try:
+        subject_mower = mower_id_from_subject(message.subject)
+    except ValueError:
+        return f"unexpected subject {message.subject!r}"
+    if subject_mower != state.mower_id:
+        return "subject does not match the state's mower"
+    return state
 
-    async def handle(message: BusMessage) -> None:
-        try:
-            state = message.model(MowerState)
-        except ValidationError as exc:
-            raise DropMessage(f"invalid mower state: {exc.error_count()} errors") from exc
-        if _subject_mower(message) != state.mower_id:
-            raise DropMessage("subject does not match the state's mower")
-        try:
-            stored = await ingest.record_state(state)
-        except AccountMismatchError as exc:
-            _log.warning(
-                "state dropped",
-                mower_id=str(state.mower_id),
-                account_id=str(state.account_id),
-                reason=exc.message,
-            )
-            raise DropMessage(exc.message) from exc
-        if not stored:
-            _log.debug("older state ignored", mower_id=str(state.mower_id))
+
+def states_handler(ingest: Ingest) -> BatchHandler:
+    """Store a batch of states in one transaction (ADR 0078).
+
+    Malformed states and states naming another account are dropped with a warning (``term``),
+    the others acknowledged after the commit. A database failure raises: the whole batch is
+    delivered again, and what was stored already changes nothing the second time.
+    """
+
+    async def handle(messages: list[BusMessage]) -> list[Outcome]:
+        outcomes: list[Outcome] = ["term"] * len(messages)
+        valid: list[tuple[int, MowerState]] = []
+        for index, message in enumerate(messages):
+            decoded = _decode_state(message)
+            if isinstance(decoded, str):
+                _log.warning("message dropped", subject=message.subject, reason=decoded)
+            else:
+                valid.append((index, decoded))
+        results = await ingest.record_states([state for _, state in valid])
+        for (index, state), result in zip(valid, results, strict=True):
+            if isinstance(result, AccountMismatchError):
+                _log.warning(
+                    "state dropped",
+                    mower_id=str(state.mower_id),
+                    account_id=str(state.account_id),
+                    reason=result.message,
+                )
+                continue
+            if result is StateOutcome.OLDER:
+                _log.debug("older state ignored", mower_id=str(state.mower_id))
+            outcomes[index] = "ack"
+        return outcomes
 
     return handle
 
@@ -225,11 +251,18 @@ async def subscribe_all(
     *,
     unknown_mower_attempts: int,
     queries: Queries | None = None,
+    batch_max: int = 64,
+    batch_wait_seconds: float = 0.0,
 ) -> list[Subscription]:
     """Subscribe every handler of the service and return the subscriptions."""
     subscriptions = [
-        await bus.subscribe(
-            ALL_TELEMETRY, state_handler(ingest), durable=STATES_CONSUMER, queue=STATES_CONSUMER
+        await bus.subscribe_batch(
+            ALL_TELEMETRY,
+            states_handler(ingest),
+            durable=STATES_CONSUMER,
+            queue=STATES_CONSUMER,
+            max_batch=batch_max,
+            max_wait_seconds=batch_wait_seconds,
         ),
         await bus.subscribe(
             ALL_COMMAND_RESULTS,

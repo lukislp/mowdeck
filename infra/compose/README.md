@@ -107,6 +107,7 @@ The ids are only logged. Services using `mowdeck-authz` resolve the store **by n
 | `OPENFGA_API_URL` | `http://openfga:8080` | OpenFGA URL for the job and the services |
 | `OPENFGA_API_TOKEN` | unset (falls back to `OPENFGA_AUTHN_PRESHARED_KEYS`) | Key the clients use; set it when several pre-shared keys are configured |
 | `OPENFGA_STORE_NAME` | `mowdeck` | Store name |
+| `OPENFGA_LOG_LEVEL` | unset (`info`; the demo override: `warn`) | OpenFGA's log level. `info` logs every request (`grpc_req_complete` with its body), which costs CPU and disk on a small host ([Load testing](../../docs/ops/load-testing.md)); `warn` keeps warnings and errors. Helm: `openfga.log.level` |
 
 ## MowDeck services
 

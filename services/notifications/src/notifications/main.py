@@ -227,7 +227,12 @@ def build_app(
         if active_bus is not None:
             cache = as_cache(active_authorizer)
             subscriptions = await subscribe_all(
-                active_bus, services.watcher, services.accounts, cache
+                active_bus,
+                services.watcher,
+                services.accounts,
+                cache,
+                batch_max=settings.notifications_state_batch_max,
+                batch_wait_seconds=settings.notifications_state_batch_wait_seconds,
             )
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)

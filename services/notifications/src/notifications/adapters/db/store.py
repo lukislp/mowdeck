@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from notifications.adapters.db import tables
-from notifications.application.ports import AccountPurge, Tx
+from notifications.application.ports import AccountPurge, StateContext, Tx
 from notifications.domain.geofence import Fence, MowerFence
 from notifications.domain.live_activity import ActivityDevice, ActivityRun, LiveActivity
 from notifications.domain.models import (
@@ -176,34 +176,69 @@ def _fence(row: Any) -> MowerFence:
     )
 
 
+_MOWER = sa.bindparam("mower_id", type_=sa.Uuid())
+_STATE_CONTEXT = sa.select(
+    sa.select(tables.mower_directory.c.account_id)
+    .where(tables.mower_directory.c.mower_id == _MOWER)
+    .scalar_subquery()
+    .label("owner"),
+    sa.select(tables.mower_geofence.c.account_id)
+    .where(tables.mower_geofence.c.mower_id == _MOWER)
+    .scalar_subquery()
+    .label("fence_account"),
+    sa.select(tables.mower_geofence.c.observed_at)
+    .where(tables.mower_geofence.c.mower_id == _MOWER)
+    .scalar_subquery()
+    .label("fence_at"),
+)
+"""Directory account and geofence key of a mower in one round trip (every state needs them)."""
+_WATCH = (
+    sa.select(tables.mower_watch).where(tables.mower_watch.c.mower_id == _MOWER).with_for_update()
+)
+_GEOFENCE = sa.select(tables.mower_geofence).where(tables.mower_geofence.c.mower_id == _MOWER)
+_WATCH_COLUMNS = ("account_id", "last_seen_at", "disconnected_at", "offline", "state")
+
+
+def _put_watch_statement() -> Any:
+    """The watch upsert, built once (building it per state was a measurable share of the CPU
+    per state, docs/ops/load-testing.md "Ingestion cost")."""
+    insert = pg_insert(tables.mower_watch)
+    return insert.on_conflict_do_update(
+        index_elements=[tables.mower_watch.c.mower_id],
+        set_={name: insert.excluded[name] for name in _WATCH_COLUMNS},
+    )
+
+
+_PUT_WATCH = _put_watch_statement()
+
+
 class _SqlTx:
     def __init__(self, conn: AsyncConnection) -> None:
         self._conn = conn
 
+    async def state_context(self, mower_id: UUID) -> StateContext:
+        row = (await self._conn.execute(_STATE_CONTEXT, {"mower_id": mower_id})).one()
+        return StateContext(owner=row.owner, fence_account=row.fence_account, fence_at=row.fence_at)
+
+    async def geofence(self, mower_id: UUID) -> MowerFence | None:
+        row = (await self._conn.execute(_GEOFENCE, {"mower_id": mower_id})).first()
+        return _fence(row) if row else None
+
     async def watch(self, mower_id: UUID) -> MowerWatch | None:
-        result = await self._conn.execute(
-            sa.select(tables.mower_watch)
-            .where(tables.mower_watch.c.mower_id == mower_id)
-            .with_for_update()
-        )
-        row = result.first()
+        row = (await self._conn.execute(_WATCH, {"mower_id": mower_id})).first()
         return _watch(row) if row else None
 
     async def put_watch(self, watch: MowerWatch) -> None:
-        values = {
-            "mower_id": watch.mower_id,
-            "account_id": watch.account_id,
-            "last_seen_at": watch.last_seen_at,
-            "disconnected_at": watch.disconnected_at,
-            "offline": watch.offline,
-            "state": watch.to_json(),
-        }
-        insert = pg_insert(tables.mower_watch).values(**values)
         await self._conn.execute(
-            insert.on_conflict_do_update(
-                index_elements=[tables.mower_watch.c.mower_id],
-                set_={k: insert.excluded[k] for k in values if k != "mower_id"},
-            )
+            _PUT_WATCH,
+            {
+                "mower_id": watch.mower_id,
+                "account_id": watch.account_id,
+                "last_seen_at": watch.last_seen_at,
+                "disconnected_at": watch.disconnected_at,
+                "offline": watch.offline,
+                "state": watch.to_json(),
+            },
         )
 
     async def offline_candidates(

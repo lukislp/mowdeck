@@ -115,6 +115,12 @@ async def test_telemetry_nats_answers_the_track_query() -> None:
             await h.publish_state(
                 make_state(mower_id, owner.account_id, at=T0, position=(48.1, 11.5))
             )
+
+            async def stored() -> bool:  # states are stored in batches (ADR 0078)
+                state = await h.client.get(f"{API}/mowers/{mower_id}/state", headers=owner.headers)
+                return state.status_code == 200
+
+            await eventually(stored)
             request = PositionTrackRequest(
                 account_id=owner.account_id,
                 mower_id=mower_id,

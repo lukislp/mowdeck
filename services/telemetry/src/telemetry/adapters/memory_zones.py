@@ -2,7 +2,7 @@
 
 import asyncio
 from collections import defaultdict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager
 from datetime import date
 from uuid import UUID
@@ -53,6 +53,14 @@ class MemoryZoneStore:
             (z for z in self.zones.values() if z.mower_id == mower_id),
             key=lambda z: (z.created_at, str(z.id)),
         )
+
+    async def zones_for_many(self, mower_ids: Collection[UUID]) -> dict[UUID, list[VirtualZone]]:
+        found: dict[UUID, list[VirtualZone]] = {}
+        for mower_id in mower_ids:
+            zones = await self.zones_for(mower_id)
+            if zones:
+                found[mower_id] = zones
+        return found
 
     async def add_zone(self, zone: VirtualZone, limit: int) -> bool:
         async with self._locks[zone.mower_id]:

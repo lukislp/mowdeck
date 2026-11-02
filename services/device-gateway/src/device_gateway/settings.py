@@ -52,6 +52,13 @@ class Settings(ServiceSettings):
     sim_tick_seconds: float = Field(default=1.0, gt=0, le=60)
     """Real seconds between two simulation steps of a simulated mower."""
 
+    sim_state_period_seconds: float = Field(default=0.0, ge=0, le=60)
+    """Real seconds between two periodic state reports of a simulated mower (the simulator's
+    ``state_period_s``, unless the registration sets it); 0: one report per simulation step.
+    Changes (a command, an error, the RTK fix) are still reported at once. Every report is
+    processed by Telemetry, Notifications, the Scheduler, Realtime and Vision, so a public demo
+    can trade smoothness of the moving marker for CPU (docs/ops/load-testing.md)."""
+
     sim_pause_unwatched: bool = True
     """Demo mode only (``MOWDECK_DEMO_MODE``, ADR 0076): the mowers of an account with no live
     socket (Realtime's ``presence.accounts``) rest, so idle demo sandboxes cost no CPU. Ignored

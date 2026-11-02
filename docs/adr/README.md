@@ -81,3 +81,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0075](0075-chat-control-assistant-add-on.md) | Chat control as an optional assistant add-on | Accepted |
 | [0076](0076-demo-sandboxes.md) | Demo sandboxes, one account per visitor | Accepted |
 | [0077](0077-liveness-readiness-and-routing.md) | Liveness, readiness and routing | Accepted |
+| [0078](0078-batched-state-ingestion.md) | Batched state ingestion | Accepted |

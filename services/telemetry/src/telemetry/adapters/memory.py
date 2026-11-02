@@ -13,7 +13,14 @@ from datetime import date, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
-from telemetry.application.ports import RetentionScope, RetentionTarget, ThinResult, Tx
+from telemetry.application.ports import (
+    IngestRows,
+    RetentionScope,
+    RetentionTarget,
+    StateWrites,
+    ThinResult,
+    Tx,
+)
 from telemetry.domain.health import BladeChange, DailyRow, HealthRow
 from telemetry.domain.models import (
     CommandEvent,
@@ -133,6 +140,26 @@ class _MemoryTx:
 
     async def add_blade_change(self, change: BladeChange) -> None:
         self._data.blade_changes.setdefault(change.id, change)
+
+    async def ingest_rows(self, mower_ids: Collection[UUID]) -> IngestRows:
+        data = self._data
+        return IngestRows(
+            owners={m: data.directory[m].account_id for m in mower_ids if m in data.directory},
+            latest={m: data.latest[m] for m in mower_ids if m in data.latest},
+            health={m: data.health[m] for m in mower_ids if m in data.health},
+        )
+
+    async def write_states(self, writes: StateWrites) -> None:
+        for history in writes.history:
+            await self.add_history(history)
+        for position in writes.positions:
+            await self.add_position(position)
+        for latest in writes.latest.values():
+            await self.put_latest(latest)
+        for health in writes.health.values():
+            await self.put_health(health)
+        for daily in writes.daily.values():
+            await self.put_daily(daily)
 
 
 class _MemoryRetention:

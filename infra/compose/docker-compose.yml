@@ -217,6 +217,9 @@ services:
       OPENFGA_PLAYGROUND_ENABLED: "false"
       OPENFGA_AUTHN_METHOD: preshared
       OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}
+      # info logs every request (grpc_req_complete), which costs CPU on a small host
+      # (docs/ops/load-testing.md); the demo sets warn.
+      OPENFGA_LOG_LEVEL: ${OPENFGA_LOG_LEVEL:-info}
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully

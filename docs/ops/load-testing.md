@@ -373,6 +373,79 @@ per request was the lever. The 7-day RTK positions are still loaded with every m
 panel's shares need them); asking for them only when the panel is opened would be a web app
 change.
 
+### Ingestion cost
+
+The public demo gives every visitor a sandbox ([ADR 0076](../adr/0076-demo-sandboxes.md)); a
+watched one, one mower mowing, cost about 5 % of a core, most of it not the simulator but the
+processing of its states. Measured on 2026-11-02 with
+`tools/repo-checks/scripts/demo_sandbox_cost.py` (20 sandboxes, each watched by a live view with
+one mower mowing, about 27 states a second for the whole stack; 60 s per phase; it now also
+reports the database writes per second from `pg_stat_database` and `pg_stat_wal` and the NATS
+message rate) against the e2e demo stack, alternating `main` at 3c8179f and this change on the
+same workstation (Docker Desktop, containers not pinned). Other containers shared the host, so
+the whole-stack totals moved by 30 % of a core between runs of the same code (the fake
+services alone between 0 and 12 %); the services on the ingestion path are the comparison.
+
+Profiling the consumers with py-spy (`--pid=container:...` with `SYS_PTRACE`) showed where a
+state went: one transaction per state and consumer (Telemetry about nine statements plus the
+pool's ping, `BEGIN` and `COMMIT`; Notifications three connection checkouts with a ping each;
+the Scheduler one more), SQLAlchemy building every upsert anew (the `excluded` columns and the
+cache key were the largest single cost in Telemetry and the Scheduler), the Scheduler writing
+the activity of every state, and eight NATS messages per state (the publish and seven
+acknowledgements). What changed ([ADR 0078](../adr/0078-batched-state-ingestion.md)):
+
+- **Batches**: Telemetry and Notifications consume states with the kit's new batch
+  subscription and store each batch in one transaction, the rows of its mowers read once, the
+  write rules applied state by state in order, one statement per table. Same rows as before,
+  acknowledged after the commit.
+- **Statements built once** on the ingestion paths (Telemetry, Notifications, Scheduler).
+- **Scheduler**: the activity is written when it changes, otherwise at most every 30 s.
+- **Notifications**: the parsed geofence is reused while the stored one is unchanged.
+- **No acknowledgements for live views**: Realtime's fan-out, Vision's view and the camera
+  relay's latest state consume states with `AckPolicy.NONE`.
+
+CPU in percent of one core while the 20 sandboxes were watched (two runs each):
+
+| Service | Before | After |
+| --- | ---: | ---: |
+| Telemetry | 36 / 37 % | 11 / 15 % |
+| Notifications | 24 / 24 % | 8 / 9 % |
+| PostgreSQL | 23 / 24 % | 8 / 13 % |
+| Scheduler | 10 / 13 % | 3 / 8 % |
+| NATS | 13 / 13 % | 14 / 16 % |
+| These five | 106 / 109 % | 52 / 53 % |
+
+| Database, per second | Before | After |
+| --- | ---: | ---: |
+| Transactions of Telemetry, Notifications, Scheduler | 81 to 82 | 12 to 15 |
+| Rows inserted / updated (same three databases) | 21 / 129 to 132 | 19 to 21 / 97 to 104 |
+| WAL | 104 to 106 KiB, 600 records | 89 to 96 KiB, 410 to 440 records |
+| NATS messages in | 218 | 110 to 140 |
+
+- **Per watched sandbox** (the script's difference to the baseline, divided by 20), the
+  ingestion path (Telemetry, Notifications, PostgreSQL, the Scheduler, NATS) went from about
+  **5.0 % to 2.1 %** of a core. The whole stack went from 6.3 % to 4.1 % and 5.2 % in two runs,
+  of which 0.4 and 1.4 % were the fake services of the e2e stack (host noise): about **3.7 %
+  instead of 6.3 %** for the demo's own services. Per state that is about 4 ms of CPU in
+  Telemetry instead of 12 ms, 2.5 ms instead of 8 ms in Notifications.
+- **Projection for the 2-vCPU demo host**: keeping a third of the 200 % for the stack's own
+  baseline and headroom (as ADR 0076 does) leaves room for about **35 watched sandboxes
+  instead of about 20**, so most of `DEMO_SANDBOX_MAX=40` can be watched at once. A VPS vCPU is
+  slower than a desktop core: rerun the script on the host before raising the cap.- NATS did not get cheaper with fewer messages: its CPU is the JetStream file store and the
+  delivery to seven consumers, not the acknowledgements. A memory stream would be cheaper but
+  loses buffered states on a NATS restart (ADR 0078, alternatives).
+- Rows written per state stay what the data needs (each state of a mowing mower is a history
+  or position row, the latest row and the health totals); the transactions and statements
+  around them are what went away.
+
+**Fewer reports from simulated mowers (demo only).** `DEMO_SIM_STATE_PERIOD_SECONDS`
+(Device-Gateway `MOWDECK_SIM_STATE_PERIOD_SECONDS`, default 0: a report every simulation step,
+one a second) lets the demo's mowers report their position less often; changes (a command, an
+error) still go out at once. With `DEMO_SIM_STATE_PERIOD_SECONDS=2` the stack received about 16
+instead of 27 states a second and a watched sandbox cost **1.9 %** of a core (one run, every live
+view receiving states). The marker then moves in larger steps, so the
+default stays at one a second; an operator who needs more sandboxes on the same host can set 2.
+
 ## Fixed in the first load test change
 
 - **One question in flight per check** (`libs/mowdeck-authz`, `OpenFgaAuthorizer`): a cacheable
@@ -418,4 +491,6 @@ From the first run; 1, 4 and 7 are done, 2 in part:
 8. **Traefik's memory** grew with the open sockets and the per-address buckets to about 250 MB at
    400 visitors. If the host limits containers, give the gateway at least 512 MB.
 9. **OpenFGA logs every request at INFO** (`grpc_req_complete` with the request body).
-   `OPENFGA_LOG_LEVEL=warn` saves CPU and disk on a small host.
+   `OPENFGA_LOG_LEVEL=warn` saves CPU and disk on a small host. Done: Compose passes
+   `OPENFGA_LOG_LEVEL` (default `info`), the demo override sets `warn`, Helm has
+   `openfga.log.level`.
