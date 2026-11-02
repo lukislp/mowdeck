@@ -1,0 +1,34 @@
+[project]
+name = "assistant"
+version = "0.1.0"
+description = "Optional chat control add-on: turns a typed request into a validated, confirmable mower action proposal."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "AGPL-3.0-only"
+authors = [{ name = "MowDeck contributors" }]
+classifiers = [
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "httpx>=0.28.1",
+  "mowdeck-auth",
+  "mowdeck-contracts",
+  "mowdeck-service-kit",
+]
+
+[project.scripts]
+assistant = "assistant.main:main"
+
+[tool.uv.sources]
+mowdeck-auth = { workspace = true }
+mowdeck-contracts = { workspace = true }
+mowdeck-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.32.4"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/assistant"]

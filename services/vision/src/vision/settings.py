@@ -68,6 +68,10 @@ class Settings(ServiceSettings):
     vision_provider_tests_per_hour: int = Field(default=10, ge=1, le=1000)
     """Provider tests per user and hour."""
 
+    vision_structured_per_hour: int = Field(default=30, ge=1, le=10000)
+    """Text-only structured answers (``POST /me/provider/structured``, used by optional
+    modules such as the assistant, ADR 0075) per user and hour."""
+
     # --- proposals ------------------------------------------------------------------------
 
     vision_proposal_ttl_seconds: int = Field(default=300, ge=30, le=3600)

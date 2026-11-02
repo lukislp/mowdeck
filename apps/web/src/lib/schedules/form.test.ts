@@ -136,6 +136,20 @@ describe('validateForm', () => {
     });
   });
 
+  it('checks only the day of a one-off schedule', () => {
+    expect(validateForm(form({ kind: 'once', anchorDate: '', intervalDays: '400' }))).toEqual({
+      anchor_date: { code: 'required' },
+    });
+    const body = toBody(form({ kind: 'once', anchorDate: '2026-11-02', intervalDays: '3' }));
+    expect(body).toMatchObject({
+      kind: 'once',
+      days_of_week: [],
+      anchor_date: '2026-11-02',
+      interval_days: null,
+    });
+    expect(fromSchedule({ ...stored, kind: 'once', anchor_date: '2026-11-02' }).kind).toBe('once');
+  });
+
   it('refuses areas on a group, too many angles and long names', () => {
     expect(validateForm(form({ targetType: 'group', areaIds: ['a'] })).areas).toEqual({
       code: 'group_areas',
