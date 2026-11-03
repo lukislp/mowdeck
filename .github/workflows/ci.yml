@@ -1,8 +1,16 @@
 name: ci
 
-# Minute budget: private repository, limited Actions minutes. Pull requests run the full
-# pipeline once (no duplicate push run); pushes to main run only the fast checks, because the
-# merged content was already verified in the pull request. Superseded runs are cancelled.
+# Minute budget: private repository, limited Actions minutes. Pull requests run the pipeline
+# once (no duplicate push run); pushes to main run only the fast checks, because the merged
+# content was already verified in the pull request. Superseded runs are cancelled.
+#
+# Pull requests are scoped by their changes (docs/dev/ci.md): the job `changes` maps the changed
+# files to the jobs that check them (tools/repo-checks/scripts/ci_scope.py) and every other job
+# is skipped with an `if:`. A skipped job counts as passed for a required check, so the workflow
+# has no `paths` filter and always starts; an unknown path, a shared input (lock files,
+# Dockerfiles, libs/, Compose) or a failed `changes` job runs the jobs as before. A pull request
+# that only changes CI configuration runs `ci-config` (actionlint, shellcheck, repo-checks) and
+# the jobs whose definition in this file changed. Pushes to main and manual runs are not scoped.
 on:
   push:
     branches: [main]
@@ -31,7 +39,104 @@ env:
   DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
+  # Which jobs this run needs: one output per scoped job, "true" or "false". The other jobs run
+  # unless their output is "false", so a failed classification runs them (fail safe).
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.scope.outputs.python }}
+      openfga_model: ${{ steps.scope.outputs.openfga_model }}
+      docs: ${{ steps.scope.outputs.docs }}
+      web: ${{ steps.scope.outputs.web }}
+      compose: ${{ steps.scope.outputs.compose }}
+      gradle_wrapper: ${{ steps.scope.outputs.gradle_wrapper }}
+      helm: ${{ steps.scope.outputs.helm }}
+      docker: ${{ steps.scope.outputs.docker }}
+      camera_relay_media: ${{ steps.scope.outputs.camera_relay_media }}
+      e2e: ${{ steps.scope.outputs.e2e }}
+      e2e_web: ${{ steps.scope.outputs.e2e_web }}
+      e2e_demo: ${{ steps.scope.outputs.e2e_demo }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      # On a pull request HEAD is the merge commit; its first parent HEAD^1 is the base branch,
+      # so the diff between them is exactly what the pull request changes.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.24"
+          enable-cache: false
+      # PyYAML (the version of uv.lock) compares the jobs of this file between base and head.
+      - name: Classify the changes
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            set -- --base HEAD^1 --head HEAD
+          else
+            set -- --all
+          fi
+          scope="$(uv run --no-project --with pyyaml==6.0.3 python tools/repo-checks/scripts/ci_scope.py jobs "$@")"
+          printf '%s\n' "$scope" | tee -a "$GITHUB_OUTPUT"
+
+  # The CI configuration itself, on every pull request: actionlint (with shellcheck on every
+  # run: block), shellcheck of the CI scripts and, when the python job is skipped, lint and
+  # tests of tools/repo-checks, which check the workflows, Dependabot and the release
+  # configuration (the python job runs those tests itself otherwise).
+  ci-config:
+    if: ${{ !cancelled() && github.event_name != 'push' }}
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      # sha256 of actionlint_<version>_linux_amd64.tar.gz from the release's checksums file
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      REPO_CHECKS: ${{ needs.changes.outputs.python == 'false' }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+      - name: shellcheck (CI scripts)
+        run: shellcheck tools/repo-checks/scripts/*.sh
+      - if: env.REPO_CHECKS == 'true'
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.24"
+          enable-cache: true
+      - if: env.REPO_CHECKS == 'true'
+        run: uv sync
+      - if: env.REPO_CHECKS == 'true'
+        name: Lint tools/repo-checks
+        run: |
+          uv run ruff check tools/repo-checks
+          uv run ruff format --check tools/repo-checks
+          uv run mypy tools/repo-checks
+      - if: env.REPO_CHECKS == 'true'
+        name: Test tools/repo-checks
+        run: uv run pytest tools/repo-checks -p no:cacheprovider
+
   python:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.python != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -147,6 +252,8 @@ jobs:
   # The authorization model: CLI model tests, freshness of the packaged JSON, and the
   # idempotent bootstrap job of the Compose stack (second run must not write a model).
   openfga-model:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.openfga_model != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -177,6 +284,8 @@ jobs:
           grep -q "model unchanged" second.log
 
   docs:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -201,6 +310,8 @@ jobs:
   # native builds do not (Android: release.yml on v* tags, iOS: apple-testflight.yml on demand
   # or the owner's Mac; its App Store readiness checks run in the python job).
   web:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.web != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -223,6 +334,8 @@ jobs:
       - run: pnpm --filter web build
 
   compose:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.compose != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -251,9 +364,12 @@ jobs:
   # apps/mobile/android keeps the standard committed Gradle wrapper (gradle-wrapper.jar); this
   # job checks the jar against the checksums Gradle publishes for its releases, so a modified
   # wrapper fails the pull request before release.yml ever runs it. It also runs on push to main
-  # (no event condition): Scorecard's Binary-Artifacts check needs a successful ci.yml run for the
-  # latest main commit, which is why scorecard.yml waits for this workflow.
+  # (no event condition; `changes` sets every output there): Scorecard's Binary-Artifacts check
+  # needs a successful ci.yml run for the latest main commit. On a pull request only when the
+  # wrapper (apps/mobile/android/gradle*) or this job changes.
   gradle-wrapper:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.outputs.gradle_wrapper != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -270,7 +386,8 @@ jobs:
   # both overlays, kubeconform -strict, the required-secret checks and the Compose drift test
   # (infra/helm/check.sh). The kind install test is .github/workflows/helm-kind.yml (manual, tags).
   helm:
-    if: github.event_name != 'push'
+    needs: [changes]
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.helm != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -303,7 +420,8 @@ jobs:
       - run: sh infra/helm/check.sh
 
   docker:
-    if: github.event_name != 'push'
+    needs: [changes]
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docker != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -488,10 +606,12 @@ jobs:
   # (services/camera-relay/tests/media): WHEP with aiortc, tickets, the freeze hook, the grace
   # and the release, and the transcoder on the recorded H.265 stream. About two minutes after the
   # cached image build.
+  # The jobs below build the images themselves from the cache the docker job fills; they wait for
+  # it when it runs and also run when it is skipped (only their own definition changed).
   camera-relay-media:
-    if: github.event_name != 'push'
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.camera_relay_media != 'false' && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
     runs-on: ubuntu-24.04
-    needs: [docker]
+    needs: [changes, docker]
     timeout-minutes: 20
     steps:
       - name: Harden the runner
@@ -534,9 +654,9 @@ jobs:
   # The service images are built first with the GitHub Actions cache of the docker
   # job (same scopes); `compose up --build` then finds every layer in the builder.
   e2e:
-    if: github.event_name != 'push'
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e != 'false' && contains(fromJSON('["success", "skipped"]'), needs.python.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
     runs-on: ubuntu-24.04
-    needs: [python, docker]
+    needs: [changes, python, docker]
     timeout-minutes: 30
     steps:
       - name: Harden the runner
@@ -691,9 +811,9 @@ jobs:
   # on retry and is the required check of the branch ruleset.
   e2e-web-shard:
     name: e2e-web shard ${{ matrix.shard }}
-    if: github.event_name != 'push'
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e_web != 'false' && contains(fromJSON('["success", "skipped"]'), needs.web.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
     runs-on: ubuntu-24.04
-    needs: [web, docker]
+    needs: [changes, web, docker]
     # A shard takes about 5 min of setup and a quarter of the suite; one retried slow spec (a test
     # timeout of 3 min) must still fit.
     timeout-minutes: 30
@@ -874,9 +994,9 @@ jobs:
   # (Playwright projects demo and demo-phone) run "Try the demo", the closed registration, the
   # banner on every main page and the API refusals.
   e2e-demo:
-    if: github.event_name != 'push'
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e_demo != 'false' && contains(fromJSON('["success", "skipped"]'), needs.web.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
     runs-on: ubuntu-24.04
-    needs: [web, docker]
+    needs: [changes, web, docker]
     timeout-minutes: 30
     env:
       PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
@@ -944,13 +1064,20 @@ jobs:
       - name: Configure the stack
         run: |
           cp infra/compose/.env.example infra/compose/.env
-          sh infra/mirror-env.sh >> infra/compose/.env
-          grep '^[A-Z_]*=' tests/e2e-web/stack.env >> infra/compose/.env
-          grep '^[A-Z_]*=' tests/e2e-web/demo.env >> infra/compose/.env
+          {
+            sh infra/mirror-env.sh
+            grep '^[A-Z_]*=' tests/e2e-web/stack.env
+            grep '^[A-Z_]*=' tests/e2e-web/demo.env
+          } >> infra/compose/.env
+      # COMPOSE_FILES is a list of -f options, split on purpose (shellcheck SC2086).
       - name: Start the demo stack
-        run: docker compose $COMPOSE_FILES up -d --build --wait --wait-timeout 600
+        run: |
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES up -d --build --wait --wait-timeout 600
       - name: Seed job output
-        run: docker compose $COMPOSE_FILES logs --no-log-prefix demo-seed
+        run: |
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES logs --no-log-prefix demo-seed
       - name: Demo specs (Playwright)
         env:
           MOWDECK_E2E_BASE_URL: http://localhost
@@ -963,10 +1090,14 @@ jobs:
             "$PLAYWRIGHT_IMAGE" npm run demo
       # ADR 0074: the seed job and the demo specs stay within the services' NATS permissions.
       - name: No NATS permission violations
-        run: sh infra/compose/nats-violations.sh $COMPOSE_FILES
+        run: |
+          # shellcheck disable=SC2086
+          sh infra/compose/nats-violations.sh $COMPOSE_FILES
       - name: Collect logs on failure
         if: failure()
-        run: docker compose $COMPOSE_FILES logs --no-color --timestamps > e2e-demo-logs.txt
+        run: |
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES logs --no-color --timestamps > e2e-demo-logs.txt
       - name: Upload traces and logs on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -978,14 +1109,17 @@ jobs:
           retention-days: 7
       - name: Stop the stack
         if: always()
-        run: docker compose $COMPOSE_FILES down -v
+        run: |
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES down -v
 
   # The required check `e2e-web` (branch ruleset): merges the shards' blob reports into one report
-  # and fails when a shard failed, was cancelled or did not run.
+  # and fails when a shard failed, was cancelled or did not run. Skipped (which the ruleset accepts)
+  # when the pull request changes nothing the suite depends on.
   e2e-web:
-    if: ${{ github.event_name != 'push' && !cancelled() }}
+    if: ${{ github.event_name != 'push' && !cancelled() && needs.changes.outputs.e2e_web != 'false' }}
     runs-on: ubuntu-24.04
-    needs: [e2e-web-shard]
+    needs: [changes, e2e-web-shard]
     timeout-minutes: 10
     steps:
       - name: Harden the runner

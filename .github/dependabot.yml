@@ -1,6 +1,8 @@
 # Daily dependency PRs for the ecosystems this repository builds from, in the same shape as the
-# other lukislp repositories: fix(...) commit prefixes, at most two open PRs per ecosystem (uv:
-# ten, see there).
+# other lukislp repositories, at most two open PRs per ecosystem (uv: ten, see there). Commit
+# prefixes decide the release (docs/ops/release.md, "CI-only changes"): runtime dependencies
+# (uv, npm) are fix(deps) and release a patch; CI tooling (GitHub Actions, the ClusterFuzzLite
+# toolchain) is ci and releases nothing (tools/repo-checks/tests/test_ci_scope.py).
 #
 # Not covered here, on purpose:
 #   * Container images. Every third-party image is pinned once under "Image sources" in
@@ -20,7 +22,7 @@ updates:
     schedule:
       interval: daily
     commit-message:
-      prefix: "fix(ci)"
+      prefix: "ci"
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 5
@@ -41,7 +43,7 @@ updates:
     schedule:
       interval: weekly
     commit-message:
-      prefix: "fix(ci)"
+      prefix: "ci"
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 5

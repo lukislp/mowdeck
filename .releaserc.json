@@ -18,6 +18,11 @@
           {
             "type": "refactor",
             "release": "patch"
+          },
+          {
+            "type": "fix",
+            "scope": "ci",
+            "release": false
           }
         ]
       }
