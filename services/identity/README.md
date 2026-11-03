@@ -160,7 +160,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | Variable | Default | Description |
 | --- | --- | --- |
 | `MOWDECK_DATABASE_URL` | required | PostgreSQL of the `identity` database |
-| `MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY` | required | 256-bit key (base64 or hex) that encrypts the signing keys at rest; use `_FILE` in production |
+| `MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY` | required | 256-bit key (base64 or hex) that encrypts the signing keys at rest; use `_FILE` in production. With `MOWDECK_ENVIRONMENT=prod` the development key of `infra/compose/.env.example` is refused at startup |
 | `MOWDECK_IDENTITY_REGISTRATION` | `open` | `open` (home installation default), `closed` (only the first account, then 403), `invite` (reserved, behaves like `closed`) |
 | `MOWDECK_IDENTITY_ISSUER` | `urn:mowdeck:identity` | `iss`; services set `MOWDECK_AUTH_ISSUER` to the same value |
 | `MOWDECK_IDENTITY_AUDIENCE` | `mowdeck-api` | `aud` |
