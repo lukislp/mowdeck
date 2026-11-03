@@ -1,7 +1,9 @@
 """JWKS cache: lifespan, refresh on unknown kid, cooldown, stale keys, parsing; keys."""
 
+import asyncio
 from uuid import uuid4
 
+import httpx
 import pytest
 from mowdeck_auth import (
     AuthSettings,
@@ -85,6 +87,46 @@ async def test_first_fetch_failure_rejects_and_retries_after_cooldown() -> None:
     keys.server.fail = False
     clock.now += 31
     assert await cache.key_for(keys.key.kid) is not None
+
+
+class SlowJwks(httpx.AsyncBaseTransport):
+    """Answers the JWKS only once ``release`` is set, so concurrent lookups overlap a fetch."""
+
+    def __init__(self, keys: TestKeys) -> None:
+        self.keys = keys
+        self.release = asyncio.Event()
+        self.requests = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.requests += 1
+        await self.release.wait()
+        return httpx.Response(200, json=self.keys.server.document())
+
+
+async def test_a_burst_on_a_fresh_cache_waits_for_the_fetch_in_flight() -> None:
+    keys = TestKeys()
+    transport = SlowJwks(keys)
+    cache = JwksCache(TEST_JWKS_URL, transport=transport, refresh_cooldown=30)
+    lookups = [asyncio.create_task(cache.key_for(keys.key.kid)) for _ in range(20)]
+    await asyncio.sleep(0.01)  # every lookup has started; the first one fetches
+    assert not any(task.done() for task in lookups)  # none gave up as "unknown key"
+    transport.release.set()
+    found = await asyncio.gather(*lookups)
+    assert all(key is not None for key in found)
+    assert transport.requests == 1
+
+
+async def test_an_unknown_kid_during_a_fetch_waits_once_and_fetches_nothing_more() -> None:
+    keys = TestKeys()
+    transport = SlowJwks(keys)
+    cache = JwksCache(TEST_JWKS_URL, transport=transport, refresh_cooldown=30)
+    first = asyncio.create_task(cache.key_for(keys.key.kid))
+    await asyncio.sleep(0.01)
+    random_kids = [asyncio.create_task(cache.key_for(f"random-{uuid4()}")) for _ in range(5)]
+    transport.release.set()
+    assert await first is not None
+    assert await asyncio.gather(*random_kids) == [None] * 5
+    assert transport.requests == 1
 
 
 async def test_unreachable_url_is_handled() -> None:
