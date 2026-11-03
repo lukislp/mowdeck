@@ -126,6 +126,12 @@ class MemoryTable[T]:
         self._check_unique(item, ignore=key)
         self.rows[key] = copy.deepcopy(item)
 
+    async def update_where(self, values: dict[str, Any], **where: Any) -> int:
+        found = self._select(where)
+        for row in found:
+            self.rows[self._key(row)] = dataclasses.replace(row, **values)  # type: ignore[type-var]
+        return len(found)
+
     async def delete(self, **where: Any) -> int:
         doomed = [self._key(row) for row in self._select(where)]
         for key in doomed:

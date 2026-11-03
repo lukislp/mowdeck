@@ -188,8 +188,15 @@ class Settings(ServiceSettings):
     identity_demo_sandbox_max: int = Field(default=40, ge=1, le=10_000)
     """Sandboxes visitors may hold at once; one more visitor sees "the demo is full"."""
 
-    identity_demo_sandbox_pool: int = Field(default=2, ge=0, le=50)
-    """Ready sandboxes kept for the next visitors (their history takes seconds to make)."""
+    identity_demo_sandbox_pool: int = Field(default=8, ge=0, le=50)
+    """Ready sandboxes kept for the next visitors. A resting pool sandbox costs only its rows,
+    and since its history is a copy of a daily template a refill takes about a second (ADR
+    0079), so a burst of visitors is served from the pool."""
+
+    identity_demo_sandbox_make_parallel: int = Field(default=3, ge=1, le=50)
+    """Sandboxes made on the spot at once for visitors who found the pool empty; more such
+    visitors wait for a turn (or for a refilled pool sandbox) instead of overloading the
+    other services."""
 
     identity_demo_sandbox_idle_minutes: int = Field(default=30, ge=5, le=24 * 60)
     """A sandbox is deleted this long after its last session refresh (the web app refreshes
@@ -245,6 +252,7 @@ class Settings(ServiceSettings):
         return SandboxConfig(
             max_active=self.identity_demo_sandbox_max,
             pool_size=self.identity_demo_sandbox_pool,
+            make_parallel=self.identity_demo_sandbox_make_parallel,
             idle=timedelta(minutes=self.identity_demo_sandbox_idle_minutes),
             max_age=timedelta(hours=self.identity_demo_sandbox_max_hours),
             per_address_per_hour=self.identity_demo_sandbox_per_address_per_hour,

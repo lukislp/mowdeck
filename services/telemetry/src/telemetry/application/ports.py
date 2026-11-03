@@ -156,6 +156,15 @@ class Tx(Protocol):
         totals upserted (the caller holds the row locks)."""
         ...
 
+    async def copy_ingested(
+        self, source: UUID, target: UUID, account_id: UUID, received_at: datetime
+    ) -> int:
+        """Copy what the ingestion stored of mower ``source`` to mower ``target`` of
+        ``account_id`` (demo sandboxes, ADR 0079): history and position rows with the thinning
+        watermark, the latest row (its state names the target), the health and daily totals.
+        Rows the target already has are kept. Returns the number of rows copied."""
+        ...
+
 
 class RetentionScope(Protocol):
     """Held by the one replica that may delete (see :meth:`Store.retention`)."""

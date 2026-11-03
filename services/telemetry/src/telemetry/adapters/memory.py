@@ -161,6 +161,46 @@ class _MemoryTx:
         for daily in writes.daily.values():
             await self.put_daily(daily)
 
+    async def copy_ingested(
+        self, source: UUID, target: UUID, account_id: UUID, received_at: datetime
+    ) -> int:
+        data, copied = self._data, 0
+        for (mower, at), history in list(data.history.items()):
+            if mower == source and (target, at) not in data.history:
+                data.history[(target, at)] = replace_fields(
+                    history, mower_id=target, account_id=account_id
+                )
+                copied += 1
+        for (mower, at), position in list(data.positions.items()):
+            if mower == source and (target, at) not in data.positions:
+                data.positions[(target, at)] = replace_fields(
+                    position, mower_id=target, account_id=account_id
+                )
+                copied += 1
+        for (mower, day), daily in list(data.daily.items()):
+            if mower == source and (target, day) not in data.daily:
+                data.daily[(target, day)] = replace_fields(
+                    daily, mower_id=target, account_id=account_id
+                )
+                copied += 1
+        health = data.health.get(source)
+        if health is not None and target not in data.health:
+            data.health[target] = replace_fields(
+                health, mower_id=target, account_id=account_id, updated_at=received_at
+            )
+            copied += 1
+        latest = data.latest.get(source)
+        if latest is not None and target not in data.latest:
+            state = {**latest.state, "mower_id": str(target), "account_id": str(account_id)}
+            data.latest[target] = replace_fields(
+                latest, mower_id=target, account_id=account_id, received_at=received_at, state=state
+            )
+            copied += 1
+        if source in data.thinned_until and target not in data.thinned_until:
+            data.thinned_until[target] = data.thinned_until[source]
+            copied += 1
+        return copied
+
 
 class _MemoryRetention:
     def __init__(self, data: _Data) -> None:

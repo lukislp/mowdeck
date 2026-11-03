@@ -4,7 +4,9 @@
 refresh on an unknown ``kid``) but is async and rate limited:
 
 * the set is reused for ``lifespan`` seconds;
-* an unknown ``kid`` triggers a refresh, so a freshly rotated key verifies at once;
+* an unknown ``kid`` triggers a refresh, so a freshly rotated key verifies at once; while a
+  fetch is in flight, a lookup of a ``kid`` that is not known yet waits for that fetch (a burst
+  of first sign-ins on a freshly started service is not refused);
 * two fetches are at least ``refresh_cooldown`` seconds apart, so a flood of tokens with random
   ``kid`` values cannot turn the service into a JWKS fetching proxy;
 * when a refresh fails the last good set is served for at most ``stale_max`` seconds after the
@@ -118,10 +120,20 @@ class JwksCache:
         if self._expired(now) and self._may_fetch(now):
             await self.refresh()
         key = self._keys.get(kid)
-        if key is None and self._may_fetch(self._clock()):
-            await self.refresh()
+        if key is None:
+            if self._may_fetch(self._clock()):
+                await self.refresh()
+            elif self._lock.locked():
+                # A fetch is in flight (it set the cooldown): a fresh service sees a burst of
+                # tokens before its first set arrives, and these must wait for it, not fail.
+                await self._fetched()
             key = self._keys.get(kid)
         return key
+
+    async def _fetched(self) -> None:
+        """Return once the fetch in flight is done (the lock is held for exactly its time)."""
+        async with self._lock:
+            pass
 
     async def refresh(self) -> bool:
         """Fetch the set now. Concurrent callers share one fetch. True on success."""

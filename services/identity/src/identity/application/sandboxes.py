@@ -5,14 +5,17 @@ zones and inbox, so nobody sees another visitor's actions. The lifecycle of one 
 
 1. **Pool.** A background worker keeps ``pool_size`` sandboxes ready: the account and its user
    (no password, nobody signs in with one), the setup tour marked done, then the provisioner
-   fills the other services (mowers, schedules, notification preferences, a week of history).
-   Filling takes seconds (the history); a click must not wait for it.
+   fills the other services (mowers, schedules, notification preferences, a week of history,
+   which Telemetry copies from a daily template, ADR 0079). A click must not wait for it.
 2. **Claim.** "Try the demo" takes the oldest ready sandbox and starts a login session of its
    user, the same tokens and cookie as any sign-in (``POST /demo/session``). With an empty pool
-   a sandbox is made on the spot without history (about a second). The number of active
-   sandboxes is capped (``max_active``): one more visitor gets :class:`DemoFull` with a time to
-   come back; one address may start ``per_address_per_hour`` sandboxes an hour.
-3. **Idle and expiry.** The sweep runs every minute. A sandbox whose user's newest login session
+   a sandbox is made on the spot without history (about a second), at most ``make_parallel``
+   at once; a visitor waiting for a turn takes a sandbox the refill made meanwhile. The number
+   of active sandboxes is capped (``max_active``; visitors waiting for a sandbox made on the
+   spot count too): one more visitor gets :class:`DemoFull` with a time to come back; one
+   address may start ``per_address_per_hour`` sandboxes an hour.
+3. **Idle and expiry.** The sweep runs every minute, a few seconds after a logout, and when a
+   purge waiting for ``settle`` is due. A sandbox whose user's newest login session
    row (every refresh writes one; the web app refreshes every few minutes while a tab is open)
    is older than ``idle``, whose login session ended (logout), or which is older than
    ``max_age`` goes to ``purging``. Its sessions are revoked at once.
@@ -37,7 +40,7 @@ from mowdeck_service_kit.client_address import limiter_key
 from identity.application.accounts import AccountService, Registration
 from identity.application.context import SYSTEM, RequestContext
 from identity.application.deps import Deps
-from identity.application.ports import Gt, Lt, SandboxProvisioner
+from identity.application.ports import Gt, Lt, SandboxProvisioner, Tx
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.sessions import SessionService, TokenPair
 from identity.application.sync import platform_tuple
@@ -62,8 +65,10 @@ class SandboxConfig:
 
     max_active: int = 40
     """Sandboxes visitors hold at once; one more visitor gets "the demo is full"."""
-    pool_size: int = 2
-    """Ready sandboxes kept for the next visitors."""
+    pool_size: int = 8
+    """Ready sandboxes kept for the next visitors (a resting one costs only its rows)."""
+    make_parallel: int = 3
+    """Sandboxes made on the spot at once when the pool is empty; more visitors wait a turn."""
     idle: timedelta = timedelta(minutes=30)
     """A sandbox without a session refresh for this long is deleted."""
     max_age: timedelta = timedelta(hours=6)
@@ -78,6 +83,8 @@ class SandboxConfig:
     """Wait between Fleet's purge (the mowers stop) and the other services' purges."""
     retry_max: timedelta = timedelta(minutes=10)
     """Longest wait between two purge attempts of one sandbox."""
+    nudge_delay: timedelta = timedelta(seconds=5)
+    """After a logout the sweep waits this long, so a burst of logouts is swept once."""
     account_name: str = "MowDeck demo"
     display_name: str = "Demo visitor"
 
@@ -113,7 +120,11 @@ class SandboxService:
         per_hour = config.per_address_per_hour
         self._limiter = TokenBucketLimiter(per_minute=per_hour / 60.0, capacity=max(1, per_hour))
         self._claim = asyncio.Lock()
+        self._reserved = 0
+        """Visitors waiting for a sandbox whose row does not exist yet (they count to the cap)."""
+        self._making = asyncio.Semaphore(max(1, config.make_parallel))
         self._fill = asyncio.Lock()
+        self._nudged = asyncio.Event()
         self.wanted = asyncio.Event()
         """Set when the pool should be refilled (a claim took a sandbox)."""
 
@@ -128,42 +139,73 @@ class SandboxService:
         if wait > 0:
             msg = "this address started many demo sandboxes; try again later"
             raise RateLimited(msg, int(wait) + 1)
-        sandbox, fresh = await self._claim_one()
+        sandbox = await self._claim_one()
         self.wanted.set()
-        if fresh:
-            try:
-                await self._fill_services(sandbox, history=False)
-            except Exception as exc:
-                _log.warning("a sandbox could not be prepared", error=repr(exc))
-                await self._mark(sandbox, "provisioning failed")
-                msg = "the demo could not prepare your sandbox; try again in a minute"
-                raise DemoFull(msg, 60) from exc
-            await self._set_state(sandbox, SandboxState.ACTIVE)
+        fresh = False
+        if sandbox is None:
+            sandbox, fresh = await self._make_for_visitor()
         _log.info("sandbox claimed", account_id=str(sandbox.account_id), fresh=fresh)
         return await self.sessions.login_sandbox(sandbox.user_id, sandbox.account_id, ctx)
 
-    async def _claim_one(self) -> tuple[DemoSandbox, bool]:
-        """A ready sandbox turned active, or a new reserved one (``True``) when the pool is
-        empty. Serialised, so the cap holds under concurrent clicks."""
+    async def _claim_one(self) -> DemoSandbox | None:
+        """A ready sandbox turned active, or None with a place reserved for a sandbox made on
+        the spot (the pool is empty). Serialised, so the cap holds under concurrent clicks; the
+        reservation counts to the cap until the visitor's sandbox is active (ADR 0079)."""
         async with self._claim:
-            now = self.deps.clock()
             async with self.deps.store.transaction() as tx:
                 taken = await tx.sandboxes.count(state=SandboxState.ACTIVE)
                 taken += await tx.sandboxes.count(
                     state=SandboxState.PROVISIONING, claimed_at=Gt(_EPOCH)
                 )
-                if taken >= self.config.max_active:
+                if taken + self._reserved >= self.config.max_active:
                     msg = "every demo sandbox is taken; try again in a few minutes"
                     raise DemoFull(msg, self.config.retry_after_seconds)
-                ready = await tx.sandboxes.find(
-                    state=SandboxState.READY, order_by="created_at", limit=1
-                )
-                if ready:
-                    sandbox = ready[0]
-                    sandbox.state, sandbox.claimed_at = SandboxState.ACTIVE, now
-                    await tx.sandboxes.update(sandbox)
-                    return sandbox, False
-            return await self._create(claimed_at=now), True
+                sandbox = await self._take_ready(tx)
+            if sandbox is None:
+                self._reserved += 1
+            return sandbox
+
+    async def _take_ready(self, tx: Tx) -> DemoSandbox | None:
+        """The oldest ready sandbox turned active (the caller holds the claim lock)."""
+        ready = await tx.sandboxes.find(state=SandboxState.READY, order_by="created_at", limit=1)
+        if not ready:
+            return None
+        sandbox = ready[0]
+        sandbox.state, sandbox.claimed_at = SandboxState.ACTIVE, self.deps.clock()
+        await tx.sandboxes.update(sandbox)
+        return sandbox
+
+    async def _make_for_visitor(self) -> tuple[DemoSandbox, bool]:
+        """A sandbox for a visitor who found the pool empty, holding a reserved place; True when
+        it was made on the spot (False: a pool sandbox refilled while the visitor waited).
+
+        At most ``make_parallel`` are made at once (ADR 0079): a burst beyond the pool would
+        otherwise ask Fleet, the Scheduler and OpenFGA for dozens of accounts at the same
+        moment, and on two cores their checks time out. A visitor waiting for a turn takes a
+        sandbox the pool refill made meanwhile instead."""
+        reserved = True
+        try:
+            async with self._making:
+                async with self._claim, self.deps.store.transaction() as tx:
+                    pooled = await self._take_ready(tx)
+                # From here on the active row counts to the cap (no await since its commit).
+                if pooled is not None:
+                    self._reserved, reserved = self._reserved - 1, False
+                    return pooled, False
+                sandbox = await self._create(claimed_at=self.deps.clock())
+                self._reserved, reserved = self._reserved - 1, False
+                try:
+                    await self._fill_services(sandbox, history=False)
+                except Exception as exc:
+                    _log.warning("a sandbox could not be prepared", error=repr(exc))
+                    await self._mark(sandbox, "provisioning failed")
+                    msg = "the demo could not prepare your sandbox; try again in a minute"
+                    raise DemoFull(msg, 60) from exc
+                await self._set_state(sandbox, SandboxState.ACTIVE)
+                return sandbox, True
+        finally:
+            if reserved:
+                self._reserved -= 1
 
     # --- pool ---------------------------------------------------------------------------------
 
@@ -256,6 +298,40 @@ class SandboxService:
 
     # --- sweep and purge ----------------------------------------------------------------------
 
+    def session_ended(self) -> None:
+        """A visitor logged out: sweep soon (after ``nudge_delay``, so that a burst of logouts
+        is swept once) instead of at the next interval."""
+        self._nudged.set()
+
+    async def run_sweep(self, every_seconds: float = 60.0) -> None:
+        """Sweep every ``every_seconds``, soon after a logout, and when a purge waiting for
+        the settle time after Fleet is due (ADR 0079), so a sandbox is gone about
+        ``settle`` after its visitor left instead of up to two intervals later."""
+        while True:
+            self._nudged.clear()
+            try:
+                await self.sweep()
+                wait = await self.next_sweep_in(every_seconds)
+            except Exception:
+                _log.exception("the sandbox sweep failed")
+                wait = every_seconds
+            try:
+                async with asyncio.timeout(wait):
+                    await self._nudged.wait()
+                await asyncio.sleep(self.config.nudge_delay.total_seconds())
+            except TimeoutError:
+                pass
+
+    async def next_sweep_in(self, every_seconds: float) -> float:
+        """Seconds until the next sweep: ``every_seconds``, or less when a purge attempt is
+        due earlier (at least a second)."""
+        async with self.deps.store.transaction() as tx:
+            purging = await tx.sandboxes.find(state=SandboxState.PURGING)
+        if not purging:
+            return every_seconds
+        due = min(s.next_attempt_at or _EPOCH for s in purging)
+        return min(every_seconds, max(1.0, (due - self.deps.clock()).total_seconds()))
+
     async def sweep(self) -> SweepResult:
         """Mark idle, ended, expired and stuck sandboxes for deletion, then purge what is due."""
         now = self.deps.clock()
@@ -303,9 +379,11 @@ class SandboxService:
             current.state, current.purge_reason = SandboxState.PURGING, reason
             current.next_attempt_at = now
             await tx.sandboxes.update(current)
-            for session in await tx.sessions.find(user_id=sandbox.user_id, revoked_at=None):
-                session.revoked_at, session.revoke_reason = now, f"demo sandbox {reason}"
-                await tx.sessions.update(session)
+            await tx.sessions.update_where(
+                {"revoked_at": now, "revoke_reason": f"demo sandbox {reason}"},
+                user_id=sandbox.user_id,
+                revoked_at=None,
+            )
         _log.info("sandbox to be deleted", account_id=str(sandbox.account_id), reason=reason)
 
     async def _set_state(self, sandbox: DemoSandbox, state: SandboxState) -> None:

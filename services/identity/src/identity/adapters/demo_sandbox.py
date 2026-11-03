@@ -10,7 +10,9 @@ The garden template is the one of the shared demo's seed job (``infra/compose/de
 a test keeps both equal.
 """
 
+import asyncio
 import math
+from collections.abc import Awaitable, Iterable
 from typing import Any
 from uuid import UUID
 
@@ -86,6 +88,18 @@ class ProvisioningFailed(Exception):  # noqa: N818 - reads like what happened
     """A service refused or did not answer while a sandbox was filled or emptied."""
 
 
+async def _all[T](calls: Iterable[Awaitable[T]]) -> list[T]:
+    """Run ``calls`` at the same time; the first failure is raised once all have ended (so
+    no call is left running behind the caller's back)."""
+    results = await asyncio.gather(*calls, return_exceptions=True)
+    done: list[T] = []
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
+        done.append(result)
+    return done
+
+
 class HttpSandboxProvisioner:
     """The sandbox provisioner on the services' HTTP APIs."""
 
@@ -108,6 +122,7 @@ class HttpSandboxProvisioner:
         self._timeout = timeout_seconds
         self._history_timeout = history_timeout_seconds
         self._transport = transport
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def services(self) -> tuple[str, ...]:
@@ -130,44 +145,69 @@ class HttpSandboxProvisioner:
     def _url(self, service: str, path: str) -> str:
         return self._template.format(service=service) + path
 
+    def _shared(self) -> httpx.AsyncClient:
+        """One client for every call (ADR 0079): its connections to the services are kept and
+        reused instead of a new client, TLS context and connection per sandbox."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=self._timeout,
+                transport=self._transport,
+                limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close the shared client (at shutdown)."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
     async def provision(self, account_id: UUID, access_token: str, *, history: bool) -> None:
-        """Mowers, schedules, notification preferences and (``history``) the past days."""
+        """Mowers, schedules, notification preferences and (``history``) the past days.
+
+        The calls that do not depend on each other run at the same time (ADR 0079): the first
+        mower alone (it makes the account's default site in Fleet), then the other two, then
+        the schedules and the preferences together, so a visitor waiting for a sandbox made on
+        the spot waits for four round trips instead of eight."""
         bearer = {"Authorization": f"Bearer {access_token}"}
         seeded = {**bearer, DEMO_SEED_HEADER: self._seed_token}
-        async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
-            created: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
-            for spec in MOWERS:
-                lat, lon = garden_origin(spec["offset_m"])
-                options = {**spec["connection_options"], "origin_lat": lat, "origin_lon": lon}
-                mower = await self._call(
-                    client,
-                    "POST",
-                    self._url("fleet", "/mowers"),
-                    seeded,
-                    {
-                        "name": spec["name"],
-                        "connection_kind": "simulated",
-                        "connection_options": options,
-                    },
-                )
-                created.append((spec, str(mower["id"]), options))
-            for spec, mower_id, _ in created:
-                await self._call(
-                    client,
-                    "POST",
-                    self._url("scheduler", "/schedules"),
-                    bearer,
-                    {
-                        "name": f"{spec['name']}'s routine",
-                        "target_type": "mower",
-                        "target_id": mower_id,
-                        "kind": "weekly",
-                        "duration_minutes": 180,
-                        "timezone": "Europe/Berlin",
-                        "rotation_step_deg": 45,
-                        **spec["schedule"],
-                    },
-                )
+        client = self._shared()
+
+        async def mower(spec: dict[str, Any]) -> tuple[dict[str, Any], str, dict[str, Any]]:
+            lat, lon = garden_origin(spec["offset_m"])
+            options = {**spec["connection_options"], "origin_lat": lat, "origin_lon": lon}
+            made = await self._call(
+                client,
+                "POST",
+                self._url("fleet", "/mowers"),
+                seeded,
+                {
+                    "name": spec["name"],
+                    "connection_kind": "simulated",
+                    "connection_options": options,
+                },
+            )
+            return spec, str(made["id"]), options
+
+        async def schedule(spec: dict[str, Any], mower_id: str) -> None:
+            await self._call(
+                client,
+                "POST",
+                self._url("scheduler", "/schedules"),
+                bearer,
+                {
+                    "name": f"{spec['name']}'s routine",
+                    "target_type": "mower",
+                    "target_id": mower_id,
+                    "kind": "weekly",
+                    "duration_minutes": 180,
+                    "timezone": "Europe/Berlin",
+                    "rotation_step_deg": 45,
+                    **spec["schedule"],
+                },
+            )
+
+        async def preferences() -> None:
             # Notifications fills the inbox only for users who saved preferences (ADR 0068).
             url = self._url("notifications", "/preferences")
             current = await self._call(client, "GET", url, bearer)
@@ -175,35 +215,38 @@ class HttpSandboxProvisioner:
                 await self._call(
                     client, "PUT", url, bearer, {key: current[key] for key in PREFERENCE_FIELDS}
                 )
-            if history and self._history_days > 0:
-                await self._call(
-                    client,
-                    "POST",
-                    self._url("telemetry", "/demo/history"),
-                    seeded,
-                    {
-                        "mowers": [
-                            {
-                                "mower_id": mower_id,
-                                "account_id": str(account_id),
-                                "connection_options": options,
-                            }
-                            for _, mower_id, options in created
-                        ],
-                        "days": self._history_days,
-                    },
-                    timeout=self._history_timeout,
-                )
+
+        first = await mower(MOWERS[0])
+        created = [first, *await _all(mower(spec) for spec in MOWERS[1:])]
+        await _all([*(schedule(spec, mower_id) for spec, mower_id, _ in created), preferences()])
+        if history and self._history_days > 0:
+            await self._call(
+                client,
+                "POST",
+                self._url("telemetry", "/demo/history"),
+                seeded,
+                {
+                    "mowers": [
+                        {
+                            "mower_id": mower_id,
+                            "account_id": str(account_id),
+                            "connection_options": options,
+                        }
+                        for _, mower_id, options in created
+                    ],
+                    "days": self._history_days,
+                },
+                timeout=self._history_timeout,
+            )
 
     async def purge(self, service: str, account_id: UUID) -> None:
         """``DELETE /api/v1/<service>/demo/accounts/<id>`` with the seed secret."""
-        async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
-            answer = await self._call(
-                client,
-                "DELETE",
-                self._url(service, f"/demo/accounts/{account_id}"),
-                {DEMO_SEED_HEADER: self._seed_token},
-            )
+        answer = await self._call(
+            self._shared(),
+            "DELETE",
+            self._url(service, f"/demo/accounts/{account_id}"),
+            {DEMO_SEED_HEADER: self._seed_token},
+        )
         _log.debug("sandbox purged in a service", service=service, deleted=answer.get("deleted"))
 
     @staticmethod

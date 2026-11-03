@@ -194,7 +194,7 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
         tasks.append(asyncio.create_task(sandboxes.run_pool(), name="sandbox-pool"))
         tasks.append(
             asyncio.create_task(
-                every(settings.identity_demo_sandbox_sweep_seconds, "sandboxes", sandboxes.sweep),
+                sandboxes.run_sweep(settings.identity_demo_sandbox_sweep_seconds),
                 name="sandbox-sweep",
             )
         )

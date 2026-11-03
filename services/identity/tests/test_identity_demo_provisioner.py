@@ -1,5 +1,6 @@
 """The HTTP provisioner of the demo sandboxes (ADR 0076) against a fake of the other services."""
 
+import asyncio
 import json
 from uuid import uuid4
 
@@ -54,13 +55,21 @@ async def test_a_pool_sandbox_gets_mowers_schedules_preferences_and_history() ->
     account_id = uuid4()
     await _provisioner(fake).provision(account_id, "visitor-token", history=True)
     calls = [(method, path) for method, path, _, _ in fake.calls]
-    assert calls == [
-        *[("POST", "/api/v1/fleet/mowers")] * len(MOWERS),
-        *[("POST", "/api/v1/scheduler/schedules")] * len(MOWERS),
-        ("GET", "/api/v1/notifications/preferences"),
-        ("PUT", "/api/v1/notifications/preferences"),
-        ("POST", "/api/v1/telemetry/demo/history"),
-    ]
+    assert sorted(calls) == sorted(
+        [
+            *[("POST", "/api/v1/fleet/mowers")] * len(MOWERS),
+            *[("POST", "/api/v1/scheduler/schedules")] * len(MOWERS),
+            ("GET", "/api/v1/notifications/preferences"),
+            ("PUT", "/api/v1/notifications/preferences"),
+            ("POST", "/api/v1/telemetry/demo/history"),
+        ]
+    )
+    # The mowers first (the schedules name them), the preferences read before they are
+    # written, the history last (Telemetry needs the mowers).
+    assert calls[: len(MOWERS)] == [("POST", "/api/v1/fleet/mowers")] * len(MOWERS)
+    get = calls.index(("GET", "/api/v1/notifications/preferences"))
+    assert get < calls.index(("PUT", "/api/v1/notifications/preferences"))
+    assert calls[-1] == ("POST", "/api/v1/telemetry/demo/history")
     for method, path, headers, _ in fake.calls:
         assert headers["authorization"] == "Bearer visitor-token"
         seeded = path in ("/api/v1/fleet/mowers", "/api/v1/telemetry/demo/history")
@@ -69,6 +78,48 @@ async def test_a_pool_sandbox_gets_mowers_schedules_preferences_and_history() ->
     assert isinstance(history, dict)
     assert history["days"] == 2
     assert {m["account_id"] for m in history["mowers"]} == {str(account_id)}
+
+
+class SlowServices(httpx.AsyncBaseTransport):
+    """:class:`FakeServices` answering after a pause; counts the calls in flight at once."""
+
+    def __init__(self) -> None:
+        self.fake = FakeServices()
+        self.in_flight = 0
+        self.most = 0
+        self.rounds: list[int] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.in_flight += 1
+        self.most = max(self.most, self.in_flight)
+        try:
+            await asyncio.sleep(0.02)
+            await request.aread()
+            return self.fake(request)
+        finally:
+            self.in_flight -= 1
+
+
+async def test_independent_calls_run_side_by_side_on_one_client() -> None:
+    slow = SlowServices()
+    provisioner = HttpSandboxProvisioner(seed_token=SEED, history_days=0, transport=slow)
+    client = provisioner._shared()
+    await provisioner.provision(uuid4(), "t", history=False)
+    await provisioner.purge("fleet", uuid4())
+    assert provisioner._shared() is client  # one client, its connections kept
+    # Eight calls of the provisioning in four rounds (the first mower, the other two, the
+    # schedules beside the preferences read, the preferences written), then the purge.
+    assert len(slow.fake.calls) == 9
+    assert slow.most == len(MOWERS) + 1  # three schedules and the preferences at once
+    await provisioner.aclose()
+
+
+async def test_a_failing_call_among_parallel_ones_fails_the_provisioning() -> None:
+    fake = FakeServices(fail="scheduler")
+    provisioner = HttpSandboxProvisioner(seed_token=SEED, transport=httpx.MockTransport(fake))
+    with pytest.raises(ProvisioningFailed, match="scheduler"):
+        await provisioner.provision(uuid4(), "t", history=True)
+    assert all("history" not in path for _, path, _, _ in fake.calls)
 
 
 async def test_a_sandbox_made_on_the_spot_has_no_history() -> None:

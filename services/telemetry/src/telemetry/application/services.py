@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.demo import DemoPurge
+from telemetry.application.demo_history import DemoHistory
 from telemetry.application.errors import ErrorExplanations
 from telemetry.application.health import Health
 from telemetry.application.ingest import Ingest
@@ -35,6 +36,8 @@ class Services:
     """Virtual zones (ADR 0070); None without a zone store."""
     demo: DemoPurge | None = None
     """The demo sandbox purge (ADR 0076), wired at startup."""
+    demo_history: DemoHistory | None = None
+    """Past mowing days for demo mowers from daily templates (ADR 0068, ADR 0079)."""
 
 
 def build_services(
@@ -59,8 +62,9 @@ def build_services(
         if zone_store is not None
         else None
     )
+    ingest = Ingest(store, config, clock, events, observer=zones)
     return Services(
-        ingest=Ingest(store, config, clock, events, observer=zones),
+        ingest=ingest,
         queries=queries,
         health=Health(store, config, clock, queries),
         retention=Retention(store, config, clock, observer=retention_observer),
@@ -74,4 +78,5 @@ def build_services(
             zone_points=zones.zone_points if zones is not None else None,
         ),
         zones=zones,
+        demo_history=DemoHistory(store, ingest, clock),
     )

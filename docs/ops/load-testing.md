@@ -446,6 +446,70 @@ instead of 27 states a second and a watched sandbox cost **1.9 %** of a core (on
 view receiving states). The marker then moves in larger steps, so the
 default stays at one a second; an operator who needs more sandboxes on the same host can set 2.
 
+### Sandbox claim and release
+
+The real demo host (2 vCPU, v0.58.6, `vps/ladder.sh`, all visitors arriving within 180 s)
+stayed within the thresholds up to 50 sandbox visitors, but "Try the demo" and the logout
+degraded first: at 50 visitors a claim p95 of 1.23 s (264 ms at 30) and a logout p95 of 3.1 s
+(260 ms at 30), with the host's CPU averaging only 57 %. Profiled on the stack under test
+(py-spy on Identity, Fleet, the Scheduler, Notifications and Telemetry) and measured with the
+new `--lifecycle` mode of `tools/repo-checks/scripts/demo_sandbox_cost.py` (N visitors claim
+within a ramp, each opens its mower list and a mower, then all log out at the same moment):
+
+- **The pool refill was the biggest CPU consumer of a burst**: a week of simulated history,
+  about 6,700 states through Telemetry's ingestion, about 2.6 s of Telemetry CPU per sandbox,
+  with Telemetry's event loop blocked for most of it, so the mower pages of the visitors already
+  inside waited. It still kept up with only 16 of 40 claims in a minute; 24 visitors got a
+  sandbox without history.
+- **Sandboxes made on the spot were serialised** (the account inside the claim lock, then eight
+  HTTP calls one after the other) and, without the lock, overloaded OpenFGA, so checks timed out
+  and claims failed.
+- **The logout** only ends the session, but 40 at once queue in Identity's one process; the
+  release took two sweep intervals.
+
+What changed ([ADR 0079](../adr/0079-fast-sandbox-lifecycle.md)): Telemetry simulates a
+garden's history once a day for a template mower and copies its rows to each sandbox's mower
+(one `INSERT ... SELECT` per table); the pool holds 8 (resting sandboxes cost only rows); a
+sandbox made on the spot is made outside the claim lock, at most three at once, with the
+independent calls side by side on one HTTP client, and a waiting visitor takes a refilled pool
+sandbox; a session family is revoked in one statement; the sweep runs soon after a logout and
+after the settle time; `JwksCache` lookups wait for a fetch in flight.
+
+Measured on 2026-11-03 on the stack under test, `main` at f44400e against this change, 40
+visitors (`--sandboxes 40`):
+
+| 40 visitors | within 60 s, before | within 60 s, after | within 10 s, before | within 10 s, after |
+| --- | ---: | ---: | ---: | ---: |
+| Claim median / p95 / max | 511 / 1092 / 2214 ms | 43 / 157 / 245 ms | 8940 / 13715 / 13760 ms | 3285 / 6918 / 7239 ms |
+| Claims served by the pool (with history) | 16 of 40 | 40 of 40 | about 3 of 40 | 15 of 40 |
+| First view median / p95 | 337 / 517 ms | 362 / 431 ms | 615 / 1428 ms | 514 / 697 ms |
+| Stack CPU while claiming (Telemetry), % of a core | 152 (49) | 105 (14) | 199 (42) | 198 (14) |
+| Every sandbox deleted after the logouts | 120 s | 53 s | 107 s | 54 s |
+
+No claim failed in these runs; without the bound on sandboxes made at once, 6 of 40 claims
+within 10 s failed (OpenFGA checks timed out, the Scheduler answered "mower not found"). 40
+logouts at once, straight at Identity inside the stack's network: median / p95 356 / 651 ms
+before, 211 / 367 ms after.
+
+The scenario `sandbox-visitor` (`LOAD_VUS=40 LOAD_RAMP=180s LOAD_DURATION=2m LOAD_HOLD=60`,
+every visitor starts a mower and holds the live view; the shape of the host's ladder level):
+
+| 40 sandbox visitors | Before | After |
+| --- | ---: | ---: |
+| API p95 | 1.30 s (threshold crossed) | 172 ms |
+| "Try the demo" p95 / max | 6.09 s / 9.08 s | 98 / 160 ms |
+| Logout p95 | 376 ms | 292 ms |
+| `GET /telemetry/mowers/{id}/state` p95 | 2.0 s | 213 ms |
+| First live state p95 | 662 ms | 107 ms |
+| Failed requests | 0.16 % | 0 % |
+| Stack CPU average (Telemetry) | 157 % (40 %) | 93 % (15 %) |
+
+With `DEMO_SANDBOX_MAX=60` for the run, 60 visitors: "Try the demo" p95 271 ms, logout p95
+602 ms, API p95 582 ms, 0.08 % failed requests, 99.5 % of the live views with states, the stack
+at 133 % on average and at its 200 % in peaks. Beyond 40 the limit is the telemetry of the
+watched mowers again ([Ingestion cost](#ingestion-cost)), not the sandbox life cycle; the demo
+host's ladder should show the knee move from the claim and logout to the API as a whole.
+
 ## Fixed in the first load test change
 
 - **One question in flight per check** (`libs/mowdeck-authz`, `OpenFgaAuthorizer`): a cacheable

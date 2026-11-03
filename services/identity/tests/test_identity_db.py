@@ -179,6 +179,31 @@ def a_user(name: str, **overrides: Any) -> User:
 
 
 @pytest.mark.parametrize("kind", STORES)
+async def test_update_where_sets_every_matching_row_and_no_other(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with store_of(kind, monkeypatch) as store:
+        acct = an_account()
+        names = ("anna", "ben", "cleo")
+        async with store.transaction() as tx:
+            await tx.accounts.add(acct)
+            for name in names:
+                await tx.users.add(a_user(name, owner_account_id=acct.id))
+            await tx.users.update_where({"status": Status.DISABLED}, username_norm="cleo")
+            changed = await tx.users.update_where(
+                {"display_name": "Gone", "last_login_at": NOW},
+                owner_account_id=acct.id,
+                status=Status.ACTIVE,
+            )
+            none = await tx.users.update_where({"display_name": "x"}, username_norm="nobody")
+            users = {u.username_norm: u for u in await tx.users.find(order_by="username_norm")}
+    assert (changed, none) == (2, 0)
+    assert [users[n].display_name for n in names] == ["Gone", "Gone", "Cleo"]
+    assert users["anna"].last_login_at == NOW
+    assert users["cleo"].last_login_at is None
+
+
+@pytest.mark.parametrize("kind", STORES)
 async def test_store_contract(kind: str, monkeypatch: pytest.MonkeyPatch) -> None:
     async with store_of(kind, monkeypatch) as store:
         acct = an_account()

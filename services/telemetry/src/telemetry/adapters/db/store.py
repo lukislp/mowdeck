@@ -190,6 +190,27 @@ _ACCOUNT_TABLES = (
 )
 """The tables of :class:`SqlStore` with an ``account_id`` column (the demo purge)."""
 
+_COPIED_TABLES = (
+    tables.mower_history,
+    tables.mower_positions,
+    tables.mower_positions_thinning,
+    tables.mower_health_daily,
+    tables.mower_health,
+    tables.mower_latest,
+)
+"""What the ingestion writes of a mower's states (``copy_ingested``, ADR 0079)."""
+
+
+def _with_ids(state: sa.ColumnElement[Any], mower_id: UUID, account_id: UUID) -> Any:
+    """``state`` (a ``MowerState`` as JSONB) naming another mower and account."""
+    for key, value in (("mower_id", mower_id), ("account_id", account_id)):
+        state = sa.func.jsonb_set(
+            state,
+            sa.literal([key], ARRAY(sa.Text())),
+            sa.func.to_jsonb(sa.cast(str(value), sa.Text())),
+        )
+    return state
+
 
 _POSITION_COLUMNS = tuple(
     tables.mower_positions.c[field.name] for field in dataclasses.fields(PositionRow)
@@ -328,6 +349,34 @@ class _SqlTx:
         for statement, rows in batches:
             if rows:
                 await self._conn.execute(statement, [_fields(row) for row in rows])
+
+    async def copy_ingested(
+        self, source: UUID, target: UUID, account_id: UUID, received_at: datetime
+    ) -> int:
+        """One ``INSERT ... SELECT`` per table, ``ON CONFLICT DO NOTHING``."""
+        replaced: dict[str, sa.ColumnElement[Any]] = {
+            "mower_id": sa.literal(target, sa.Uuid()),
+            "account_id": sa.literal(account_id, sa.Uuid()),
+            "received_at": sa.literal(received_at, sa.DateTime(timezone=True)),
+            "updated_at": sa.literal(received_at, sa.DateTime(timezone=True)),
+        }
+        copied = 0
+        for table in _COPIED_TABLES:
+            columns: list[sa.ColumnElement[Any]] = []
+            for column in table.c:
+                if column.name == "state":  # the latest row's MowerState names its mower
+                    columns.append(_with_ids(column, target, account_id))
+                elif column.name in replaced:
+                    columns.append(replaced[column.name])
+                else:
+                    columns.append(column)
+            names = [column.name for column in table.c]
+            select = sa.select(*columns).where(table.c.mower_id == source)
+            result = await self._conn.execute(
+                pg_insert(table).from_select(names, select).on_conflict_do_nothing()
+            )
+            copied += result.rowcount
+        return copied
 
     async def put_directory(self, entry: DirectoryEntry, *, replace: bool) -> None:
         insert = pg_insert(tables.mower_directory).values(**_fields(entry))

@@ -106,6 +106,11 @@ class Table[T](Protocol):
         """Write back a changed row (identified by its primary key)."""
         ...
 
+    async def update_where(self, values: dict[str, Any], **where: Any) -> int:
+        """Set ``values`` on every matching row in one statement; returns how many matched.
+        For columns no unique constraint covers (revocations, timestamps)."""
+        ...
+
     async def delete(self, **where: Any) -> int:
         """Delete matching rows; returns the number deleted."""
         ...

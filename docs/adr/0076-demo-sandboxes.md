@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-01). Extends [ADR 0068](0068-public-demo-mode.md) (public demo mode) and answers its open question "shared or isolated accounts"; changes where [ADR 0073](0073-guided-tour.md) stores the tour's outcome in the demo.
+Accepted (2026-11-01). Extends [ADR 0068](0068-public-demo-mode.md) (public demo mode) and answers its open question "shared or isolated accounts"; changes where [ADR 0073](0073-guided-tour.md) stores the tour's outcome in the demo. Amended by [ADR 0079](0079-fast-sandbox-lifecycle.md) (2026-11-03): the history is copied from a daily template, the pool holds 8, sandboxes made on the spot are made outside the claim lock (at most three at once), and the sweep runs soon after a logout and after the settle time.
 
 ## Context
 

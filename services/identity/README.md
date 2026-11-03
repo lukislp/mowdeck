@@ -194,13 +194,14 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_DEMO_USERNAME` | `demo` | Public demo (`MOWDECK_DEMO_MODE`, [ADR 0068](../../docs/adr/0068-public-demo-mode.md)): the user every visitor signs in as with `POST /demo/session` ("Try the demo"); the seed job creates it with `POST /demo/seed`. Demo mode also closes registration and turns passkeys, GitHub and Apple off, and Identity then refuses every mutation but the demo sign-in, refresh, logout, the permission check and the setup tour |
 | `MOWDECK_IDENTITY_DEMO_SANDBOXES` | `false` | Demo mode only ([ADR 0076](../../docs/adr/0076-demo-sandboxes.md)): "Try the demo" gives every visitor an own sandbox account (pool, cap, idle deletion, purge in every service) instead of the shared demo user; needs `MOWDECK_DEMO_SEED_TOKEN` |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAX` | `40` | Sandboxes held at once; one more visitor gets `503 demo-full` with `Retry-After` |
-| `MOWDECK_IDENTITY_DEMO_SANDBOX_POOL` | `2` | Ready sandboxes (with history) kept for the next visitors |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_POOL` | `8` | Ready sandboxes (with history) kept for the next visitors; refilled one at a time, about a second each ([ADR 0079](../../docs/adr/0079-fast-sandbox-lifecycle.md)) |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_PARALLEL` | `3` | Sandboxes made on the spot at once when the pool is empty; further visitors wait for a turn or take a refilled pool sandbox ([ADR 0079](../../docs/adr/0079-fast-sandbox-lifecycle.md)) |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_IDLE_MINUTES` | `30` | A sandbox is deleted this long after its last session refresh, or right after a logout |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAX_HOURS` | `6` | A sandbox is deleted this long after it was claimed |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` | `6` | Sandboxes one client address (IPv6 per /64) may start an hour (`429`) |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_HISTORY_DAYS` | `7` | Days of simulated history of a pool sandbox (0: none) |
 | `MOWDECK_IDENTITY_DEMO_SERVICE_URL` | `http://{service}:8000/api/v1/{service}` | Where Identity reaches the other services to fill and purge sandboxes |
-| `MOWDECK_IDENTITY_DEMO_SANDBOX_SWEEP_SECONDS` | `60` | Interval of the sweep that deletes idle and expired sandboxes |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_SWEEP_SECONDS` | `60` | Interval of the sweep that deletes idle and expired sandboxes; it also runs 5 s after a logout and when a purge waiting out the settle time after Fleet is due |
 | `MOWDECK_IDENTITY_DEMO_ACCOUNT_NAME`, `_DEMO_DISPLAY_NAME` | `MowDeck demo`, `Demo visitor` | Names of the demo account and its user |
 | `MOWDECK_IDENTITY_MAINTENANCE_SECONDS` | `60` | Key rotation, key reload, purge of login attempts older than 30 days and of expired passkey challenges, app login requests and codes, and GitHub round trips |
 | `MOWDECK_IDENTITY_RECONCILE_SECONDS` | `3600` | Full reconcile interval, 0 disables |

@@ -1,29 +1,26 @@
 """Public demo (ADR 0068): past mowing days for the freshly seeded demo mowers.
 
-Only the demo seed job calls this (404 outside demo mode, 403 without the seed secret), before
-the Device-Gateway starts: the simulated days run offline (``mowdeck_control.history``) and go
-through the normal ingestion, so tracks, coverage, heatmaps and the health history look like a
-mower that worked for a week. Hidden from the API documents.
+Only the demo seed job and Identity's sandbox pool call this (404 outside demo mode, 403
+without the seed secret), before the mowers report: the simulated days run offline
+(``mowdeck_control.history``) once a day per garden through the normal ingestion and are copied
+to each mower (:mod:`telemetry.application.demo_history`, ADR 0079), so tracks, coverage,
+heatmaps and the health history look like a mower that worked for a week. Hidden from the API
+documents.
 """
 
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from mowdeck_contracts.v1 import utc_now
-from mowdeck_control.history import MAX_DAYS, simulated_history
+from mowdeck_control.history import MAX_DAYS
 from mowdeck_service_kit.demo import DemoPurgeOut, require_demo_seed
 from mowdeck_service_kit.errors import ServiceUnavailable
 from pydantic import BaseModel, Field
 
 from telemetry.adapters.api.deps import ServicesDep
-from telemetry.application.ingest import StateOutcome
-from telemetry.domain.errors import AccountMismatchError
+from telemetry.application.demo_history import HistoryMower
 
 router = APIRouter(prefix="/telemetry/demo", tags=["telemetry: demo"])
-
-HISTORY_BATCH = 200
-"""States of the simulated history stored per transaction."""
 
 
 class DemoMowerIn(BaseModel):
@@ -54,26 +51,15 @@ async def demo_history(
     _: Annotated[None, Depends(require_demo_seed)],
     services: ServicesDep,
 ) -> DemoHistoryOut:
-    """Simulate ``days`` past mowing days per mower and ingest them, oldest first."""
-    offered = stored = 0
-    now = utc_now()
-    for mower in body.mowers:
-        states = await simulated_history(
-            mower_id=mower.mower_id,
-            account_id=mower.account_id,
-            options=mower.connection_options,
-            end=now,
-            days=body.days,
-        )
-        # In batches through the normal ingestion (ADR 0078): a week is thousands of states.
-        for start in range(0, len(states), HISTORY_BATCH):
-            outcomes = await services.ingest.record_states(states[start : start + HISTORY_BATCH])
-            for outcome in outcomes:
-                if isinstance(outcome, AccountMismatchError):
-                    raise outcome
-                offered += 1
-                stored += outcome is StateOutcome.STORED
-    return DemoHistoryOut(states=offered, stored=stored)
+    """``days`` past mowing days per mower, oldest first: simulated once a day per garden and
+    copied to every mower of that garden (ADR 0079)."""
+    if services.demo_history is None:
+        raise ServiceUnavailable("telemetry is starting")
+    result = await services.demo_history.fill(
+        [HistoryMower(m.mower_id, m.account_id, m.connection_options) for m in body.mowers],
+        body.days,
+    )
+    return DemoHistoryOut(states=result.states, stored=result.stored)
 
 
 @router.delete("/accounts/{account_id}", include_in_schema=False)

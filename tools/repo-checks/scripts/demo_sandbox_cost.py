@@ -23,6 +23,17 @@ message rate (``/varz``, asked from a throwaway curl container on the stack's ne
 ``--hold`` keeps the watched sandboxes running that many seconds after the measurement, e.g. to
 attach a profiler. The numbers in ADR 0076, docs/ops/demo.md and docs/ops/load-testing.md came
 from this script.
+
+``--lifecycle`` measures the claim and the release instead (ADR 0079): ``--sandboxes`` visitors
+click "Try the demo" within ``--ramp`` seconds (each from its own address of 198.18.0.0/15 in
+``X-Forwarded-For``, so it needs a stack that trusts the caller as its proxy, like the load test
+stack of ``tests/load``), each opens its mower list and one mower right away, then all of them
+log out at once. Prints the claim, first-view and logout times (median, p95, max), how long until
+every sandbox is deleted and the pool is full again, and the CPU and database writes of each
+window::
+
+    uv run python tools/repo-checks/scripts/demo_sandbox_cost.py --lifecycle \
+        --base http://localhost:8590 --project mowdeck-load --sandboxes 40 --ramp 60
 """
 
 import argparse
@@ -282,6 +293,217 @@ def per_sandbox(base: Phase, active: Phase, n: int) -> None:
             print(f"  {service:<16} {delta:6.2f} %")
 
 
+def percentiles(values: list[float]) -> str:
+    """``median / p95 / max`` of ``values`` in milliseconds."""
+    if not values:
+        return "-"
+    ordered = sorted(values)
+    p95 = ordered[min(len(ordered) - 1, round(0.95 * (len(ordered) - 1)))]
+    return (
+        f"median {statistics.median(ordered) * 1000:.0f} ms, p95 {p95 * 1000:.0f} ms, "
+        f"max {ordered[-1] * 1000:.0f} ms"
+    )
+
+
+def sandbox_states(project: str) -> dict[str, int]:
+    """``{state: count}`` of Identity's ``demo_sandboxes`` (empty when it cannot be asked)."""
+    done = subprocess.run(  # noqa: S603 - fixed arguments, the project name is checked
+        [  # noqa: S607
+            "docker",
+            "exec",
+            f"{project}-postgres-1",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "identity",
+            "-AtF,",
+            "-c",
+            "SELECT state, count(*) FROM demo_sandboxes GROUP BY 1",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    found: dict[str, int] = {}
+    for line in done.stdout.splitlines():
+        state, _, count = line.partition(",")
+        if count.isdigit():
+            found[state] = int(count)
+    return found
+
+
+@dataclass
+class Claimed:
+    """One visitor of the lifecycle run: its refresh token and how long each step took."""
+
+    refresh: str | None = None
+    claim: float | None = None
+    first_view: float | None = None
+    logout: float | None = None
+    errors: list[str] = field(default_factory=list)
+
+
+async def warm(client: httpx.AsyncClient) -> None:
+    """Open the client's connection with a static file, so the measured request does not
+    include connecting (Docker Desktop's port forwarding takes a few hundred ms per
+    connection, which would swamp what the services do)."""
+    await client.get("/config.json")
+
+
+async def claim_and_look(base: str, address: str, delay: float, visitor: Claimed) -> None:
+    """After ``delay``: "Try the demo", then the mower list and one mower, as the web app."""
+    await asyncio.sleep(delay)
+    headers = {"X-Forwarded-For": address, "X-Requested-With": "mowdeck-web"}
+    async with httpx.AsyncClient(base_url=base, timeout=60, headers=headers) as client:
+        await warm(client)
+        started = time.perf_counter()
+        response = await client.post("/api/v1/identity/demo/session", json={})
+        if response.status_code != 200:
+            visitor.errors.append(f"claim {response.status_code}")
+            return
+        visitor.claim = time.perf_counter() - started
+        body = response.json()
+        visitor.refresh = body.get("refresh_token")
+        auth = {"Authorization": f"Bearer {body['access_token']}"}
+        started = time.perf_counter()
+        listed = await client.get("/api/v1/fleet/mowers", headers=auth)
+        if listed.status_code != 200:
+            visitor.errors.append(f"mowers {listed.status_code}")
+            return
+        items = listed.json()["items"]
+        if items:
+            mower = items[0]["id"]
+            answers = await asyncio.gather(
+                client.get(f"/api/v1/telemetry/mowers/{mower}/state", headers=auth),
+                client.get(f"/api/v1/fleet/mowers/{mower}", headers=auth),
+                client.get("/api/v1/identity/me", headers=auth),
+            )
+            visitor.errors.extend(
+                f"view {a.status_code}" for a in answers if a.status_code not in (200, 404)
+            )
+        visitor.first_view = time.perf_counter() - started
+
+
+async def log_out(base: str, address: str, visitor: Claimed, start: asyncio.Event) -> None:
+    """``POST /identity/session/logout`` with the visitor's refresh token, once ``start`` is set
+    (every visitor's connection is open by then)."""
+    if visitor.refresh is None:
+        return
+    headers = {"X-Forwarded-For": address, "X-Requested-With": "mowdeck-web"}
+    async with httpx.AsyncClient(base_url=base, timeout=60, headers=headers) as client:
+        await warm(client)
+        await start.wait()
+        started = time.perf_counter()
+        response = await client.post(
+            "/api/v1/identity/session/logout", json={"refresh_token": visitor.refresh}
+        )
+        if response.status_code != 204:
+            visitor.errors.append(f"logout {response.status_code}")
+            return
+        visitor.logout = time.perf_counter() - started
+
+
+async def sampled(project: str, work: Any) -> tuple[Any, Phase]:
+    """Run ``work`` (an awaitable) while sampling like :func:`measure`; its result and phase."""
+    rows: list[dict[str, tuple[float, float]]] = []
+    pg_before = await asyncio.to_thread(pg_counters, project)
+    started = time.monotonic()
+    task = asyncio.ensure_future(work)
+    while not task.done():
+        rows.append(await asyncio.to_thread(sample, project))
+        await asyncio.wait({task}, timeout=2)
+    pg_after = await asyncio.to_thread(pg_counters, project)
+    took = time.monotonic() - started
+    services = sorted({s for row in rows for s in row})
+    pg = {
+        name: tuple((x - y) / took for x, y in zip(after, pg_before[name], strict=True))
+        for name, after in pg_after.items()
+        if name in pg_before
+    }
+    phase = Phase(
+        services={
+            s: (
+                statistics.fmean(r[s][0] for r in rows if s in r),
+                statistics.fmean(r[s][1] for r in rows if s in r),
+            )
+            for s in services
+        },
+        seconds=took,
+        pg=pg,  # type: ignore[arg-type]
+        nats_per_second=None,
+    )
+    return task.result(), phase
+
+
+async def wait_for(project: str, done: Any, limit: float) -> float | None:
+    """Seconds until ``done(states)`` holds (polled every 2 s), None after ``limit``."""
+    started = time.monotonic()
+    while time.monotonic() - started < limit:
+        if done(await asyncio.to_thread(sandbox_states, project)):
+            return time.monotonic() - started
+        await asyncio.sleep(2)
+    return None
+
+
+async def lifecycle(args: argparse.Namespace) -> int:
+    """The claim and release measurement (see the module docstring)."""
+    project, n = args.project, args.sandboxes
+    print(f"sandboxes before: {sandbox_states(project)}", flush=True)
+    print(f"waiting for the pool of {args.pool} ...", flush=True)
+    await wait_for(project, lambda s: s.get("ready", 0) >= args.pool, 600)
+    visitors = [Claimed() for _ in range(n)]
+    offset = args.address_offset
+    addresses = [f"198.18.{(offset + i) // 250 % 256}.{1 + (offset + i) % 250}" for i in range(n)]
+    print(f"\n{n} visitors claim within {args.ramp:.0f} s ...", flush=True)
+    _, claim_phase = await sampled(
+        project,
+        asyncio.gather(
+            *(
+                claim_and_look(args.base, addresses[i], args.ramp * i / max(1, n - 1), v)
+                for i, v in enumerate(visitors)
+            )
+        ),
+    )
+    claims = [v.claim for v in visitors if v.claim is not None]
+    views = [v.first_view for v in visitors if v.first_view is not None]
+    report("claim window", claim_phase)
+    print(f"\nclaim: {len(claims)} of {n}, {percentiles(claims)}")
+    print(f"first view (mower list, mower, state, me): {percentiles(views)}")
+    print(f"sandboxes after the claims: {sandbox_states(project)}", flush=True)
+    refilled = await wait_for(project, lambda s: s.get("ready", 0) >= args.pool, 600)
+    print(f"pool full again {refilled if refilled is None else round(refilled)} s later")
+    await asyncio.sleep(args.hold)
+    print(f"\n{len(claims)} visitors log out at once ...", flush=True)
+    start = asyncio.Event()
+
+    async def release() -> None:
+        tasks = [
+            asyncio.create_task(log_out(args.base, addresses[i], v, start))
+            for i, v in enumerate(visitors)
+        ]
+        await asyncio.sleep(5)  # every connection open
+        start.set()
+        await asyncio.gather(*tasks)
+
+    await release()
+    logouts = [v.logout for v in visitors if v.logout is not None]
+    print(f"logout: {len(logouts)}, {percentiles(logouts)}", flush=True)
+
+    async def deleted() -> float | None:
+        return await wait_for(
+            project, lambda s: not s.get("active", 0) and not s.get("purging", 0), 900
+        )
+
+    gone, release_phase = await sampled(project, deleted())
+    report("release window (logout until every sandbox is deleted)", release_phase)
+    print(f"\nevery sandbox deleted {gone if gone is None else round(gone)} s after the logouts")
+    errors = [e for v in visitors for e in v.errors]
+    print(f"errors: {len(errors)} {sorted(set(errors))}")
+    print(f"sandboxes at the end: {sandbox_states(project)}", flush=True)
+    return 1 if errors else 0
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--base", default="http://localhost:8680")
@@ -289,9 +511,17 @@ async def main() -> int:
     parser.add_argument("--sandboxes", type=int, default=10)
     parser.add_argument("--seconds", type=float, default=60)
     parser.add_argument("--hold", type=float, default=0, help="seconds to keep watching after")
+    parser.add_argument("--lifecycle", action="store_true", help="measure claim and release")
+    parser.add_argument("--ramp", type=float, default=60, help="lifecycle: arrival window")
+    parser.add_argument("--pool", type=int, default=8, help="lifecycle: the stack's pool size")
+    parser.add_argument(
+        "--address-offset", type=int, default=0, help="lifecycle: first visitor address"
+    )
     args = parser.parse_args()
     if not args.project.replace("-", "").replace("_", "").isalnum():
         parser.error("invalid project name")
+    if args.lifecycle:
+        return await lifecycle(args)
 
     print("baseline ...", flush=True)
     baseline = await measure(args.project, args.seconds)
