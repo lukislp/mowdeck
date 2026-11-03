@@ -24,16 +24,19 @@ Names visitors type in (sites, groups, area names, zones, schedules) lose contro
 
 With `DEMO_SANDBOXES=true` (the default of `docker-compose.demo.yml`) every visitor gets an own account ([ADR 0076](../adr/0076-demo-sandboxes.md)):
 
-- **Pool.** Identity keeps `DEMO_SANDBOX_POOL` sandboxes ready (mowers, schedules, a week of history); "Try the demo" claims one in a few milliseconds. A burst beyond the pool gets sandboxes made on the spot (about a second, no history).
+- **Pool.** Identity keeps `DEMO_SANDBOX_POOL` (8) sandboxes ready (mowers, schedules, a week of history); "Try the demo" claims one in a few milliseconds and the pool refills in about a second per sandbox, because the history is simulated once a day per garden and copied ([ADR 0079](../adr/0079-fast-sandbox-lifecycle.md)). A burst beyond the pool gets sandboxes made on the spot (about a second, no history), at most three at a time; a visitor waiting for a turn takes a refilled pool sandbox instead.
 - **Limits.** At most `DEMO_SANDBOX_MAX` sandboxes at once; the next visitor sees "the demo is full" with a countdown and is let in automatically when one is free. One address may start `DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` sandboxes an hour.
 - **Resting mowers.** The simulated mowers of a sandbox only run while its visitor has the app open (a live socket); otherwise they rest and cost no CPU. A command (also a scheduled start) wakes them for two minutes.
-- **Lifetime.** A sandbox is deleted `DEMO_SANDBOX_IDLE_MINUTES` after the visitor's last visit (the app keeps it alive while a tab is open), right after a logout, and at the latest `DEMO_RESET_HOURS` after it was claimed. The deletion runs in every service and is retried until it is complete; the periodic reset stays the safety net. A visitor who comes back later gets a fresh sandbox without an error; the tour is not shown again in the same browser.
+- **Lifetime.** A sandbox is deleted `DEMO_SANDBOX_IDLE_MINUTES` after the visitor's last visit (the app keeps it alive while a tab is open), within about a minute after a logout (the logout itself only ends the session; the sweep runs a few seconds later), and at the latest `DEMO_RESET_HOURS` after it was claimed. The deletion runs in every service and is retried until it is complete; the periodic reset stays the safety net. A visitor who comes back later gets a fresh sandbox without an error; the tour is not shown again in the same browser.
 
 Measured cost ([ADR 0076](../adr/0076-demo-sandboxes.md#measurements)): a resting sandbox about 0 % CPU and 1 MiB; a watched one with a mower mowing about 5 to 8 % of one CPU core and 1 to 2 MiB, most of it telemetry processing. On the 2-vCPU demo VPS that is room for 20 to 25 watched sandboxes at once; the default cap of 40 assumes about half of the claimed sandboxes are watched at any time. To measure on your host:
 
 ```bash
 # a demo stack with sandboxes on the e2e settings (lifted limits), then:
 uv run python tools/repo-checks/scripts/demo_sandbox_cost.py --base http://localhost:8680 --project mowdeck-sbx --sandboxes 20
+# claim and release times instead: visitors arriving within --ramp, then all logging out
+# (needs a stack that trusts the caller's X-Forwarded-For, e.g. tests/load's stack)
+uv run python tools/repo-checks/scripts/demo_sandbox_cost.py --lifecycle --base http://localhost:8590 --project mowdeck-load --sandboxes 40 --ramp 60 --pool 8
 ```
 
 How many sandboxes exist and in which state:
@@ -172,7 +175,7 @@ In `infra/compose/demo/demo.env` (read after `../.env.example`):
 | `DEMO_RATE_PER_MINUTE`, `DEMO_RATE_BURST` | `1200`, `600` | Requests per client address at the gateway; the web app's files count too, so the burst must hold a first visit with an empty cache (a few hundred requests) |
 | `DEMO_SANDBOXES` | `true` | A sandbox per visitor ([ADR 0076](../adr/0076-demo-sandboxes.md)); `false`: the one shared demo user |
 | `DEMO_SANDBOX_MAX` | `40` | Sandboxes visitors hold at once; one more visitor sees "the demo is full" with a countdown (see [Sandboxes](#sandboxes)) |
-| `DEMO_SANDBOX_POOL` | `2` | Ready sandboxes (with history) kept for the next visitors |
+| `DEMO_SANDBOX_POOL` | `8` | Ready sandboxes (with history) kept for the next visitors; a resting one costs only its rows ([ADR 0079](../adr/0079-fast-sandbox-lifecycle.md)) |
 | `DEMO_SANDBOX_IDLE_MINUTES` | `30` | A sandbox is deleted this long after its last visit (also shown in the band) |
 | `DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` | `6` | Sandboxes one client address (IPv6: its /64) may start an hour |
 | `DEMO_USERNAME` | `demo` | The shared demo user (only with `DEMO_SANDBOXES=false`) |
