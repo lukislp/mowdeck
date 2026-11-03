@@ -146,6 +146,13 @@ class SqlTable[T]:
             msg = f"no {self.table.name} row with {self.pk}={key}"
             raise LookupError(msg)
 
+    async def update_where(self, values: dict[str, Any], **where: Any) -> int:
+        plain = {name: _plain(value) for name, value in values.items()}
+        result = await self.conn.execute(
+            update(self.table).where(*self._where(where)).values(**plain)
+        )
+        return int(result.rowcount)
+
     async def delete(self, **where: Any) -> int:
         result = await self.conn.execute(delete(self.table).where(*self._where(where)))
         return int(result.rowcount)

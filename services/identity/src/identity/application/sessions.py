@@ -730,13 +730,13 @@ class SessionService:
                 await tx.users.update(found)
 
     async def _revoke_family(self, tx: Tx, family_id: UUID, reason: str) -> int:
-        now = self.deps.clock()
-        count = 0
-        for session in await tx.sessions.find(family_id=family_id, revoked_at=None):
-            session.revoked_at, session.revoke_reason = now, reason
-            await tx.sessions.update(session)
-            count += 1
-        return count
+        # One statement for the whole family (ADR 0079: a burst of logouts at the end of a
+        # demo is a burst of these).
+        return await tx.sessions.update_where(
+            {"revoked_at": self.deps.clock(), "revoke_reason": reason},
+            family_id=family_id,
+            revoked_at=None,
+        )
 
     async def refresh(self, refresh_token: str, ctx: RequestContext) -> TokenPair:
         """Rotate the refresh token and issue a new access token with fresh claims.

@@ -197,6 +197,8 @@ async def logout(
 ) -> None:
     """End the login session of the refresh token."""
     await services.sessions.logout(_refresh_token(body, cookie, requested_with), ctx)
+    if services.sandboxes is not None:  # a demo sandbox is deleted soon after (ADR 0079)
+        services.sandboxes.session_ended()
     drop_refresh_cookie(response)
 
 

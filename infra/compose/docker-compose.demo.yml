@@ -88,7 +88,9 @@ services:
       # Defaults live here, so demo/demo.env needs none of these keys.
       MOWDECK_IDENTITY_DEMO_SANDBOXES: ${DEMO_SANDBOXES:-true}
       MOWDECK_IDENTITY_DEMO_SANDBOX_MAX: ${DEMO_SANDBOX_MAX:-40}
-      MOWDECK_IDENTITY_DEMO_SANDBOX_POOL: ${DEMO_SANDBOX_POOL:-2}
+      # A resting pool sandbox costs only its rows, and a refill takes about a second (its
+      # history is a copy of a daily template, ADR 0079): 8 ready ones absorb a burst.
+      MOWDECK_IDENTITY_DEMO_SANDBOX_POOL: ${DEMO_SANDBOX_POOL:-8}
       MOWDECK_IDENTITY_DEMO_SANDBOX_IDLE_MINUTES: ${DEMO_SANDBOX_IDLE_MINUTES:-30}
       MOWDECK_IDENTITY_DEMO_SANDBOX_MAX_HOURS: ${DEMO_RESET_HOURS:-6}
       MOWDECK_IDENTITY_DEMO_SANDBOX_PER_ADDRESS_PER_HOUR: ${DEMO_SANDBOX_PER_ADDRESS_PER_HOUR:-6}
