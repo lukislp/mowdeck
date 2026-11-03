@@ -29,6 +29,15 @@ The authoritative list is `RULES` in `ci_scope.py` (first match wins); `tools/re
 
 The jobs that start the Compose stack (`camera-relay-media`, `e2e`, `e2e-web`, `e2e-demo`) build the images from the cache the `docker` job fills. They wait for it (and for `python` or `web`) when those run, and also run when those are skipped, for example when only their own definition in `ci.yml` changed.
 
+## Coverage in the job summary
+
+The `python` and `web` jobs write their test coverage into the run's summary (`tools/repo-checks/scripts/coverage_summary.py`):
+
+- **python**: statement and branch coverage of the product code from `uv run poe test` (pytest-cov with branch coverage). Test modules, fixtures and `tests/` are omitted in `[tool.coverage.run]` of the root `pyproject.toml`, so they do not inflate the number.
+- **web**: Vitest's v8 coverage of the modules listed under `coverage.include` in `apps/web/vite.config.ts` (the logic modules; components and pages are covered by the Playwright gate of `tests/e2e-web`). That list has a line threshold of 80 %.
+
+Neither number is a gate beyond the web threshold; they are there to be visible on every run, for reviews and for the [OpenSSF Best Practices](https://www.bestpractices.dev/) answers.
+
 ## Required checks
 
 The branch ruleset of `main` requires `python`, `openfga-model`, `docs`, `web`, `compose`, `helm`, `docker`, `camera-relay-media`, `e2e` and `e2e-web` from this workflow (plus `review / dependency-review`, the Socket Security checks and CodeQL, which are not scoped). GitHub counts a job skipped by its `if:` as passed, so a skipped required job does not block the merge. A workflow that does not start at all (a `paths` filter under `on:`) would leave its required checks pending forever, which is why `ci.yml` has no `paths` filter and always starts; `test_ci_scope.py` keeps it that way. `e2e-web`, which merges the shard reports, is skipped together with its shards when the suite is not needed and still fails when a needed shard failed or was skipped.

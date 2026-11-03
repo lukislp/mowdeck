@@ -78,6 +78,7 @@ when its definition changes; tools/repo-checks/tests/test_ci_scope.py keeps the 
 CI_SCRIPTS = (
     "tools/repo-checks/scripts/ci_scope.py",
     "tools/repo-checks/scripts/cosign_retry.sh",
+    "tools/repo-checks/scripts/coverage_summary.py",
     "tools/repo-checks/scripts/gh_retry.sh",
     "tools/repo-checks/scripts/licence_gate.py",
     "tools/repo-checks/scripts/release_assets.py",
