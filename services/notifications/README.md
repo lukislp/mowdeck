@@ -148,7 +148,7 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 
 | Direction | Subject | Consumer | Payload |
 | --- | --- | --- | --- |
-| consumed | `telemetry.mower.*` | durable queue `notifications-states` | `MowerState`: the rules |
+| consumed | `telemetry.mower.*` | durable queue `notifications-states`, in batches | `MowerState`: the rules; one transaction per batch ([ADR 0078](../../docs/adr/0078-batched-state-ingestion.md)): each mower's directory account, geofence key and watch read once (watches locked in mower id order), the rules state by state in order, each changed watch written once, the events fanned out after the commit. The parsed geofence is kept in memory per stored version |
 | consumed | `event.mower.>` | durable queue `notifications-mowers` | `mower.registered`, `.updated`, `.removed` (`MowerRegistration`): directory with account and name; `mower.connected`, `.disconnected` (`MowerConnectionEvent`): offline rule |
 | consumed | `event.identity.>` | durable queue `notifications-identity` | `identity.user.disabled`, `.deleted` (`UserChanged`): delete the user's preferences, targets, inbox and deliveries (in that account); `identity.session.new_device` (`NewDeviceLogin`): `security_new_login` for that user |
 | consumed | `command.mower.*` | durable queue `notifications-commands` | `CommandEnvelope`: newest command time per mower (`issued_at`; manual drive frames, kind `manual_drive` or correlation id `drive:<session>`, also as drive time) |
@@ -176,6 +176,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `..._BATTERY_REARM_PERCENT` | `30` | Level that re-arms `battery_low` (never below the threshold) |
 | `..._OFFLINE_AFTER_SECONDS` | `120` | Offline without a state for this long |
 | `..._DISCONNECT_GRACE_SECONDS` | `30` | `mower.disconnected` becomes offline after this long without a reconnect |
+| `..._STATE_BATCH_MAX` | `64` | Most states whose rules run in one transaction (ADR 0078); `1`: one at a time |
+| `..._STATE_BATCH_WAIT_SECONDS` | `0.2` | How long a batch waits for more states after its first one; the rules see a state at most this much later |
 | `..._COOLDOWN_SECONDS` | `300` | One notification per kind and mower within this time |
 | `..._OFFLINE_CHECK_SECONDS` | `10` | Offline timer interval |
 | `..._MAINTENANCE_GRACE_SECONDS` | `120` | An offline noticed this long after the deploy maintenance window ended is still held back; still offline after that: `mower_offline` is sent |

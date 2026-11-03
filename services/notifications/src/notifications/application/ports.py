@@ -130,8 +130,27 @@ class AccountPurge:
     mower_ids: frozenset[UUID]
 
 
+@dataclass(frozen=True, slots=True)
+class StateContext:
+    """What the rules need besides the watch for a state, read in one round trip: the
+    directory's account of the mower and which geofence is stored (its account and
+    ``observed_at``, the key of the parsed fences kept in memory)."""
+
+    owner: UUID | None
+    fence_account: UUID | None
+    fence_at: datetime | None
+
+
 class Tx(Protocol):
     """Writes of one transaction (rules and directory)."""
+
+    async def state_context(self, mower_id: UUID) -> StateContext:
+        """The directory's account and the stored geofence's key of a mower."""
+        ...
+
+    async def geofence(self, mower_id: UUID) -> MowerFence | None:
+        """The stored geofence of a mower."""
+        ...
 
     async def watch(self, mower_id: UUID) -> MowerWatch | None:
         """The watch of a mower, locked against concurrent writers."""

@@ -2,7 +2,8 @@
 
 Every instance (ephemeral consumers, no queue group) feeds its :class:`BusMowerView`:
 
-* ``telemetry.mower.*`` and ``device.mower.>`` starting with the newest message per subject;
+* ``telemetry.mower.*`` and ``device.mower.>`` starting with the newest message per subject
+  (the states without acknowledgements, ADR 0078: the next state replaces a lost one);
 * ``command.mower.*`` and ``command.result.mower.*`` from now on.
 
 Shared (durable ``vision-identity``): ``identity.user.disabled`` and ``identity.user.deleted``
@@ -196,7 +197,10 @@ async def subscribe_all(
         )
     return [
         *extra,
-        await bus.subscribe(ALL_TELEMETRY, state_handler(view), last_per_subject=True),
+        # The latest state per mower: no acknowledgement per state (ADR 0078).
+        await bus.subscribe(
+            ALL_TELEMETRY, state_handler(view), last_per_subject=True, acknowledge=False
+        ),
         await bus.subscribe(ALL_DEVICE_SNAPSHOTS, snapshot_handler(view), last_per_subject=True),
         await bus.subscribe(ALL_COMMANDS, command_handler(view)),
         await bus.subscribe(ALL_COMMAND_RESULTS, result_handler(view)),

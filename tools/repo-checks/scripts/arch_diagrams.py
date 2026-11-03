@@ -12,7 +12,8 @@ Everything on the page is derived from a source of truth, nothing is drawn by ha
   variable names of each service).
 * NATS subjects and JetStream streams: the constants and helper functions of
   ``libs/*/src`` and ``services/*/src`` (read with ``ast``, never imported) and every
-  ``subscribe``, ``publish`` and ``request`` call on a bus object in ``services/*/src``.
+  ``subscribe`` (also ``subscribe_batch``), ``publish`` and ``request`` call on a bus object in
+  ``services/*/src``.
 * HTTP API surface: the OpenAPI documents in ``apps/web/openapi`` (``tools``, ``paths``).
 * Data ownership: the database of each service (compose) and its Alembic revisions.
 
@@ -44,7 +45,7 @@ SUBJECTS_FILE = Path("libs/mowdeck-contracts/src/mowdeck_contracts/v1/subjects.p
 
 _SKIP_DIRS = {"tests", "migrations", "__pycache__", ".venv", "node_modules", "build", "dist"}
 _BUS_RECEIVERS = {"bus", "_bus", "events", "_events"}
-_BUS_METHODS = {"subscribe", "publish", "request"}
+_BUS_METHODS = {"subscribe", "subscribe_batch", "publish", "request"}
 
 # External systems, recognised by the environment variable names a service is configured with.
 # (regular expression on the variable name, node label). A variable that appears in a service
@@ -562,7 +563,8 @@ def _bus_call(node: ast.AST) -> tuple[str, str, ast.expr] | None:
         and _receiver_name(node.func.value) in _BUS_RECEIVERS
         and node.args
     ):
-        return node.func.attr, _receiver_name(node.func.value), node.args[0]
+        method = "subscribe" if node.func.attr == "subscribe_batch" else node.func.attr
+        return method, _receiver_name(node.func.value), node.args[0]
     return None
 
 

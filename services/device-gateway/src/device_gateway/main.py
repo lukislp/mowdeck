@@ -120,6 +120,7 @@ def build_app(
     provider = connection_provider or RegistryConnectionProvider(
         sim_time_scale=settings.sim_time_scale,
         sim_tick_seconds=settings.sim_tick_seconds,
+        sim_state_period_seconds=settings.sim_state_period_seconds,
         cloud_providers=None if demo else providers,
         simulated_only=demo,
     )

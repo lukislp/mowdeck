@@ -1,5 +1,6 @@
 """Ports of the virtual zones (ADR 0070)."""
 
+from collections.abc import Collection
 from contextlib import AbstractAsyncContextManager
 from datetime import date
 from typing import Protocol
@@ -33,6 +34,11 @@ class ZoneStore(Protocol):
 
     async def zones_for(self, mower_id: UUID) -> list[VirtualZone]:
         """The zones of a mower (ingestion: the state's account was checked before)."""
+        ...
+
+    async def zones_for_many(self, mower_ids: Collection[UUID]) -> dict[UUID, list[VirtualZone]]:
+        """The zones of several mowers in one read (a batch of states, ADR 0078), oldest
+        first; mowers without zones are missing."""
         ...
 
     async def add_zone(self, zone: VirtualZone, limit: int) -> bool:

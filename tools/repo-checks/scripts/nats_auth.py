@@ -374,7 +374,7 @@ def summary(users: Mapping[str, Access] = USERS) -> str:
 
 # --- Code scan --------------------------------------------------------------------------------
 
-_SUBSCRIBE = {"subscribe", "_subscribe"}
+_SUBSCRIBE = {"subscribe", "_subscribe", "subscribe_batch"}
 _REQUEST = {"request", "_request"}
 _PUBLISH = {"publish", "_publish", "emit", "connection_event", "_connection_event"}
 _CORE = {"fleet", "gateway", "entitlements", "tracks", "relay", "presence"}

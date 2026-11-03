@@ -93,6 +93,14 @@ class Settings(ServiceSettings):
     """Deliveries of a command result for a mower missing from the directory before it is
     dropped with a warning (Fleet's event may arrive a moment later)."""
 
+    telemetry_ingest_batch_max: int = Field(default=64, ge=1, le=500)
+    """Most states stored in one transaction (ADR 0078); 1 stores every state on its own."""
+
+    telemetry_ingest_batch_wait_seconds: float = Field(default=0.2, ge=0, le=2)
+    """How long a batch waits for more states after its first one arrived (ADR 0078): the
+    stored latest state lags the stream by at most this much; 0 batches only what queued up
+    while the previous batch was written."""
+
     telemetry_fleet_timeout_seconds: float = Field(default=5, gt=0)
     """Timeout of the ``fleet.mowers.list`` request that seeds the mower directory."""
 

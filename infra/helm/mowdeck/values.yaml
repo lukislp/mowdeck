@@ -1022,6 +1022,10 @@ openfga:
       keysSecret: mowdeck-openfga
   playground:
     enabled: false
+  # OPENFGA_LOG_LEVEL of Compose: info logs every request (grpc_req_complete); warn saves CPU
+  # and log volume on a small node (docs/ops/load-testing.md).
+  log:
+    level: info
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65532

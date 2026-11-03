@@ -4,6 +4,10 @@ The health history (blade and mowing hours, distance, battery cycles, charge ses
 see :mod:`telemetry.domain.health`) advances in the same transaction as the latest row. The
 blade hours threshold event is published after the commit; a failed publish is logged.
 
+States arrive in batches (:meth:`Ingest.record_states`, ADR 0078): one transaction per batch,
+the rows of its mowers read once, the write rules applied state by state in order, one
+statement per table. A batch of one is exactly the former per-message transaction.
+
 Manual drive frames (ten per second) produce command results whose correlation id names a drive
 session; their ``accepted`` results are not stored, so they do not flood the timeline.
 
@@ -15,7 +19,9 @@ a request.
 
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from datetime import date
+from enum import Enum
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -33,10 +39,12 @@ from mowdeck_contracts.v1 import (
 from mowdeck_service_kit import get_logger
 
 from telemetry.application.context import TelemetryConfig
-from telemetry.application.ports import Clock, HealthEvents, Store, Tx
+from telemetry.application.ports import Clock, HealthEvents, IngestRows, StateWrites, Store, Tx
 from telemetry.domain.errors import AccountMismatchError, UnknownMowerError
 from telemetry.domain.health import (
+    DailyRow,
     HealthLimits,
+    HealthRow,
     advance,
     apply_delta,
     blade_counter_seconds,
@@ -54,11 +62,30 @@ from telemetry.domain.rules import (
 _log = get_logger("telemetry.ingest")
 
 
+class StateOutcome(Enum):
+    """What :meth:`Ingest.record_states` did with a state (besides an account mismatch)."""
+
+    STORED = "stored"
+    OLDER = "older"
+    """Older than the stored latest state: nothing written."""
+
+
+class _Batch:
+    """The rows one batch of states works on: read once, updated in memory state by state."""
+
+    def __init__(self, rows: IngestRows) -> None:
+        self.rows = rows
+        self.latest: dict[UUID, LatestRow] = dict(rows.latest)
+        self.health: dict[UUID, HealthRow] = dict(rows.health)
+        self.daily: dict[tuple[UUID, date], DailyRow | None] = {}
+        self.writes = StateWrites.empty()
+
+
 class PositionObserver(Protocol):
     """Follows the stored states after their commit (the virtual zones, ADR 0070)."""
 
-    async def observe(self, state: MowerState) -> object:
-        """Look at one stored state."""
+    async def observe_many(self, states: Sequence[MowerState]) -> None:
+        """Look at the stored states of one batch, in order (failures are its own to log)."""
         ...
 
 
@@ -86,79 +113,124 @@ class Ingest:
         Raises :class:`AccountMismatchError` when the state names another account than the one the
         directory or the stored rows assign to the mower.
         """
-        now = self._clock()
-        crossed: BladeHoursThreshold | None = None
-        async with self._store.transaction() as tx:
-            owner = await tx.directory_account(state.mower_id)
-            if owner is not None and owner != state.account_id:
-                msg = "state names another account than the mower directory"
-                raise AccountMismatchError(msg)
-            current = await tx.latest(state.mower_id)
-            if current is not None and current.account_id != state.account_id:
-                msg = "state names another account than the stored state"
-                raise AccountMismatchError(msg)
-            decision = decide(
-                state, current, heartbeat_seconds=self._config.heartbeat_history_seconds
-            )
-            if not decision.latest:
-                return False
-            history_at = current.history_written_at if current else None
-            history_print = current.history_fingerprint if current else None
-            position_print = current.position_fingerprint if current else None
-            if decision.history:
-                await tx.add_history(history_row(state))
-                history_at, history_print = state.observed_at, state_fingerprint(state)
-            if decision.position:
-                row = position_row(state)
-                if row is not None:
-                    await tx.add_position(row)
-                    position_print = position_fingerprint(state)
-            await tx.put_latest(
-                LatestRow(
-                    mower_id=state.mower_id,
-                    account_id=state.account_id,
-                    observed_at=state.observed_at,
-                    received_at=now,
-                    activity=state.activity.value,
-                    battery_percent=state.battery_percent,
-                    state=state.model_dump(mode="json"),
-                    history_written_at=history_at,
-                    history_fingerprint=history_print,
-                    position_fingerprint=position_print,
-                )
-            )
-            crossed = await self._advance_health(tx, state)
-        if crossed is not None:
-            await self._publish_threshold(crossed)
-        await self._observe(state)
-        return True
+        outcome = (await self.record_states([state]))[0]
+        if isinstance(outcome, AccountMismatchError):
+            raise outcome
+        return outcome is StateOutcome.STORED
 
-    async def _observe(self, state: MowerState) -> None:
-        """Hand the stored state to the observer; its failure never fails the ingestion."""
+    async def record_states(
+        self, states: Sequence[MowerState]
+    ) -> list[StateOutcome | AccountMismatchError]:
+        """Store a batch of states in one transaction, each exactly as :meth:`record_state`
+        would one after the other, in the given order; one outcome per state.
+
+        The batch reads the directory, the latest rows and the health totals of its mowers once
+        (locked, in mower id order), applies the write rules state by state in memory and then
+        writes everything with one statement per table: the history and position rows of every
+        state, the last latest row, health totals and daily totals per mower. A state naming
+        another account than the directory or the stored rows is left out (its outcome is the
+        :class:`AccountMismatchError`), the others are stored. A database failure raises and
+        stores nothing, so the whole batch is delivered again; a redelivered state changes
+        nothing (rule 4 of :mod:`telemetry.domain.rules`, :func:`~telemetry.domain.health.advance`).
+        Blade threshold events are published and the observer runs after the commit, in order.
+        """
+        if not states:
+            return []
+        outcomes: list[StateOutcome | AccountMismatchError] = []
+        stored: list[MowerState] = []
+        crossed: list[BladeHoursThreshold] = []
+        async with self._store.transaction() as tx:
+            batch = _Batch(await tx.ingest_rows({s.mower_id for s in states}))
+            for state in states:
+                outcome = await self._apply(tx, batch, state, crossed)
+                outcomes.append(outcome)
+                if outcome is StateOutcome.STORED:
+                    stored.append(state)
+            if stored:
+                await tx.write_states(batch.writes)
+        for event in crossed:
+            await self._publish_threshold(event)
+        if stored:
+            await self._observe(stored)
+        return outcomes
+
+    async def _apply(
+        self, tx: Tx, batch: "_Batch", state: MowerState, crossed: list[BladeHoursThreshold]
+    ) -> "StateOutcome | AccountMismatchError":
+        """The write rules for one state against the batch's rows (see :meth:`record_states`)."""
+        mower = state.mower_id
+        owner = batch.rows.owners.get(mower)
+        if owner is not None and owner != state.account_id:
+            return AccountMismatchError("state names another account than the mower directory")
+        current = batch.latest.get(mower)
+        if current is not None and current.account_id != state.account_id:
+            return AccountMismatchError("state names another account than the stored state")
+        decision = decide(state, current, heartbeat_seconds=self._config.heartbeat_history_seconds)
+        if not decision.latest:
+            return StateOutcome.OLDER
+        health = batch.health.get(mower)
+        if health is not None and health.account_id != state.account_id:
+            return AccountMismatchError("state names another account than the stored health totals")
+        writes = batch.writes
+        history_at = current.history_written_at if current else None
+        history_print = current.history_fingerprint if current else None
+        position_print = current.position_fingerprint if current else None
+        if decision.history:
+            writes.history.append(history_row(state))
+            history_at, history_print = state.observed_at, state_fingerprint(state)
+        if decision.position:
+            row = position_row(state)
+            if row is not None:
+                writes.positions.append(row)
+                position_print = position_fingerprint(state)
+        latest = LatestRow(
+            mower_id=mower,
+            account_id=state.account_id,
+            observed_at=state.observed_at,
+            received_at=self._clock(),
+            activity=state.activity.value,
+            battery_percent=state.battery_percent,
+            state=state.model_dump(mode="json"),
+            history_written_at=history_at,
+            history_fingerprint=history_print,
+            position_fingerprint=position_print,
+        )
+        batch.latest[mower] = writes.latest[mower] = latest
+        event = await self._advance_health(tx, batch, state, health)
+        if event is not None:
+            crossed.append(event)
+        return StateOutcome.STORED
+
+    async def _observe(self, states: list[MowerState]) -> None:
+        """Hand the stored states to the observer; its failure never fails the ingestion."""
         if self._observer is None:
             return
         try:
-            await self._observer.observe(state)
+            await self._observer.observe_many(states)
         except Exception:
-            _log.exception("evaluating the zones failed", mower_id=str(state.mower_id))
+            _log.exception("evaluating the zones failed", states=len(states))
 
-    async def _advance_health(self, tx: Tx, state: MowerState) -> BladeHoursThreshold | None:
+    async def _advance_health(
+        self, tx: Tx, batch: "_Batch", state: MowerState, current: HealthRow | None
+    ) -> BladeHoursThreshold | None:
         """Add the state to the health totals; the threshold event when it was crossed."""
-        current = await tx.health(state.mower_id)
-        if current is not None and current.account_id != state.account_id:
-            msg = "state names another account than the stored health totals"
-            raise AccountMismatchError(msg)
         step = advance(current, state, self._limits, self._clock())
         if step is None:  # redelivery or out of order: counted already
             return None
-        await tx.put_health(step.row)
+        mower = state.mower_id
+        batch.health[mower] = batch.writes.health[mower] = step.row
         for delta in step.deltas:
-            day = await tx.daily(state.mower_id, delta.day)
-            await tx.put_daily(apply_delta(day, delta, state.mower_id, state.account_id))
+            key = (mower, delta.day)
+            if key in batch.daily:
+                day = batch.daily[key]
+            else:
+                day = await tx.daily(mower, delta.day)
+            updated = apply_delta(day, delta, mower, state.account_id)
+            batch.daily[key] = batch.writes.daily[key] = updated
         if not step.threshold_crossed:
             return None
         return BladeHoursThreshold(
-            mower_id=state.mower_id,
+            mower_id=mower,
             account_id=state.account_id,
             blade_hours_since_change=blade_counter_seconds(step.row) / 3600,
             threshold_hours=threshold_seconds(step.row, self._limits) / 3600,

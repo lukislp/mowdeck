@@ -42,12 +42,14 @@ class RegistryConnectionProvider:
         *,
         sim_time_scale: float = 1.0,
         sim_tick_seconds: float = 1.0,
+        sim_state_period_seconds: float = 0.0,
         registry: ConnectionRegistry | None = None,
         cloud_providers: LoadedProviders | None = None,
         simulated_only: bool = False,
     ) -> None:
         self._sim_time_scale = sim_time_scale
         self._sim_tick_seconds = sim_tick_seconds
+        self._sim_state_period_seconds = sim_state_period_seconds
         self._registry = registry or default_registry()
         self._cloud_providers = cloud_providers
         self._simulated_only = simulated_only
@@ -73,6 +75,11 @@ class RegistryConnectionProvider:
             options[BASE_STATION_OPTION] = registration.base_station.model_dump(mode="json")
         if registration.connection_kind is ConnectionKind.SIMULATED:
             options.setdefault("time_scale", self._sim_time_scale)
+            if self._sim_state_period_seconds > 0:
+                # The simulator counts the period in simulated seconds.
+                scale = options["time_scale"]
+                if isinstance(scale, int | float) and scale > 0:
+                    options.setdefault("state_period_s", self._sim_state_period_seconds * scale)
         config = ConnectionConfig(
             mower_id=registration.mower_id, account_id=registration.account_id, options=options
         )

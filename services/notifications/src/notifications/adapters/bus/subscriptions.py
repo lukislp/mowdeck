@@ -1,7 +1,7 @@
 """Subscriptions of notifications.
 
 * ``telemetry.mower.*`` (JetStream ``TELEMETRY``, durable and queue group
-  ``notifications-states``): the rules.
+  ``notifications-states``): the rules, in batches, one transaction each (ADR 0078).
 * ``event.mower.>`` (JetStream ``EVENTS``, durable ``notifications-mowers``):
   ``mower.registered``/``updated``/``removed`` maintain the directory (account and name),
   ``mower.connected``/``disconnected`` feed the offline rule.
@@ -78,10 +78,12 @@ from mowdeck_contracts.v1.subjects import (
 )
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import (
+    BatchHandler,
     BusMessage,
     DropMessage,
     EventBus,
     MessageHandler,
+    Outcome,
     Subscription,
 )
 from pydantic import ValidationError
@@ -115,25 +117,42 @@ _TRACKING_EVENTS = frozenset({TRACKING_STARTED, TRACKING_MOVED, TRACKING_STALE, 
 _USER_REMOVED = frozenset({IDENTITY_USER_DISABLED, IDENTITY_USER_DELETED})
 
 
-def state_handler(watcher: Watcher) -> MessageHandler:
-    """Apply the rules to a state."""
+def _decode_state(message: BusMessage) -> MowerState | str:
+    """The state of a message, or why it is dropped."""
+    try:
+        state = message.model(MowerState)
+    except ValidationError as exc:
+        return f"invalid mower state: {exc.error_count()} errors"
+    try:
+        subject_mower = mower_id_from_subject(message.subject)
+    except ValueError:
+        return f"unexpected subject {message.subject!r}"
+    if subject_mower != state.mower_id:
+        return "subject does not match the state's mower"
+    return state
 
-    async def handle(message: BusMessage) -> None:
-        try:
-            state = message.model(MowerState)
-        except ValidationError as exc:
-            raise DropMessage(f"invalid mower state: {exc.error_count()} errors") from exc
-        try:
-            subject_mower = mower_id_from_subject(message.subject)
-        except ValueError as exc:
-            raise DropMessage(f"unexpected subject {message.subject!r}") from exc
-        if subject_mower != state.mower_id:
-            raise DropMessage("subject does not match the state's mower")
-        try:
-            await watcher.on_state(state)
-        except AccountMismatchError as exc:
-            _log.warning("state dropped", mower_id=str(state.mower_id), reason=exc.message)
-            raise DropMessage(exc.message) from exc
+
+def states_handler(watcher: Watcher) -> BatchHandler:
+    """Apply the rules to a batch of states in one transaction (ADR 0078). Malformed states and
+    states naming another account are dropped with a warning; a database failure raises, so the
+    whole batch comes again (the watches did not move, nothing was notified)."""
+
+    async def handle(messages: list[BusMessage]) -> list[Outcome]:
+        outcomes: list[Outcome] = ["term"] * len(messages)
+        valid: list[tuple[int, MowerState]] = []
+        for index, message in enumerate(messages):
+            decoded = _decode_state(message)
+            if isinstance(decoded, str):
+                _log.warning("message dropped", subject=message.subject, reason=decoded)
+            else:
+                valid.append((index, decoded))
+        results = await watcher.on_states([state for _, state in valid])
+        for (index, state), result in zip(valid, results, strict=True):
+            if result is not None:
+                _log.warning("state dropped", mower_id=str(state.mower_id), reason=result.message)
+                continue
+            outcomes[index] = "ack"
+        return outcomes
 
     return handle
 
@@ -333,12 +352,23 @@ def identity_handler(accounts: Accounts) -> MessageHandler:
 
 
 async def subscribe_all(
-    bus: EventBus, watcher: Watcher, accounts: Accounts, cache: SupportsInvalidate | None
+    bus: EventBus,
+    watcher: Watcher,
+    accounts: Accounts,
+    cache: SupportsInvalidate | None,
+    *,
+    batch_max: int = 64,
+    batch_wait_seconds: float = 0.0,
 ) -> list[Subscription]:
     """Subscribe every handler of the service and return the subscriptions."""
     subscriptions: list[Subscription] = [
-        await bus.subscribe(
-            ALL_TELEMETRY, state_handler(watcher), durable=STATES_CONSUMER, queue=STATES_CONSUMER
+        await bus.subscribe_batch(
+            ALL_TELEMETRY,
+            states_handler(watcher),
+            durable=STATES_CONSUMER,
+            queue=STATES_CONSUMER,
+            max_batch=batch_max,
+            max_wait_seconds=batch_wait_seconds,
         ),
         await bus.subscribe(
             event_wildcard("mower"),

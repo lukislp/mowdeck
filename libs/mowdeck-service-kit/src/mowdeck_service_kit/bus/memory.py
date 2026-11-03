@@ -14,14 +14,18 @@ from mowdeck_contracts.v1.subjects import STREAMS, StreamSpec, subject_matches
 from pydantic import BaseModel
 
 from mowdeck_service_kit.bus.base import (
+    BatchHandler,
     BusMessage,
     BusNotConnectedError,
     MessageHandler,
     NoRespondersError,
     PublishResult,
     RequestTimeoutError,
+    check_acknowledge,
+    check_batch_limits,
     dispatch,
     encode_payload,
+    one_at_a_time,
     outgoing_headers,
 )
 
@@ -34,6 +38,7 @@ class _MemorySubscription:
     group: str | None
     jetstream: bool
     active: bool = field(default=True)
+    acknowledge: bool = field(default=True)
 
     async def unsubscribe(self) -> None:
         self.active = False
@@ -145,7 +150,7 @@ class InMemoryBus:
         return PublishResult(stream=stream.name, sequence=sequence)
 
     async def _deliver_with_retries(self, sub: _MemorySubscription, message: BusMessage) -> None:
-        for attempt in range(1, self.max_deliver + 1):
+        for attempt in range(1, (self.max_deliver if sub.acknowledge else 1) + 1):
             delivery = BusMessage(
                 subject=message.subject,
                 data=message.data,
@@ -167,13 +172,16 @@ class InMemoryBus:
         durable: str | None = None,
         queue: str | None = None,
         last_per_subject: bool = False,
+        acknowledge: bool = True,
     ) -> _MemorySubscription:
         """Subscribe ``handler``; ``durable``/``queue`` form a load-balanced group.
 
         With ``last_per_subject`` the newest stored message of every matching stream subject is
-        delivered to the new subscription before ``subscribe`` returns.
+        delivered to the new subscription before ``subscribe`` returns. Without ``acknowledge``
+        a failing handler gets no redelivery.
         """
         self._ensure_open()
+        check_acknowledge(acknowledge, durable, queue)
         jetstream = _stream_for(self.streams, subject) is not None
         if (durable is not None or last_per_subject) and not jetstream:
             msg = f"durable and last-per-subject consumers need a stream subject: {subject!r}"
@@ -184,6 +192,7 @@ class InMemoryBus:
             handler=handler,
             group=queue or durable,
             jetstream=jetstream,
+            acknowledge=acknowledge,
         )
         self._subscriptions.append(sub)
         if last_per_subject:
@@ -191,6 +200,25 @@ class InMemoryBus:
                 if subject_matches(subject, stored_subject):
                     await self._deliver_with_retries(sub, message)
         return sub
+
+    async def subscribe_batch(
+        self,
+        subject: str,
+        handler: BatchHandler,
+        *,
+        durable: str | None = None,
+        queue: str | None = None,
+        max_batch: int = 64,
+        max_wait_seconds: float = 0.0,
+    ) -> _MemorySubscription:
+        """Subscribe a batch handler. Delivery stays synchronous inside ``publish``, so every
+        batch holds one message; outcomes map to acknowledge, redeliver and drop as for
+        :meth:`subscribe`."""
+        if _stream_for(self.streams, subject) is None:
+            msg = f"batch subscriptions need a stream subject: {subject!r}"
+            raise ValueError(msg)
+        check_batch_limits(max_batch, max_wait_seconds)
+        return await self.subscribe(subject, one_at_a_time(handler), durable=durable, queue=queue)
 
     async def request(
         self,

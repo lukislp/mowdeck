@@ -71,7 +71,7 @@ Proposal states: `analysing`, then `proposed` (waits for approval until `expires
 | requests | `fleet.drive.start`, `fleet.drive.stop` | `DriveStartRequest` (`origin: vision`), `DriveStopRequest` (`completed`, `aborted`) | on behalf of the approver |
 | requests | `fleet.commands.issue` | `IssueCommandRequest` (`origin: vision`) | `return_to_dock` after a successful Find Dock or an approved dock proposal; `resume_mow` for an approved `resume`; `set_light` on and off around a dark photo (on the requester's behalf) |
 | requests | `gateway.mower.<id>.photo` | `PhotoRequest`, `PhotoReply` | a still image when the app sent none |
-| subscribes (every instance) | `telemetry.mower.*`, `device.mower.>` (newest per subject), `command.mower.*`, `command.result.mower.*` | | the view: states, maps, capabilities, the route of the running job (`path`), recent commands and the areas of the newest `start_mow`, emergency stops, command results |
+| subscribes (every instance) | `telemetry.mower.*`, `device.mower.>` (newest per subject), `command.mower.*`, `command.result.mower.*` | | the view: states (without acknowledgements, ADR 0078: the next state replaces a lost one), maps, capabilities, the route of the running job (`path`), recent commands and the areas of the newest `start_mow`, emergency stops, command results |
 | subscribes (durable `vision-identity`) | `event.identity.>` | `UserChanged` | disabled or deleted users lose their provider settings and preferences |
 | subscribes (durable queue `vision-auto`) | `telemetry.mower.*` | `MowerState` | automatic analysis on errors (not subscribed with `VISION_AUTO_ENABLED=false`) |
 

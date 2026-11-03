@@ -2,7 +2,9 @@
 
 * ``telemetry.mower.*`` and ``command.result.mower.*``: **without** durable and queue group,
   so the kit creates an ephemeral JetStream push consumer that delivers new messages only, and
-  every instance receives every message (any instance can serve any client).
+  every instance receives every message (any instance can serve any client). The states come
+  without acknowledgements (``acknowledge=False``, ADR 0078): a state the fan-out could not
+  handle is not worth a redelivery, the next one follows within seconds.
 * ``device.mower.*.capabilities`` (ephemeral, ``last_per_subject``): the newest capabilities
   of every mower, so ``drive_start`` knows whether the mower offers manual driving.
 * ``event.identity.grants.changed``: drop the cached decisions of the named subjects
@@ -218,7 +220,8 @@ async def subscribe_all(
 ) -> RealtimeSubscriptions:
     """Subscribe the fan-out and the re-check trigger."""
     return RealtimeSubscriptions(
-        telemetry=await bus.subscribe(ALL_TELEMETRY, state_handler(hub)),
+        # The busiest subject: a live fan-out needs no acknowledgement per state (ADR 0078).
+        telemetry=await bus.subscribe(ALL_TELEMETRY, state_handler(hub), acknowledge=False),
         results=await bus.subscribe(ALL_COMMAND_RESULTS, result_handler(hub)),
         grants=await bus.subscribe(GRANTS_CHANGED_SUBJECT, grants_handler(hub, cache)),
         capabilities=await bus.subscribe(

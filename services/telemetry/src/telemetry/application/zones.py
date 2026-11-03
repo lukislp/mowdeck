@@ -17,6 +17,7 @@ the map snapshot, the capabilities and the aerial photo that decide where they a
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -371,11 +372,24 @@ class Zones:
 
     async def observe(self, state: MowerState) -> Step | None:
         """Evaluate a stored state; None when the mower has no zones or the state is old."""
-        zones = [
-            z
-            for z in await self._zones.zones_for(state.mower_id)
-            if z.account_id == state.account_id
-        ]
+        return await self._observe(state, await self._zones.zones_for(state.mower_id))
+
+    async def observe_many(self, states: Sequence[MowerState]) -> None:
+        """Evaluate a batch of stored states in order, reading the zones of all its mowers at
+        once; a failure is logged per mower and never stops the others."""
+        by_mower: dict[UUID, list[MowerState]] = {}
+        for state in states:
+            by_mower.setdefault(state.mower_id, []).append(state)
+        all_zones = await self._zones.zones_for_many(by_mower.keys())
+        for mower_id, zones in all_zones.items():
+            try:
+                for state in by_mower[mower_id]:
+                    await self._observe(state, zones)
+            except Exception:
+                _log.exception("evaluating the zones failed", mower_id=str(mower_id))
+
+    async def _observe(self, state: MowerState, all_zones: list[VirtualZone]) -> Step | None:
+        zones = [z for z in all_zones if z.account_id == state.account_id]
         if not zones:
             return None
         shapes = self._shapes_of(zones)
