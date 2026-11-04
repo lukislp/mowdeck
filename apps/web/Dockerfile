@@ -29,6 +29,10 @@ COPY apps/web apps/web
 # operator's own image may include it (--build-arg WEB_AGORA_SDK=include, apps/web/README.md);
 # the build fails for any other value and for any Agora package in a build without it.
 ARG WEB_AGORA_SDK=exclude
+# With SOURCE_DATE_EPOCH (the commit time, set by the release build) the app version SvelteKit
+# embeds is that time, so two builds of a commit are identical (vite.config.ts,
+# docs/dev/reproducible-builds.md).
+ARG SOURCE_DATE_EPOCH
 # Compiles the messages (Paraglide), builds the SPA and writes build/csp.conf with the hashes of
 # the inline bootstrap script, plus THIRD-PARTY-LICENSES.txt and third-party-licences.json of the
 # npm packages in the bundle (build-tools/release-licences.ts).

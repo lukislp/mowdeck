@@ -16,6 +16,15 @@ const gateway = process.env.MOWDECK_DEV_GATEWAY ?? 'http://localhost';
  * published image is built without it (build-tools/release-licences.ts, apps/web/README.md). */
 const agora = agoraIncluded(process.env.MOWDECK_WEB_AGORA_SDK);
 
+/** The app version SvelteKit writes into _app/version.json, the pages' bootstrap script and the
+ * service worker. SvelteKit's default is the build time, so no two builds were alike; with
+ * SOURCE_DATE_EPOCH (the commit time, set by the reproducibility check and the release build)
+ * two builds of the same commit are bit-identical (docs/dev/reproducible-builds.md). Without
+ * it, the build time as before. */
+const sourceDateEpoch = process.env.SOURCE_DATE_EPOCH?.trim();
+const versionName =
+  sourceDateEpoch && /^\d+$/.test(sourceDateEpoch) ? sourceDateEpoch : Date.now().toString();
+
 export default defineConfig({
   plugins: [
     // SvelteKit 3 as a static SPA (its options live here, there is no svelte.config.js): every
@@ -31,7 +40,7 @@ export default defineConfig({
         strict: true,
       }),
       serviceWorker: { register: false },
-      version: { pollInterval: 0 },
+      version: { name: versionName, pollInterval: 0 },
     }),
     paraglideVitePlugin({
       project: './project.inlang',
