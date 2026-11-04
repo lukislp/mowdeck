@@ -161,3 +161,5 @@ AGPL-3.0 for services, apps and tooling (see `LICENSE`); Apache-2.0 for the reus
 ## Documentation
 
 Source in [`docs/`](docs/index.md), built with MkDocs Material (`uv run mkdocs serve`). The original project plan (German) is kept at [docs/plan/project-plan.de.md](docs/plan/project-plan.de.md).
+
+Project: [Contributing](CONTRIBUTING.md), [Governance](GOVERNANCE.md), [Roadmap](ROADMAP.md), [Security policy](SECURITY.md) and the [security assurance case](docs/dev/security-assurance.md), [Code of Conduct](CODE_OF_CONDUCT.md).

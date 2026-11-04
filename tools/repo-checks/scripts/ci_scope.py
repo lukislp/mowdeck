@@ -128,6 +128,8 @@ RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
             "CONTRIBUTING.md",
             "CODE_OF_CONDUCT.md",
             "SECURITY.md",
+            "GOVERNANCE.md",
+            "ROADMAP.md",
         ),
         frozenset({"docs"}),
     ),

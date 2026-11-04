@@ -9,7 +9,7 @@ The first job, `changes`, lists the files the pull request changes (the diff bet
 | Changed path | Jobs that run (besides `ci-config`) |
 | --- | --- |
 | `.github/**` (workflows, Dependabot, templates), `.releaserc.json`, `socket.yml`, `osv-scanner.toml`, `.pre-commit-config.yaml`, `.clusterfuzzlite/**`, repo-checks tests and CI-only scripts | none; for `ci.yml` the jobs whose definition changed (below) |
-| `docs/**`, `mkdocs.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` | docs |
+| `docs/**`, `mkdocs.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `ROADMAP.md` | docs |
 | `infra/helm/**` | helm |
 | `tests/load/**` | compose |
 | `apps/mobile/**` | web (+ gradle-wrapper for the Gradle wrapper) |

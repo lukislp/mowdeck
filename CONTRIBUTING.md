@@ -1,5 +1,14 @@
 # Contributing
 
+MowDeck has one maintainer ([GOVERNANCE.md](GOVERNANCE.md)), so the process is deliberately small, and it is the same for every change, the maintainer's own included. Planned work is in [ROADMAP.md](ROADMAP.md). Security problems never go into a public issue: see [SECURITY.md](SECURITY.md).
+
+## How changes get in
+
+1. **Bugs and requests** go into [GitHub Issues](https://github.com/lukislp/mowdeck/issues/new/choose) with the bug report or feature request template. Questions and ideas go into [Discussions](https://github.com/lukislp/mowdeck/discussions). The maintainer aims to answer new issues and discussions within 14 days. For anything bigger than a small fix, open an issue first, so the direction is agreed before you spend time on it.
+2. Fork the repository and make your change on a branch.
+3. Open a pull request against `main`. The pull request template asks what changed and why, and has the checklist below.
+4. `main` is protected: a pull request merges only after the required checks are green, its commits are signed and the branch is up to date ([CI and pull request scope](docs/dev/ci.md)). Nobody pushes to `main` directly, not even the maintainer.
+
 ## Workflow
 
 - **Conventional Commits** for all commits, in English: `feat(identity): add sub-user creation`, `fix(compose): ...`, `docs(adr): ...`, `chore: ...`. Breaking changes use `!` or a `BREAKING CHANGE:` footer.
@@ -22,7 +31,7 @@ Releases are automatic: every push to `main` runs semantic-release (`.github/wor
 
 A change is done when:
 
-1. Tests exist and are green (including tenant-isolation tests where data is touched).
+1. Tests exist and are green (including tenant-isolation tests where data is touched), as described under [Tests](#tests).
 2. Lint is clean (ruff, ruff format, mypy strict; for the frontend ESLint, Prettier, Stylelint, svelte-check and the i18n check).
 3. Documentation is updated (affected README, `docs/`), and an ADR is added or updated for every architecture decision.
 4. `mkdocs build --strict` passes.
@@ -30,6 +39,43 @@ A change is done when:
 A new service is generated from `templates/service` and has its own definition of done in `docs/dev/service-template.md`. A new mower vendor is generated from `templates/provider` (`uv run poe new-provider <vendor>`) and keeps the provider conformance kit green (`docs/dev/adding-a-provider.md`).
 
 A new third-party image (a base image, an infrastructure container, an image only CI runs) is pinned under "Image sources" in `infra/compose/.env.example` and used through its `*_IMAGE` variable or build argument; `tools/repo-checks/tests/test_images.py` keeps every default equal to that list. CI pulls the list through the repository's GHCR mirror: the workflow `mirror-images.yml` copies a new or bumped image there when the pull request changes the list (re-run CI jobs that pulled before the copy finished). See `infra/compose/README.md`, "Image sources".
+
+## Tests
+
+- **New behaviour comes with tests.** A feature or a change of behaviour adds tests next to the code it changes: `services/<service>/tests`, `libs/<library>/tests`, `*.test.ts` in `apps/web` and `libs/mowdeck-ui`, the Playwright gate in `tests/e2e-web` for user flows, `tests/e2e` for the acceptance test of the whole stack. A pull request that adds behaviour without a test is asked to add one.
+- **Every defect fix comes with a regression test.** A fix of a defect in the product's behaviour (`services/`, `libs/`, `apps/`, `bridge/`, `integrations/`) adds a test that fails without the fix and passes with it. Security fixes always get one. Exempt:
+  - dependency updates (`fix(deps)`, Dependabot pull requests, lock file refreshes): the existing suites and the required checks cover them instead. The mower vendor libraries also get the hardware test ([vendor library updates](docs/ops/vendor-lib-updates.md));
+  - fixes without testable behaviour (documentation, CI, build or signing configuration, pure styling): the pull request says why no test was added and how the fix was verified.
+- **Data access is tested across accounts.** A change that reads or writes account data has a test that requests another account's data and expects the rejection ([security assurance case](docs/dev/security-assurance.md)).
+- **Input is bounded.** A new route or model field gets bounds in its Pydantic model (or an explicit check in the service) and a test for the rejection ([input validation](docs/dev/security-assurance.md#input-validation)).
+- **Parsers of untrusted input are fuzzed.** A new parser of vendor frames, bridge records, tokens or messages gets a fuzz target in `fuzz/` ([fuzzing](docs/dev/fuzzing.md)).
+
+`uv run poe test` runs the Python suites with branch coverage, and `pnpm -r test` runs the frontend suites with coverage. CI shows the numbers in the job summary of `python` and `web` ([CI](docs/dev/ci.md)), and they are expected not to drop.
+
+## Coding style
+
+- **Python:** [PEP 8](https://peps.python.org/pep-0008/), as checked by ruff (rule sets `E`, `F`, `W`, `I`, `N`, `UP`, `B`, `S`, `C4`, `SIM`, `RUF`, `ASYNC`, line length 100) and formatted with `ruff format`. Type hints everywhere, checked by mypy in strict mode. The configuration is in the root `pyproject.toml`. A `# noqa` or `# type: ignore` names the rule and says why.
+- **TypeScript and Svelte:** ESLint with typescript-eslint, Prettier, Stylelint and svelte-check (`eslint.config.js`, `.prettierrc.json`, `stylelint.config.js`). UI work uses the design tokens of `libs/mowdeck-ui` and the UI checklist below.
+- **Workflows and shell:** actionlint and shellcheck (job `ci-config`). Actions are pinned to a commit SHA with the version in a comment.
+- **Everything:** `.editorconfig`, English, comments that explain why rather than what. Decisions go into an ADR ([docs/adr](docs/adr/README.md)).
+
+The required checks enforce all of this: `python` runs `uv run poe lint` (ruff, ruff format, mypy), `web` runs `pnpm -r lint` and `pnpm -r check`, and `ci-config` lints the workflows. A pull request with lint errors cannot merge.
+
+## Code review
+
+Every change, the maintainer's own included, goes through a pull request and the required checks. The reviewer (today the maintainer, see [GOVERNANCE.md](GOVERNANCE.md)) looks at:
+
+1. **Correctness and tests:** the change does what the pull request says, new behaviour has a test, and a defect fix has a regression test that fails without it (or a stated reason for the exemption above).
+2. **Security:** authentication and an OpenFGA check on every new route and command kind, input bounds, account scoping and the cross-account test, no secrets or personal data in code, tests or logs, outbound URLs only through an allow list. A change to a trust boundary updates the [security assurance case](docs/dev/security-assurance.md).
+3. **Mower safety:** the rules of [ADR 0012](docs/adr/0012-mower-control-interface-and-safety-rules.md) hold. The emergency stop stays reachable and is never blocked or delayed. An adapter change keeps the provider conformance kit green.
+4. **Compatibility:** contracts and the generated OpenAPI documents and types, database migrations (backward compatible), the Home Assistant integration and the apps. Breaking changes are marked (`feat!:`).
+5. **Operations and docs:** Compose and Helm, the affected README and `docs/`, an ADR for an architecture decision, German and English texts.
+
+Dependabot pull requests go through the same checks. The reviewer reads the release notes of a major update before merging it, and the vendor libraries additionally need the hardware test.
+
+## Developer Certificate of Origin
+
+By contributing you certify the [Developer Certificate of Origin 1.1](https://developercertificate.org/): you wrote the change, or otherwise have the right to submit it under the licence of the part it touches ([LICENSING.md](LICENSING.md): AGPL-3.0, Apache-2.0 for `libs/`, GPL-3.0 for the GPL adapter packages). Sign off every commit with `git commit -s`, which adds a `Signed-off-by: Your Name <email>` line. Automated dependency pull requests are exempt. No check enforces the sign-off today.
 
 ## Dependency updates
 
@@ -107,4 +153,8 @@ A pull request that touches `apps/web` or `libs/mowdeck-ui` attaches screenshots
 - [ ] Light and dark screenshots attached; sunlight check (light theme, full brightness) for new status UI
 - [ ] No hard-coded strings; German and English texts present and fitting (German is longer)
 - [ ] Pending, error, empty, offline and no-permission states designed
-- [ ] Keyboard focus visible, `prefers-reduced-motion` respected Optional git hooks: `uv run pre-commit install` after `uv tool install pre-commit`.
+- [ ] Keyboard focus visible, `prefers-reduced-motion` respected
+
+## Optional git hooks
+
+`uv run pre-commit install` after `uv tool install pre-commit`.
