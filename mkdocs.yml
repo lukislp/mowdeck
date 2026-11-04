@@ -139,6 +139,7 @@ nav:
       - "Security assurance case": dev/security-assurance.md
       - "Fuzzing and property-based tests": dev/fuzzing.md
       - "CI and pull request scope": dev/ci.md
+      - "Reproducible builds": dev/reproducible-builds.md
       - dev/wiki.md
   - Operations:
       - ops/compose.md

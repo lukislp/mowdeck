@@ -42,7 +42,11 @@ Neither number is a gate beyond the web threshold; they are there to be visible 
 
 The branch ruleset of `main` requires `python`, `openfga-model`, `docs`, `web`, `compose`, `helm`, `docker`, `camera-relay-media`, `e2e` and `e2e-web` from this workflow (plus `review / dependency-review`, the Socket Security checks and CodeQL, which are not scoped). GitHub counts a job skipped by its `if:` as passed, so a skipped required job does not block the merge. A workflow that does not start at all (a `paths` filter under `on:`) would leave its required checks pending forever, which is why `ci.yml` has no `paths` filter and always starts; `test_ci_scope.py` keeps it that way. `e2e-web`, which merges the shard reports, is skipped together with its shards when the suite is not needed and still fails when a needed shard failed or was skipped.
 
-Other workflows that only matter for some paths keep their own `paths` filter, because none of them is a required check: `helm-kind.yml` (the chart), `fuzzing.yml` (fuzzed code), `mirror-images.yml` (the image list).
+Other workflows that only matter for some paths keep their own `paths` filter, because none of them is a required check: `helm-kind.yml` (the chart), `fuzzing.yml` (fuzzed code), `mirror-images.yml` (the image list), `reproducibility.yml` (the build inputs, see below).
+
+## Reproducible build check
+
+`.github/workflows/reproducibility.yml` builds the same commit twice from a clean tree and compares every output file byte for byte: the Python packages, the web app, the Helm chart and every released image. It runs weekly, on demand and on pull requests that change build inputs. Any difference fails it. See [Reproducible builds](reproducible-builds.md).
 
 ## Releases from CI-only changes
 
