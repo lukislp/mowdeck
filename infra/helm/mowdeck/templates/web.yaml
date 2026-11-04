@@ -9,7 +9,8 @@ MOWDECK_WEB_CAMERA_ENABLED: the live camera, MOWDECK_WEB_API_EXPLORER: the API e
 MOWDECK_WEB_HSTS: Strict-Transport-Security over HTTPS, and the
 build's source code link: MOWDECK_SOURCE_URL when config.SOURCE_URL is set). */ -}}
 {{- $c := .Values.config }}
-{{- include "mowdeck.workload" (dict "ctx" . "component" "web" "key" "web" "image" "web" "port" 8080 "web" true
+{{- /* Internal TLS: HTTPS on 8443 (plain HTTP on 8080 then listens on the pod's loopback only). */ -}}
+{{- include "mowdeck.workload" (dict "ctx" . "component" "web" "key" "web" "image" "web" "port" (int (include "mowdeck.webPort" .)) "web" true
   "env" (merge (include "mowdeck.sourceEnv" . | fromJson) (dict
     "MOWDECK_WEB_MAP_TILES" $c.WEB_MAP_TILES
     "MOWDECK_WEB_MAP_ATTRIBUTION" $c.WEB_MAP_ATTRIBUTION

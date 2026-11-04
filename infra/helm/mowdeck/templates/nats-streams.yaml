@@ -44,6 +44,10 @@ spec:
               value: /run/secrets/nats/password
             - name: MOWDECK_LOG_FORMAT
               value: json
+            {{- if .Values.internalTls.enabled }}
+            - name: MOWDECK_TLS_CA_FILE
+              value: {{ printf "%s/ca.crt" (include "mowdeck.tls.dir" .) | quote }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           resources:
@@ -51,11 +55,17 @@ spec:
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: nats-auth, mountPath: /run/secrets/nats, readOnly: true}
+            {{- if .Values.internalTls.enabled }}
+            - {name: internal-tls, mountPath: {{ include "mowdeck.tls.dir" . }}, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
             medium: Memory
             sizeLimit: 16Mi
+        {{- if .Values.internalTls.enabled }}
+        {{- include "mowdeck.tls.trustVolume" . | nindent 8 }}
+        {{- end }}
         - name: nats-auth
           secret:
             secretName: {{ .Values.natsAuth.secretName }}

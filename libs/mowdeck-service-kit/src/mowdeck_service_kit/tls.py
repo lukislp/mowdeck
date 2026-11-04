@@ -14,9 +14,16 @@ An installation that is upgraded keeps working without editing its ``.env``: wit
 ``MOWDECK_TLS_CA_FILE`` set, an ``http://`` URL that names a MowDeck service or OpenFGA (the
 values an older ``.env`` carries, e.g. ``OPENFGA_API_URL=http://openfga:8080``) is used as
 ``https://``, because those services no longer speak plain HTTP.
+
+``python -m mowdeck_service_kit.tls --ca <ca.crt> --out <bundle>`` writes that bundle (the public
+roots the image ships plus the CA); the Helm chart runs it as an init container.
 """
 
+import argparse
 import ssl
+import sys
+from collections.abc import Sequence
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 INTERNAL_HOSTS = frozenset(
@@ -66,6 +73,48 @@ def upgrade_internal_url(url: str) -> str:
     if parts.scheme.lower() != "http" or host is None or host not in INTERNAL_HOSTS:
         return url
     return urlunsplit(("https", parts.netloc, parts.path, parts.query, parts.fragment))
+
+
+def public_roots() -> bytes:
+    """The public roots of the image: certifi (what httpx uses), else the system bundle."""
+    try:
+        import certifi  # present in every service image (httpx)
+
+        return Path(certifi.where()).read_bytes()
+    except (ImportError, OSError):
+        pass
+    try:
+        return Path("/etc/ssl/certs/ca-certificates.crt").read_bytes()
+    except OSError:
+        return b""
+
+
+def write_bundle(ca_file: Path, out: Path, *, roots: bytes | None = None) -> None:
+    """Write ``out``: the public roots followed by the CA certificates of ``ca_file``."""
+    ca = ca_file.read_bytes()
+    if b"-----BEGIN CERTIFICATE-----" not in ca:
+        msg = f"{ca_file} contains no PEM certificate"
+        raise ValueError(msg)
+    roots = public_roots() if roots is None else roots
+    if roots and not roots.endswith(b"\n"):
+        roots += b"\n"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(roots + ca)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Entry point of ``python -m mowdeck_service_kit.tls`` (the trust bundle)."""
+    parser = argparse.ArgumentParser(prog="mowdeck_service_kit.tls")
+    parser.add_argument("--ca", required=True, type=Path, help="CA certificate(s), PEM")
+    parser.add_argument("--out", required=True, type=Path, help="bundle to write (SSL_CERT_FILE)")
+    args = parser.parse_args(argv)
+    try:
+        write_bundle(args.ca, args.out)
+    except (OSError, ValueError) as exc:
+        print(f"trust-bundle: {exc}", file=sys.stderr)
+        return 1
+    print(f"trust-bundle: wrote {args.out}")
+    return 0
 
 
 def upgrade_internal_urls(value: str) -> str:

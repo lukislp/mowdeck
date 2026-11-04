@@ -24,6 +24,16 @@ spec:
     - port: http
       path: /metrics
       interval: {{ $.Values.metrics.serviceMonitor.interval }}
+      {{- if $.Values.internalTls.enabled }}
+      # Internal TLS: HTTPS, checked against the CA and the Service's name.
+      scheme: https
+      tlsConfig:
+        serverName: {{ include "mowdeck.serviceName" (dict "ctx" $ "component" $component) }}
+        ca:
+          secret:
+            name: {{ include "mowdeck.tls.secretName" (dict "ctx" $ "component" $component) }}
+            key: ca.crt
+      {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

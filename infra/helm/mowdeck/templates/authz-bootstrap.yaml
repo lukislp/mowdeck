@@ -50,6 +50,9 @@ spec:
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: scripts, mountPath: /opt/mowdeck/scripts, readOnly: true}
+            {{- if .Values.internalTls.enabled }}
+            - {name: internal-tls, mountPath: {{ include "mowdeck.tls.dir" . }}, readOnly: true}
+            {{- end }}
       containers:
         - name: authz-bootstrap
           image: {{ include "mowdeck.image" (dict "ctx" . "image" "authz-bootstrap") }}
@@ -62,6 +65,9 @@ spec:
             {{- toYaml $b.resources | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            {{- if .Values.internalTls.enabled }}
+            - {name: internal-tls, mountPath: {{ include "mowdeck.tls.dir" . }}, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
@@ -71,4 +77,7 @@ spec:
           configMap:
             name: {{ include "mowdeck.fullname" . }}-scripts
             defaultMode: 0555
+        {{- if .Values.internalTls.enabled }}
+        {{- include "mowdeck.tls.trustVolume" . | nindent 8 }}
+        {{- end }}
 {{- end }}

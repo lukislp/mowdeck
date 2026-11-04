@@ -205,6 +205,27 @@ The Compose stack uses a looser limit for the refresh path (`identity-session-ra
 
 **TLS.** With [cert-manager](https://cert-manager.io/docs/usage/ingress/) add `cert-manager.io/cluster-issuer: <issuer>` to `ingress.annotations` and a `tls` entry; cert-manager fills the Secret. Behind HTTPS keep `IDENTITY_REFRESH_COOKIE_SECURE=true`; `REALTIME_ALLOWED_ORIGINS` and `NOTIFICATIONS_APP_URL` default to `https://<ingress.host>`.
 
+### Internal TLS
+
+Every hop inside the release is encrypted and verified ([internal TLS](internal-tls.md)), on by default (`internalTls.enabled`): the services serve HTTPS on 8000 and the web app on 8443, NATS requires TLS on its client port (and its monitoring and cluster routes use it), OpenFGA serves HTTPS and gRPC with TLS, the in-cluster PostgreSQL (CloudNativePG) serves the internal CA's certificate and refuses connections without TLS (`hostnossl ... reject`), OpenFGA connects to it with `sslmode=verify-full`, and MediaMTX's API and WHEP server use HTTPS. Each server has the Secret `<service>-tls` (`tls.crt`, `tls.key`, `ca.crt`), its certificate names the Service (short, with the namespace and `svc.cluster.local`); every client checks it against the CA. Python HTTP clients trust `SSL_CERT_FILE`, a bundle of the image's public roots plus the CA that the init container `trust-bundle` writes, so calls to the internet keep working.
+
+Who issues the certificates (`internalTls.provider`):
+
+| Provider | When | What |
+| --- | --- | --- |
+| `certManager` | `auto` picks it when the cluster serves `cert-manager.io/v1` | A self-signed Issuer makes the CA (`<fullname>-internal-ca`, 20 years), a CA Issuer signs one Certificate per server (5 years, renewed by cert-manager a year before the end) |
+| `chart` | `auto` without cert-manager | The chart generates the CA on the first install and keeps it in the Secret `<fullname>-internal-ca`; `helm upgrade` issues a certificate again when it is missing, its names or the CA changed, or it ends within a year; a CA within 5 years of its end is replaced and the old one stays trusted |
+
+Pods load their certificate at start, so a renewed certificate is used after the next rollout (every upgrade of the images restarts them).
+
+**The Ingress controller to the backends.** With Traefik and its CRDs (k3s, the Traefik chart) the chart renders one `ServersTransport` per backend (the CA and the Service name, no `insecureSkipVerify`) and names it on the Service (`traefik.ingress.kubernetes.io/service.serversscheme: https`, `...service.serverstransport`); nothing to configure. Other controllers must be told to talk HTTPS to the backends and to verify them with `ca.crt` of the Secret `<fullname>-trust-tls` and the Service name as the server name; without that they send plain HTTP to an HTTPS port and answer 502. Configure the controller before an upgrade to this version, or keep the previous behaviour for the moment with `internalTls.enabled: false` (debugging only; then also `nats.config.nats.tls.enabled`, `nats.config.monitor.tls.enabled`, `nats.config.cluster.tls.enabled`, `openfga.http.tls.enabled` and `openfga.grpc.tls.enabled: false`).
+
+**Names of the subchart Secrets.** The NATS and OpenFGA charts cannot template their Secret names: `values.yaml` names `mowdeck-nats-tls` and `mowdeck-openfga-tls` (`<fullnameOverride>-tls`). Keep them in step when you change `nats.fullnameOverride` or `openfga.fullnameOverride`.
+
+**External PostgreSQL** (`postgresql.external.enabled`) is not signed by the internal CA: its URL parameters decide (`postgresql.external.serviceUrlParams`, e.g. `ssl=verify-full` with your CA; without parameters the services keep asyncpg's default `ssl=prefer`).
+
+**What stays plain.** The kubelet's probes (it does not verify certificates), the metrics ports of OpenFGA (2112) and CloudNativePG, and the RTSP feed from camera-relay to MediaMTX (see [internal TLS](internal-tls.md#what-stays-unencrypted)).
+
 **Tailscale at home.** With the [Tailscale Kubernetes operator](https://tailscale.com/kb/1236/kubernetes-operator) set `ingress.className: tailscale` and `ingress.host` to the machine name; the operator exposes the Ingress in the tailnet with a certificate for `<name>.<tailnet>.ts.net` ([cluster ingress](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)). Check the operator's documentation for what its Ingress class supports; the alternative is to keep your normal controller for the path routes and expose that controller's Service in the tailnet (annotation `tailscale.com/expose: "true"`, [exposing a Service](https://tailscale.com/kb/1439/kubernetes-operator-cluster-ingress)).
 
 ## Camera relay (media plane)

@@ -104,6 +104,45 @@ cmp -s "$chart/files/nats-auth.conf" "$root/infra/compose/nats/auth.conf" ||
   { echo "files/nats-auth.conf differs from infra/compose/nats/auth.conf: uv run poe nats-auth"; exit 1; }
 echo "ok: NATS authenticates every service with its own user"
 
+step "internal TLS (docs/ops/internal-tls.md)"
+# Default (no cert-manager in a plain `helm template`): the chart's own CA and Secrets.
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" > "$out/tls-chart.yaml"
+grep -q "name: mowdeck-internal-ca" "$out/tls-chart.yaml"
+grep -q "name: mowdeck-identity-tls" "$out/tls-chart.yaml"
+grep -q "MOWDECK_NATS_URL: tls://mowdeck-nats:4222" "$out/tls-chart.yaml"
+grep -q "MOWDECK_AUTH_JWKS_URL: https://mowdeck-identity:8000/.well-known/jwks.json" "$out/tls-chart.yaml"
+grep -q "sslmode=verify-full" "$out/tls-chart.yaml"
+grep -q "hostnossl all all all reject" "$out/tls-chart.yaml"
+if grep -qi "insecureSkipVerify" "$out/tls-chart.yaml"; then
+  echo "internal TLS must not skip certificate verification"
+  exit 1
+fi
+# cert-manager and Traefik's CRDs installed: Certificates and one ServersTransport per backend.
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --api-versions cert-manager.io/v1 --api-versions traefik.io/v1alpha1/ServersTransport \
+  > "$out/tls-cert-manager.yaml"
+grep -q "kind: Certificate" "$out/tls-cert-manager.yaml"
+grep -q "kind: ServersTransport" "$out/tls-cert-manager.yaml"
+grep -q "traefik.ingress.kubernetes.io/service.serversscheme: https" "$out/tls-cert-manager.yaml"
+if grep -q "name: mowdeck-internal-ca$" "$out/tls-cert-manager.yaml" &&
+  grep -q "mowdeck.app/tls-renew-after" "$out/tls-cert-manager.yaml"; then
+  echo "with cert-manager the chart must not generate certificates itself"
+  exit 1
+fi
+# Off (debugging): plain URLs again.
+helm template mowdeck "$chart" --namespace mowdeck -f "$test_values" \
+  --set internalTls.enabled=false > "$out/tls-off.yaml"
+grep -q "MOWDECK_NATS_URL: nats://mowdeck-nats:4222" "$out/tls-off.yaml"
+if grep -q "MOWDECK_TLS_CERT_FILE" "$out/tls-off.yaml"; then
+  echo "internalTls.enabled=false must not configure TLS in the services"
+  exit 1
+fi
+kubeconform -strict -summary -kubernetes-version "$KUBE_VERSION" \
+  -schema-location default \
+  -schema-location "$CRDS_CATALOG/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+  "$out/tls-chart.yaml" "$out/tls-cert-manager.yaml" "$out/tls-off.yaml"
+echo "ok: internal TLS renders with the chart's CA, with cert-manager and switched off"
+
 step "optional agora-bridge (ADR 0045 step 7)"
 # No image is published: enabling it without the operator's own image must fail.
 expect_failure "agoraBridge.image.repository is required" -f "$test_values" \

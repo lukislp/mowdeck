@@ -94,4 +94,4 @@ A handshake that fails names the reason in the client's log (`CERTIFICATE_VERIFY
 
 ## Kubernetes
 
-The Helm chart's own internal TLS (cert-manager or a CA of the chart) is described in [Helm](helm.md).
+The Helm chart encrypts the same hops, with certificates from cert-manager when it is installed or from a CA the chart generates and renews on `helm upgrade`; the Ingress controller (Traefik automatically) verifies the backends. Details and the upgrade notes for other controllers: [Helm, internal TLS](helm.md#internal-tls).

@@ -11,7 +11,7 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
 {{- end }}
 {{- /* The Matter server (ADR 0063) when enabled, plus config.IDENTITY_EXTRA_MODULE_URLS. */ -}}
 {{- if .Values.services.matterServer.enabled }}
-{{- $modules = append $modules (printf "http://%s:%s" (include "mowdeck.serviceName" (dict "ctx" . "component" "matter-server")) (toString $c.MATTER_HTTP_PORT)) }}
+{{- $modules = append $modules (printf "%s://%s:%s" (include "mowdeck.tls.scheme" .) (include "mowdeck.serviceName" (dict "ctx" . "component" "matter-server")) (toString $c.MATTER_HTTP_PORT)) }}
 {{- end }}
 {{- /* The optional assistant (chat control, ADR 0075) when enabled. */ -}}
 {{- if .Values.services.assistant.enabled }}

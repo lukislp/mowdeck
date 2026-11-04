@@ -42,6 +42,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
+from mowdeck_service_kit.tls import public_roots as tls_public_roots
+
 CA_VALIDITY = dt.timedelta(days=20 * 365)
 """Lifetime of a new CA."""
 
@@ -316,20 +318,6 @@ def _load_ca(ca_dir: Path) -> tuple[ec.EllipticCurvePrivateKey, x509.Certificate
     return key, certs[0]
 
 
-def _public_roots() -> bytes:
-    """The public roots the containers trusted before (certifi, else the system bundle)."""
-    try:
-        import certifi  # optional, present in every service image
-
-        return Path(certifi.where()).read_bytes()
-    except (ImportError, OSError):
-        pass
-    try:
-        return Path("/etc/ssl/certs/ca-certificates.crt").read_bytes()
-    except OSError:
-        return b""
-
-
 def ensure(
     ca_dir: Path,
     out_dir: Path,
@@ -363,7 +351,7 @@ def ensure(
         cert for cert in _read_certs(ca_dir / _CA_PREVIOUS) if cert.not_valid_after_utc > now
     ]
     trust_pem = b"".join(_pem(cert) for cert in trusted)
-    roots = _public_roots() if public_roots is None else public_roots
+    roots = tls_public_roots() if public_roots is None else public_roots
     if roots and not roots.endswith(b"\n"):
         roots += b"\n"
     _write_atomic(out_dir / _CA_CERT, trust_pem, mode=0o644)

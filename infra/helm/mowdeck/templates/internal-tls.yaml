@@ -1,0 +1,226 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
+{{- /*
+Internal TLS (docs/ops/internal-tls.md; the Compose job tls-init): a private CA and one
+certificate per server of the release, in the Secret <service>-tls (tls.crt, tls.key, ca.crt).
+Every certificate names its Kubernetes Service (short, with the namespace and the cluster domain)
+plus localhost and 127.0.0.1; OpenFGA also 0.0.0.0 (its HTTP API checks its own gRPC API at that
+address), NATS the pods of its headless Service (cluster routes), PostgreSQL the -rw, -ro and -r
+Services of CloudNativePG. <fullname>-trust-tls carries the CA for the jobs and init containers
+that only connect.
+
+internalTls.provider:
+  certManager (auto when cert-manager.io/v1 is served): a self-signed Issuer makes the CA
+    (Certificate <fullname>-internal-ca, 20 years), a CA Issuer signs the servers' Certificates
+    (5 years, renewed by cert-manager a year before).
+  chart: the chart generates the CA on the first install (Secret <fullname>-internal-ca) and keeps
+    it; a server certificate is issued again by `helm upgrade` when it is missing, its names or
+    the CA changed, or it ends within a year. A CA within 5 years of its end is replaced.
+With Traefik's CRDs every backend the Ingress reaches gets a ServersTransport that checks its
+certificate (the Service names it in an annotation, templates/_workload.tpl).
+*/ -}}
+{{- if .Values.internalTls.enabled }}
+{{- $ns := .Release.Namespace }}
+{{- $full := include "mowdeck.fullname" . }}
+{{- $certs := list }}
+{{- /* MowDeck workloads: component, key under services. */ -}}
+{{- $workloads := list
+  (list "identity" "identity") (list "fleet" "fleet") (list "telemetry" "telemetry")
+  (list "device-gateway" "deviceGateway") (list "realtime" "realtime")
+  (list "notifications" "notifications") (list "scheduler" "scheduler")
+  (list "entitlements" "entitlements") (list "planner" "planner") (list "vision" "vision")
+  (list "assistant" "assistant") (list "billing" "billing") (list "camera-relay" "cameraRelay")
+  (list "mediamtx" "cameraRelay") (list "matter-server" "matterServer") (list "web" "web") }}
+{{- range $workloads }}
+{{- if (index $.Values.services (index . 1)).enabled }}
+{{- $svc := include "mowdeck.serviceName" (dict "ctx" $ "component" (index . 0)) }}
+{{- $certs = append $certs (dict "name" (index . 0) "secret" (printf "%s-tls" $svc | trunc 63 | trimSuffix "-") "service" $svc "hosts" (list $svc) "ips" (list) "routed" true) }}
+{{- end }}
+{{- end }}
+{{- $certs = append $certs (dict "name" "trust" "secret" (printf "%s-trust-tls" $full) "service" (printf "%s-trust" $full) "hosts" (list) "ips" (list) "routed" false) }}
+{{- if .Values.nats.enabled }}
+{{- $nats := include "mowdeck.natsName" . }}
+{{- $certs = append $certs (dict "name" "nats" "secret" (printf "%s-tls" $nats) "service" $nats "hosts" (list $nats (printf "*.%s-headless" $nats)) "ips" (list) "routed" false) }}
+{{- end }}
+{{- if .Values.openfga.enabled }}
+{{- $fga := include "mowdeck.openfgaName" . }}
+{{- $certs = append $certs (dict "name" "openfga" "secret" (printf "%s-tls" $fga) "service" $fga "hosts" (list $fga) "ips" (list "0.0.0.0") "routed" false) }}
+{{- end }}
+{{- if not .Values.postgresql.external.enabled }}
+{{- $pg := include "mowdeck.pg.clusterName" . }}
+{{- $certs = append $certs (dict "name" "postgresql" "secret" (printf "%s-postgres-tls" $full) "service" (printf "%s-rw" $pg) "hosts" (list (printf "%s-rw" $pg) (printf "%s-ro" $pg) (printf "%s-r" $pg)) "ips" (list) "routed" false) }}
+{{- end }}
+{{- /* Every host also with the namespace and the cluster domain, plus the loopback names. */ -}}
+{{- range $certs }}
+{{- $dns := list }}
+{{- range .hosts }}
+{{- $dns = concat $dns (list . (printf "%s.%s" . $ns) (printf "%s.%s.svc" . $ns) (printf "%s.%s.svc.cluster.local" . $ns)) }}
+{{- end }}
+{{- $_ := set . "dns" (append $dns "localhost") }}
+{{- $_ := set . "allIps" (concat (list "127.0.0.1") .ips) }}
+{{- end }}
+{{- if include "mowdeck.tls.certManager" . }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $full }}-selfsigned
+  labels:
+    {{- include "mowdeck.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ $full }}-internal-ca
+  labels:
+    {{- include "mowdeck.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: MowDeck internal CA
+  secretName: {{ $full }}-internal-ca
+  duration: 175200h
+  renewBefore: 43800h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: {{ $full }}-selfsigned
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $full }}-internal-ca
+  labels:
+    {{- include "mowdeck.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ $full }}-internal-ca
+{{- range $certs }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .secret }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" .name) | nindent 4 }}
+spec:
+  secretName: {{ .secret }}
+  commonName: {{ .service | trunc 64 }}
+  duration: 43800h
+  renewBefore: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages: [digital signature, server auth, client auth]
+  dnsNames:
+    {{- toYaml .dns | nindent 4 }}
+  ipAddresses:
+    {{- toYaml .allIps | nindent 4 }}
+  issuerRef:
+    name: {{ $full }}-internal-ca
+    kind: Issuer
+{{- end }}
+{{- else }}
+{{- /* The chart's own CA, kept across upgrades (lookup finds nothing in `helm template`). */ -}}
+{{- $now := now | unixEpoch | int64 }}
+{{- $day := 86400 }}
+{{- $caName := printf "%s-internal-ca" $full }}
+{{- $old := lookup "v1" "Secret" $ns $caName }}
+{{- $ca := dict }}
+{{- $caRenewAt := int64 0 }}
+{{- $hadCa := and $old $old.data (index $old.data "tls.crt") (index $old.data "tls.key") $old.metadata.annotations }}
+{{- if $hadCa }}
+{{- $caRenewAt = int64 (index $old.metadata.annotations "mowdeck.app/tls-renew-after" | default "0") }}
+{{- end }}
+{{- $trusted := "" }}
+{{- if gt $caRenewAt $now }}
+{{- $ca = buildCustomCert (index $old.data "tls.crt") (index $old.data "tls.key") }}
+{{- $trusted = $ca.Cert }}
+{{- else }}
+{{- $ca = genCAWithKey "MowDeck internal CA" 7300 (genPrivateKey "ecdsa") }}
+{{- $caRenewAt = add $now (mul (sub 7300 1825) $day) }}
+{{- $trusted = $ca.Cert }}
+{{- if $hadCa }}
+{{- /* A replaced CA stays trusted (5 years left) for pods that were not restarted yet. */ -}}
+{{- $trusted = printf "%s\n%s" (trimSuffix "\n" $ca.Cert) (index $old.data "tls.crt" | b64dec) }}
+{{- end }}
+{{- end }}
+{{- $caSum := $ca.Cert | sha256sum }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $caName }}
+  labels:
+    {{- include "mowdeck.labels" . | nindent 4 }}
+  annotations:
+    mowdeck.app/tls-renew-after: {{ $caRenewAt | quote }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $ca.Cert | b64enc }}
+  tls.key: {{ $ca.Key | b64enc }}
+{{- range $certs }}
+{{- $names := printf "%s|%s" (join "," .dns) (join "," .allIps) | sha256sum }}
+{{- $prev := lookup "v1" "Secret" $ns .secret }}
+{{- $keep := false }}
+{{- if and $prev $prev.data $prev.metadata.annotations }}
+{{- $a := $prev.metadata.annotations }}
+{{- if and (eq (index $a "mowdeck.app/tls-names" | default "") $names) (eq (index $a "mowdeck.app/tls-ca" | default "") $caSum) (gt (int64 (index $a "mowdeck.app/tls-renew-after" | default "0")) $now) }}
+{{- $keep = true }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .secret }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" .name) | nindent 4 }}
+  annotations:
+    mowdeck.app/tls-names: {{ $names | quote }}
+    mowdeck.app/tls-ca: {{ $caSum | quote }}
+    {{- if $keep }}
+    mowdeck.app/tls-renew-after: {{ index $prev.metadata.annotations "mowdeck.app/tls-renew-after" | quote }}
+    {{- else }}
+    mowdeck.app/tls-renew-after: {{ add $now (mul (sub 1825 365) $day) | quote }}
+    {{- end }}
+type: kubernetes.io/tls
+data:
+  {{- if $keep }}
+  tls.crt: {{ index $prev.data "tls.crt" }}
+  tls.key: {{ index $prev.data "tls.key" }}
+  {{- else }}
+  {{- $leaf := genSignedCertWithKey (.service | trunc 64) .allIps .dns 1825 $ca (genPrivateKey "ecdsa") }}
+  tls.crt: {{ $leaf.Cert | b64enc }}
+  tls.key: {{ $leaf.Key | b64enc }}
+  {{- end }}
+  ca.crt: {{ $trusted | b64enc }}
+{{- end }}
+{{- end }}
+{{- if include "mowdeck.tls.traefik" . }}
+{{- range $certs }}
+{{- if .routed }}
+---
+# The Ingress reaches {{ .service }} over HTTPS and checks its certificate (templates/_workload.tpl
+# names this transport on the Service).
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ .service }}
+  labels:
+    {{- include "mowdeck.componentLabels" (dict "ctx" $ "component" .name) | nindent 4 }}
+spec:
+  serverName: {{ .service }}
+  rootCAs:
+    - secret: {{ .secret }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

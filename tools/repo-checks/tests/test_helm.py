@@ -34,6 +34,7 @@ REPLACED = {
     "openfga": "the official OpenFGA subchart",
     "openfga-migrate": "the OpenFGA subchart's migrate init container",
     "agora-bridge": "a second container of the camera-relay pod (cameraRelay.agoraBridge)",
+    "tls-init": "cert-manager or the chart's own CA (templates/internal-tls.yaml)",
 }
 
 # One-shot Compose jobs the chart runs as a Job per release revision (templates/<name>.yaml).
@@ -191,6 +192,8 @@ def test_camera_relay_is_off_by_default_and_a_compose_profile(repo_root: Path) -
         "traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip",
         "traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep",
         "traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889",
+        "traefik.http.services.mediamtx-whep.loadbalancer.server.scheme=https",
+        "traefik.http.services.mediamtx-whep.loadbalancer.serverstransport=mediamtx@file",
     }
     assert _values(repo_root)["services"]["cameraRelay"]["enabled"] is False
     traefik = compose["traefik"].get("depends_on", {})
@@ -284,6 +287,57 @@ def test_postgres_max_connections_matches_compose(repo_root: Path) -> None:
     assert values["maxConnections"] == compose_max
     template = (_chart(repo_root) / "templates" / "postgresql.yaml").read_text("utf-8")
     assert '"max_connections" (toString (int $pg.maxConnections))' in template
+
+
+def test_internal_tls_secret_names_match_the_subcharts(repo_root: Path) -> None:
+    """The NATS and OpenFGA subcharts cannot template their Secret names: values.yaml names the
+    Secrets templates/internal-tls.yaml issues for <fullnameOverride>-tls."""
+    values = _values(repo_root)
+    assert values["internalTls"] == {"enabled": True, "provider": "auto"}
+    nats = values["nats"]
+    nats_secret = f"{nats['fullnameOverride']}-tls"
+    assert nats["config"]["nats"]["tls"] == {
+        "enabled": True,
+        "secretName": nats_secret,
+        "merge": {"min_version": "1.2"},
+    }
+    assert nats["config"]["cluster"]["tls"]["secretName"] == nats_secret
+    assert nats["config"]["monitor"]["tls"]["enabled"] is True
+    fga = values["openfga"]
+    assert fga["http"]["tls"]["enabled"] is fga["grpc"]["tls"]["enabled"] is True
+    volume = next(v for v in fga["extraVolumes"] if v["name"] == "internal-tls")
+    assert volume["secret"]["secretName"] == f"{fga['fullnameOverride']}-tls"
+    assert fga["grpc"]["tls"]["ca"] == "/etc/mowdeck/tls/ca.crt"
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm is not installed")
+def test_rendered_internal_tls(repo_root: Path) -> None:
+    """Every MowDeck workload serves HTTPS with its own certificate Secret, is probed over HTTPS,
+    and every certificate Secret it mounts is issued by the chart."""
+    if not list((_chart(repo_root) / "charts").glob("*.tgz")):
+        pytest.skip("chart dependencies missing (helm dependency build infra/helm/mowdeck)")
+    docs = _render(repo_root)
+    secrets = {d["metadata"]["name"] for d in docs if d["kind"] == "Secret"}
+    assert "mowdeck-internal-ca" in secrets
+    checked = 0
+    for doc in docs:
+        if doc["kind"] not in {"Deployment", "StatefulSet", "Job"}:
+            continue
+        spec = doc["spec"]["template"]["spec"]
+        for volume in spec.get("volumes", []):
+            if volume["name"] == "internal-tls":
+                assert volume["secret"]["secretName"] in secrets, doc["metadata"]["name"]
+        labels = doc["metadata"].get("labels", {})
+        if doc["kind"] == "Job" or labels.get("app.kubernetes.io/name") != "mowdeck":
+            continue
+        container = spec["containers"][0]
+        if "httpGet" not in container.get("startupProbe", {}):
+            continue
+        for kind in ("startup", "liveness", "readiness"):
+            assert container[f"{kind}Probe"]["httpGet"]["scheme"] == "HTTPS", doc["metadata"]
+        assert any(v["name"] == "internal-tls" for v in spec["volumes"]), doc["metadata"]["name"]
+        checked += 1
+    assert checked >= 10
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="helm is not installed")
