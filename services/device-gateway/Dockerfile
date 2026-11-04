@@ -15,8 +15,7 @@ FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS build
 COPY --from=uv /uv /usr/local/bin/uv
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
+ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON=/usr/local/bin/python3 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
@@ -24,8 +23,17 @@ WORKDIR /src
 COPY pyproject.toml uv.lock ./
 COPY libs/ libs/
 COPY services/device-gateway/ services/device-gateway/
+# Repeatable builds (docs/dev/reproducible-builds.md): the bytecode is compiled in one process
+# in a fixed order (uv's parallel workers made some .pyc files differ from build to build),
+# hash-based instead of timestamped when SOURCE_DATE_EPOCH (the commit time, set by the release
+# build) is set; uv_cache.json (uv's bookkeeping with the install time) is not needed.
+ARG SOURCE_DATE_EPOCH
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package device-gateway
+    uv sync --frozen --no-dev --no-editable --package device-gateway \
+    && find /app/.venv -path '*.dist-info/uv_cache.json' -delete \
+    && sed -i '/\.dist-info\/uv_cache\.json,/d' /app/.venv/lib/python3*/site-packages/*.dist-info/RECORD \
+    && PYTHONHASHSEED=0 /app/.venv/bin/python -c \
+       "import compileall; compileall.compile_dir('/app/.venv/lib', force=True, quiet=2, workers=1)"
 
 FROM ${PYTHON_IMAGE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \

@@ -478,10 +478,14 @@ jobs:
           # MOWDECK_SOURCE_URL this repository, so a fork's images point to the fork.
           source_ref="$SHA"
           [ "$RELEASE" = true ] && source_ref="v$VERSION"
+          # SOURCE_DATE_EPOCH, the commit time, makes the image repeatable together with
+          # rewrite-timestamp below: the same timestamps in the image and its files, hash-based
+          # bytecode, the web app's version (docs/dev/reproducible-builds.md).
           args="$args
           MOWDECK_VERSION=$VERSION
           MOWDECK_SOURCE_URL=$SOURCE_URL
-          MOWDECK_SOURCE_REF=$source_ref"
+          MOWDECK_SOURCE_REF=$source_ref
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)"
           tags="$IMAGE:$VERSION
           $IMAGE:v$VERSION"
           [ "$LATEST" = true ] && tags="$tags
@@ -506,6 +510,8 @@ jobs:
           build-args: ${{ steps.args.outputs.build-args }}
           platforms: linux/amd64,linux/arm64
           push: true
+          # File times in the layers clamped to SOURCE_DATE_EPOCH (reproducible image layers).
+          outputs: type=image,rewrite-timestamp=true
           tags: ${{ steps.args.outputs.tags }}
           labels: |
             org.opencontainers.image.title=mowdeck-${{ matrix.image }}
@@ -581,8 +587,12 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.3.0
+      # SOURCE_DATE_EPOCH (the commit time) as the file times in the package, so the chart is
+      # repeatable bit for bit (docs/dev/reproducible-builds.md).
       - name: Package the chart (version and appVersion = release version)
         run: |
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
           helm repo add nats https://nats-io.github.io/k8s/helm/charts/
           helm repo add openfga https://openfga.github.io/helm-charts
           helm dependency build infra/helm/mowdeck

@@ -26,9 +26,12 @@ COPY services/matter-server/package.json services/matter-server/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter matter-server --prod --ignore-scripts
 COPY services/matter-server/src services/matter-server/src
-# A self-contained copy with the production dependencies only.
+# A self-contained copy with the production dependencies only. pnpm's install state
+# (node_modules/.modules.yaml) records the install time and is not read at runtime: removed so
+# two builds are identical (docs/dev/reproducible-builds.md).
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm --filter matter-server deploy --prod --legacy --ignore-scripts /out
+    pnpm --filter matter-server deploy --prod --legacy --ignore-scripts /out \
+    && rm /out/node_modules/.modules.yaml
 
 FROM ${NODE_IMAGE}
 WORKDIR /app

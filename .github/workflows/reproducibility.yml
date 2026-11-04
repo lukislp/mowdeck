@@ -1,0 +1,168 @@
+name: reproducibility
+
+# Reproducible build check (docs/dev/reproducible-builds.md; OpenSSF Best Practices
+# build_repeatable). Builds the same commit twice from a clean tree and compares every output
+# file byte for byte (tools/repo-checks/scripts/compare_builds.py):
+#   * artefacts: the wheels and sdists of the uv workspace packages, the web app build and the
+#     Helm chart package (tools/repo-checks/scripts/reproducible_build.sh), with git clean -xdf
+#     between the two builds;
+#   * images: every image the release workflow publishes (linux/amd64), built twice without a
+#     cache as OCI layouts with the release settings (SOURCE_DATE_EPOCH, rewrite-timestamp).
+# SOURCE_DATE_EPOCH is the commit time. There is no list of accepted exceptions: any difference
+# fails the run, so a new source of non-determinism shows up the first time it is introduced.
+#
+# Weekly, on demand, and on pull requests that change the build inputs. Not a required check.
+on:
+  schedule:
+    - cron: "41 3 * * 3"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/reproducibility.yml
+      - tools/repo-checks/scripts/compare_builds.py
+      - tools/repo-checks/scripts/reproducible_build.sh
+      - "**/Dockerfile"
+      - "**/Dockerfile.dockerignore"
+      - "**/pyproject.toml"
+      - uv.lock
+      - .python-version
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .node-version
+      - .npmrc
+      - apps/web/vite.config.ts
+      - apps/web/package.json
+      - apps/web/build-tools/**
+      - apps/web/scripts/**
+      - infra/helm/mowdeck/Chart.yaml
+      - infra/helm/mowdeck/Chart.lock
+      - infra/helm/mowdeck/.helmignore
+      - infra/compose/.env.example
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducibility-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Base images from the repository's GHCR mirror, as in the release workflow.
+  MOWDECK_IMAGE_MIRROR: ghcr.io/${{ github.repository_owner }}/mowdeck/mirror
+
+jobs:
+  artefacts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.24"
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+      - name: Commit time
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: First build
+        run: bash tools/repo-checks/scripts/reproducible_build.sh "$RUNNER_TEMP/build-a"
+      - name: Clean the tree
+        run: |
+          git clean -xdfq
+          git status --short
+      - name: Second build
+        run: bash tools/repo-checks/scripts/reproducible_build.sh "$RUNNER_TEMP/build-b"
+      - name: Compare
+        run: |
+          python3 tools/repo-checks/scripts/compare_builds.py "$RUNNER_TEMP/build-a" \
+            "$RUNNER_TEMP/build-b" --label "artefacts" --summary "$GITHUB_STEP_SUMMARY"
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # The images matrix of release.yml.
+        include:
+          - {image: identity, context: ., file: services/identity/Dockerfile, kind: python}
+          - {image: fleet, context: ., file: services/fleet/Dockerfile, kind: python}
+          - {image: device-gateway, context: ., file: services/device-gateway/Dockerfile, kind: python}
+          - {image: telemetry, context: ., file: services/telemetry/Dockerfile, kind: python}
+          - {image: realtime, context: ., file: services/realtime/Dockerfile, kind: python}
+          - {image: notifications, context: ., file: services/notifications/Dockerfile, kind: python}
+          - {image: scheduler, context: ., file: services/scheduler/Dockerfile, kind: python}
+          - {image: entitlements, context: ., file: services/entitlements/Dockerfile, kind: python}
+          - {image: billing, context: ., file: services/billing/Dockerfile, kind: python}
+          - {image: planner, context: ., file: services/planner/Dockerfile, kind: python}
+          - {image: vision, context: ., file: services/vision/Dockerfile, kind: python}
+          - {image: assistant, context: ., file: services/assistant/Dockerfile, kind: python}
+          - {image: camera-relay, context: ., file: services/camera-relay/Dockerfile, kind: python}
+          - {image: matter-server, context: ., file: services/matter-server/Dockerfile, kind: node}
+          - {image: web, context: ., file: apps/web/Dockerfile, kind: web}
+          - {image: authz-bootstrap, context: infra/openfga, file: infra/openfga/bootstrap/Dockerfile, kind: bootstrap}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Two uncompressed copies of an image (vision's above all) and the build store need room.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Use the image mirror
+        run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # The build arguments of the release workflow's images job, with a fixed version.
+      - name: Build twice and compare
+        env:
+          KIND: ${{ matrix.kind }}
+          IMAGE: ${{ matrix.image }}
+          CONTEXT: ${{ matrix.context }}
+          FILE: ${{ matrix.file }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          case "$KIND" in
+            python) set -- --build-arg "PYTHON_IMAGE=$PYTHON_IMAGE" --build-arg "UV_IMAGE=$UV_IMAGE" ;;
+            web) set -- --build-arg "NODE_IMAGE=$NODE_IMAGE" --build-arg "NGINX_IMAGE=$NGINX_IMAGE" ;;
+            node) set -- --build-arg "NODE_IMAGE=$NODE_IMAGE" ;;
+            bootstrap) set -- --build-arg "FGA_CLI_IMAGE=$FGA_CLI_IMAGE" \
+              --build-arg "JQ_IMAGE=$JQ_IMAGE" --build-arg "BUSYBOX_IMAGE=$BUSYBOX_IMAGE" ;;
+          esac
+          for run in a b; do
+            docker buildx build --no-cache --platform linux/amd64 "$@" \
+              --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+              --build-arg MOWDECK_VERSION=0.0.0-reproducibility \
+              --build-arg "MOWDECK_SOURCE_REF=$SHA" \
+              --output "type=oci,tar=false,rewrite-timestamp=true,dest=$RUNNER_TEMP/$run" \
+              --file "$FILE" "$CONTEXT"
+          done
+          python3 tools/repo-checks/scripts/compare_builds.py "$RUNNER_TEMP/a" "$RUNNER_TEMP/b" \
+            --label "image $IMAGE (linux/amd64)" --summary "$GITHUB_STEP_SUMMARY"

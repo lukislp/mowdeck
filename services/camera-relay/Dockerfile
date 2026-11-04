@@ -22,8 +22,7 @@ FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS build
 COPY --from=uv /uv /usr/local/bin/uv
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
+ENV UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON=/usr/local/bin/python3 \
     UV_PROJECT_ENVIRONMENT=/app/.venv
@@ -31,14 +30,26 @@ WORKDIR /src
 COPY pyproject.toml uv.lock ./
 COPY libs/ libs/
 COPY services/camera-relay/ services/camera-relay/
+# Repeatable builds (docs/dev/reproducible-builds.md): the bytecode is compiled in one process
+# in a fixed order (uv's parallel workers made some .pyc files differ from build to build),
+# hash-based instead of timestamped when SOURCE_DATE_EPOCH (the commit time, set by the release
+# build) is set; uv_cache.json (uv's bookkeeping with the install time) is not needed.
+ARG SOURCE_DATE_EPOCH
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package camera-relay
+    uv sync --frozen --no-dev --no-editable --package camera-relay \
+    && find /app/.venv -path '*.dist-info/uv_cache.json' -delete \
+    && sed -i '/\.dist-info\/uv_cache\.json,/d' /app/.venv/lib/python3*/site-packages/*.dist-info/RECORD \
+    && PYTHONHASHSEED=0 /app/.venv/bin/python -c \
+       "import compileall; compileall.compile_dir('/app/.venv/lib', force=True, quiet=2, workers=1)"
 
 FROM ${PYTHON_IMAGE} AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH=/app/.venv/bin:$PATH \
     MOWDECK_HTTP_PORT=8000
+# SOURCE_DATE_EPOCH for the package scripts (fontconfig's cache), and no install logs or
+# ldconfig's aux cache: they carry the build time (docs/dev/reproducible-builds.md).
+ARG SOURCE_DATE_EPOCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core \
     && unused=$(dpkg-query -W -f '${Package}\n' 'libllvm*' mesa-libgallium 'libz3-*' \
@@ -48,7 +59,8 @@ RUN apt-get update \
     && ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=64x48:rate=10 \
        -frames:v 3 -c:v libx264 -profile:v baseline -pix_fmt yuv420p -f null - \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log
+    && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log /var/log/alternatives.log \
+       /var/cache/ldconfig/aux-cache
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --home-dir /nonexistent \
        --shell /usr/sbin/nologin app
