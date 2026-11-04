@@ -75,6 +75,9 @@ STACK = {"docker", "camera_relay_media", "e2e", "e2e_web", "e2e_demo"}
         "tools/repo-checks/scripts/gh_retry.sh",
         "tools/repo-checks/scripts/licence_gate.py",
         "tools/repo-checks/scripts/ci_scope.py",
+        "tools/repo-checks/scripts/compare_builds.py",
+        "tools/repo-checks/scripts/reproducible_build.sh",
+        ".github/workflows/reproducibility.yml",
         "tools/repo-checks/tests/test_dependabot.py",
     ],
 )
