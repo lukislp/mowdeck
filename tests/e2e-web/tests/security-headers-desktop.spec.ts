@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Strict-Transport-Security of the web app (apps/web/nginx, MOWDECK_WEB_HSTS, on by default):
  * sent only for requests that reached the gateway over HTTPS. The test stack speaks plain HTTP, so

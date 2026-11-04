@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Chart packages in a fixed entry order (tools/repo-checks/scripts/normalize_chart.py).
 
 Helm 4 writes the subcharts' files in map order, so two packages of the same chart differ; after

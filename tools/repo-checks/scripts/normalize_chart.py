@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rewrite a Helm chart package with its entries in a fixed order.
 
 Helm 4 writes the files of the subcharts (NATS, OpenFGA and OpenFGA's own dependency) in map
