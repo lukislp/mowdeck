@@ -15,14 +15,11 @@ An installation that is upgraded keeps working without editing its ``.env``: wit
 values an older ``.env`` carries, e.g. ``OPENFGA_API_URL=http://openfga:8080``) is used as
 ``https://``, because those services no longer speak plain HTTP.
 
-``python -m mowdeck_service_kit.tls --ca <ca.crt> --out <bundle>`` writes that bundle (the public
-roots the image ships plus the CA); the Helm chart runs it as an init container.
+:func:`write_bundle` writes that bundle (the public roots the image ships plus the CA);
+:mod:`mowdeck_service_kit.trust_bundle` is its command, the Helm chart's init container.
 """
 
-import argparse
 import ssl
-import sys
-from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -100,21 +97,6 @@ def write_bundle(ca_file: Path, out: Path, *, roots: bytes | None = None) -> Non
         roots += b"\n"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(roots + ca)
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    """Entry point of ``python -m mowdeck_service_kit.tls`` (the trust bundle)."""
-    parser = argparse.ArgumentParser(prog="mowdeck_service_kit.tls")
-    parser.add_argument("--ca", required=True, type=Path, help="CA certificate(s), PEM")
-    parser.add_argument("--out", required=True, type=Path, help="bundle to write (SSL_CERT_FILE)")
-    args = parser.parse_args(argv)
-    try:
-        write_bundle(args.ca, args.out)
-    except (OSError, ValueError) as exc:
-        print(f"trust-bundle: {exc}", file=sys.stderr)
-        return 1
-    print(f"trust-bundle: wrote {args.out}")
-    return 0
 
 
 def upgrade_internal_urls(value: str) -> str:

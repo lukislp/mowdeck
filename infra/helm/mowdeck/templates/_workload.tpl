@@ -200,7 +200,7 @@ spec:
         - name: trust-bundle
           image: {{ include "mowdeck.image" (dict "ctx" $ctx "image" .image) }}
           imagePullPolicy: {{ $ctx.Values.image.pullPolicy }}
-          command: ["python", "-m", "mowdeck_service_kit.tls", "--ca", "{{ $tlsDir }}/ca.crt", "--out", {{ include "mowdeck.tls.bundle" $ctx | quote }}]
+          command: ["python", "-m", "mowdeck_service_kit.trust_bundle", "--ca", "{{ $tlsDir }}/ca.crt", "--out", {{ include "mowdeck.tls.bundle" $ctx | quote }}]
           securityContext:
             {{- toYaml $ctx.Values.securityContext | nindent 12 }}
           resources:

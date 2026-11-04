@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from cryptography import x509
-from mowdeck_service_kit import certs, db, tls
+from mowdeck_service_kit import certs, db, tls, trust_bundle
 from mowdeck_service_kit.app import server_tls_options
 from mowdeck_service_kit.bus.jetstream import JetStreamBus, nats_tls_context
 from mowdeck_service_kit.db import create_engine, database_connect_args
@@ -340,7 +340,7 @@ def test_trust_bundle_puts_the_ca_after_the_public_roots(pki: Path, tmp_path: Pa
     tls.write_bundle(pki / "ca.crt", out, roots=b"PUBLIC")
     assert out.read_bytes() == b"PUBLIC\n" + (pki / "ca.crt").read_bytes()
     # The default roots are certifi's, the ones httpx used before.
-    assert tls.main(["--ca", str(pki / "ca.crt"), "--out", str(out)]) == 0
+    assert trust_bundle.main(["--ca", str(pki / "ca.crt"), "--out", str(out)]) == 0
     context = ssl.create_default_context(cafile=str(out))
     assert len(context.get_ca_certs()) > 100
 
@@ -350,9 +350,12 @@ def test_trust_bundle_refuses_a_file_without_certificates(
 ) -> None:
     empty = tmp_path / "ca.crt"
     empty.write_text("nothing")
-    assert tls.main(["--ca", str(empty), "--out", str(tmp_path / "b.pem")]) == 1
+    assert trust_bundle.main(["--ca", str(empty), "--out", str(tmp_path / "b.pem")]) == 1
     assert "no PEM certificate" in capsys.readouterr().err
-    assert tls.main(["--ca", str(tmp_path / "missing"), "--out", str(tmp_path / "b.pem")]) == 1
+    assert (
+        trust_bundle.main(["--ca", str(tmp_path / "missing"), "--out", str(tmp_path / "b.pem")])
+        == 1
+    )
 
 
 # --- a real handshake -------------------------------------------------------------------------
