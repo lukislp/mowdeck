@@ -127,7 +127,7 @@ Refresh and logout need a valid refresh cookie anyway; their looser limit keeps 
 
 | Variable | `.env.example` | Meaning |
 | --- | --- | --- |
-| `IDENTITY_KEY_ENCRYPTION_KEY` | a marked development value | **Required.** 256-bit key (base64) that encrypts the signing keys at rest; generate your own for any real installation and keep a backup |
+| `IDENTITY_KEY_ENCRYPTION_KEY` | a marked development value | **Required.** 256-bit key (base64) that encrypts the signing keys at rest; generate your own for any real installation and keep a backup. Identity refuses the development value with `MOWDECK_ENVIRONMENT=prod` |
 | `IDENTITY_REGISTRATION` | `open` | `open`, or `closed` (only the first account; more owners with the CLI) |
 | `IDENTITY_ARGON2_PROFILE` | `rfc9106_low` | `owasp_min` for small hosts |
 | `IDENTITY_REFRESH_COOKIE_SECURE` | `false` | `true` behind HTTPS (see [HTTPS](#https)) |
