@@ -3,7 +3,9 @@
 import asyncio
 import base64
 import io
+import re
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -26,11 +28,11 @@ from mowdeck_authz.testing import InMemoryAuthorizer
 from mowdeck_contracts.v1 import ModuleDescriptor, Principal, PrincipalKind
 from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.testing import lifespan_client
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from identity import cli
 from identity.adapters.bus.publisher import BusEventPublisher
-from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
+from identity.adapters.crypto import DEV_KEK, AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.github import GitHubOAuthClient
 from identity.adapters.memory import MemoryStore
 from identity.adapters.modules import HttpModuleSource
@@ -42,6 +44,7 @@ from identity.domain.errors import NotFoundError
 from identity.domain.models import KeyStatus, Membership, Status
 from identity.main import build_app, every, start_background_tasks
 from identity.runtime import Runtime
+from identity.settings import Settings
 
 
 async def test_openfga_outage_answers_503_and_changes_nothing() -> None:
@@ -186,6 +189,24 @@ def test_key_encryption_key_parsing_and_cipher() -> None:
         cipher.decrypt("kid-2", blob)
     with pytest.raises(ValueError, match="cannot decrypt"):
         AesGcmKeyCipher(b"\x02" * 32).decrypt("kid-1", blob)
+
+
+def test_identity_refuses_the_development_key_in_production() -> None:
+    env_example = Path(__file__).parents[3] / "infra" / "compose" / ".env.example"
+    documented = re.search(
+        r"^IDENTITY_KEY_ENCRYPTION_KEY=(\S+)$", env_example.read_text("utf-8"), re.MULTILINE
+    )
+    assert documented is not None
+    dev = documented.group(1)
+    assert parse_kek(dev) == DEV_KEK  # the constant is the value .env.example ships
+    for spelling in (dev, DEV_KEK.hex(), base64.urlsafe_b64encode(DEV_KEK).decode().rstrip("=")):
+        with pytest.raises(ValidationError, match="development key"):
+            Settings.model_validate(
+                {"environment": "prod", "identity_key_encryption_key": spelling}
+            )
+    assert Settings.model_validate({"environment": "dev", "identity_key_encryption_key": dev})
+    assert Settings.model_validate({"environment": "test", "identity_key_encryption_key": dev})
+    assert Settings.model_validate({"environment": "prod", "identity_key_encryption_key": TEST_KEK})
 
 
 async def test_argon2_hasher() -> None:
