@@ -597,6 +597,9 @@ jobs:
           helm repo add openfga https://openfga.github.io/helm-charts
           helm dependency build infra/helm/mowdeck
           helm package infra/helm/mowdeck --version "$VERSION" --app-version "$VERSION" -d dist
+          # Helm 4 writes the subcharts' files in map order: a fixed entry order, so a rebuild
+          # of the tag gives the same bytes.
+          python3 tools/repo-checks/scripts/normalize_chart.py "dist/mowdeck-$VERSION.tgz"
       - name: Push to GHCR
         id: push
         env:

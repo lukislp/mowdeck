@@ -19,6 +19,7 @@ The inputs are pinned: `uv.lock` and `pnpm-lock.yaml` (installed frozen), the ch
 | --- | --- | --- |
 | Web app | SvelteKit's app version defaults to the build time; it ends up in `_app/version.json`, `200.html`, the service worker and the CSP hash of the inline script | `version.name` in `apps/web/vite.config.ts` is `SOURCE_DATE_EPOCH` when set (the build time otherwise, as before) |
 | Helm chart | file times in the package were the packaging time | `helm package` with `SOURCE_DATE_EPOCH` (Helm 4 uses it for every entry) |
+| Helm chart | Helm 4 writes the files of the subcharts (NATS, OpenFGA and its `common` chart) in map order, which changes from run to run | `tools/repo-checks/scripts/normalize_chart.py` sorts the entries by path and writes the gzip header without a time, right after `helm package` (release workflow and check) |
 | Python images | `.pyc` files recorded the time the sources were unpacked; uv's parallel bytecode workers produced different `.pyc` bytes for the same source from run to run; `uv_cache.json` of the workspace packages recorded the install time | the bytecode is compiled after `uv sync` in one process in a fixed order with `PYTHONHASHSEED=0`, hash-based (`checked-hash`) because `SOURCE_DATE_EPOCH` is set; `uv_cache.json` (uv's bookkeeping, not read at runtime) is deleted together with its `RECORD` line |
 | `camera-relay` image | fontconfig's cache, ldconfig's `aux-cache` and `alternatives.log` of the Debian package installation carried the build time | `SOURCE_DATE_EPOCH` during the installation, the log and `aux-cache` removed |
 | `matter-server` image | `node_modules/.modules.yaml` (pnpm's install state) carried the install time | removed; Node never reads it |
@@ -63,7 +64,7 @@ python3 tools/repo-checks/scripts/compare_builds.py /tmp/fleet-a /tmp/fleet-b
 
 ### Against a release
 
-- **Chart**: check out the release tag, run the chart part of the release workflow (`helm dependency build`, then `helm package infra/helm/mowdeck --version <version> --app-version <version>` with `SOURCE_DATE_EPOCH` of the tag's commit) and compare the `.tgz` with the release asset (verified first as in [Releases](../ops/release.md#verifying-a-release)).
+- **Chart**: check out the release tag, run the chart part of the release workflow (`helm dependency build`, then `helm package infra/helm/mowdeck --version <version> --app-version <version>` with `SOURCE_DATE_EPOCH` of the tag's commit, then `python3 tools/repo-checks/scripts/normalize_chart.py` on the package) and compare the `.tgz` with the release asset (verified first as in [Releases](../ops/release.md#verifying-a-release)).
 - **Image**: build from the tag with the build arguments and labels of the release workflow's `images` job (`MOWDECK_VERSION`, `MOWDECK_SOURCE_URL`, `MOWDECK_SOURCE_REF=v<version>`, the `org.opencontainers.image.*` labels) and compare the digest of the platform manifest with the one in the published index (`docker buildx imagetools inspect --raw ghcr.io/lukislp/mowdeck/<image>:<version>`). The `web` image additionally contains `whats-new.json`, which the release writes from the tags before the build (`apps/web/build-tools/whats-new.mjs`).
 
 ## Limits
