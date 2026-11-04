@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* MediaMTX (MIT, Compose service mediamtx): the data plane of the camera relay (ADR 0045).
 Rendered with services.cameraRelay.enabled, it has no switch of its own. camera-relay publishes
 every camera over RTSP (:8554) and drives it through the API (:9997), both cluster-internal;

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Select and check the files the release workflow attaches to a GitHub release.
 
 The job ``publish`` downloads the artifacts of the run and attaches only these files:

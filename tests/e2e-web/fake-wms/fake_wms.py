@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A fake aerial photo WMS for the Playwright suite (ADR 0054): GetMap in EPSG:3857.
 
 Test stacks only (infra/compose/docker-compose.e2e.yml runs it with the identity image; standard

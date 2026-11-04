@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The command bar of a mower: the commands the caller may use and, always, the emergency stop.
   Actions the caller lacks the permission for are not passed in at all; disabled actions stay

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 4 Task 21, fleet management in the web app (desktop, 1280 x 800): the owner creates a
  * second site (coordinates from a mower's map origin) and a group, moves a mower to the new

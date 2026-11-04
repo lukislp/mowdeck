@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Additional links of a mower (ADR 0038): the Bluetooth bridge next to a cloud connection.
 
 Eligibility comes from the connection-kind registry (``supports_links``), the key is stored

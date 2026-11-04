@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rules of Fleet without I/O: which right a command needs, how long it lives, how its record
 advances, which shard a mower belongs to, what a connection may carry."""
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @vitest-environment node
 /** Demo sandboxes (ADR 0076): the visitor flag, the automatic restart and the refusals. */
 import { describe, expect, it } from 'vitest';

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """BLE proxy connection: drive session frames, stop, blade gating, link loss, proxy port."""
 
 import asyncio

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Live camera over the Mammotion cloud (ADR 0032) on a fake PyMammotion port."""
 
 # ruff: noqa: S106 - placeholder tokens, not credentials

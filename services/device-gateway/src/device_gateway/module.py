@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of device-gateway, served at ``/.well-known/mowdeck-module``.
 
 Identity, Entitlements and the web app read it at startup: permissions declared here appear in

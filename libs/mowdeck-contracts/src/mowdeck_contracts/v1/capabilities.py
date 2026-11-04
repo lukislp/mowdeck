@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """What one mower model can do over one connection.
 
 Capabilities are explicit data, reported by the device adapter through

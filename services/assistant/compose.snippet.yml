@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Compose block of the assistant (already part of infra/compose/docker-compose.yml; ADR 0075).
 # Build context is the repository root. Optional: the "assistant" profile. HTTP only with the
 # caller's token: no NATS user, no database, no secret.

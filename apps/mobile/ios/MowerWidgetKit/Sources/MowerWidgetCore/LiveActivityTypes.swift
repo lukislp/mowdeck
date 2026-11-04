@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Foundation
 
 /// The state shown by the Live Activity. The server sends it as the push payload's

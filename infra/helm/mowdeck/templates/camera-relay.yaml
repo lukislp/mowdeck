@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Camera relay (ADR 0045): shared camera sessions per account and mower, leases with a
 grace period, tickets and the lifecycle events on the stream CAMERA (Compose service
 camera-relay, profile "relay"). Off by default (services.cameraRelay.enabled=false); enabled, it

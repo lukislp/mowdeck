@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The connection of one mower against the fake cloud: state, commands, settings, errors."""
 
 import asyncio

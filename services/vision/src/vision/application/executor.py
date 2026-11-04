@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Driving an approved proposal: a drive session on behalf of the approver, frames at a fixed
 rate with the dead-man ``ttl_ms`` and blades off, a safety watch, then the verification.
 

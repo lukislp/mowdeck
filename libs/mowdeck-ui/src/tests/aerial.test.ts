@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 // @vitest-environment jsdom
 import * as L from 'leaflet';
 import { describe, expect, it, vi } from 'vitest';

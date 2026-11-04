@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of the theft tracking mode under ``/api/v1/telemetry`` (ADR 0058).
 
 Reading a session, its links and the report need ``can_view`` on the mower; starting, ending,

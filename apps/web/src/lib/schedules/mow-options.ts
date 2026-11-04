@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The start settings of a schedule (the Scheduler's `SchedulePattern` plus blade height and
  * speed; ADR 0024 amendment 2026-10-24): what the editor offers for a target, the draft it

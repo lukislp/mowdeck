@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 Lukas Körber
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 -- One database and one login role per service. No service may read another
 -- service's database; only contracts are shared (see docs/architecture).
 -- Role passwords are set by 02-role-passwords.sh from SERVICE_DB_PASSWORD.

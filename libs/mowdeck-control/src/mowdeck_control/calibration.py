@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Drive calibration (ADR 0042): :class:`DriveCalibrationRun` measures what the stick values
 mean on the ground.
 

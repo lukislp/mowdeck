@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The camera source bridge's protocol (integrations/agora-bridge, protocol version 1).
 
 The bridge reads JSON control lines from the relay (credentials, subscriptions) and writes

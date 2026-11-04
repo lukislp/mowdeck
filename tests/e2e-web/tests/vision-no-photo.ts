@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * An automatic analysis that got no camera photo (live case 2026-10-24: weak Wi-Fi, -79 dBm),
  * as the Vision API reports it. Real failures need a mower on a weak link, which the test stack

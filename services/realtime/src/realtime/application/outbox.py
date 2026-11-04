@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What a connection still has to send, and the policy when a client reads too slowly.
 
 * ``state`` frames are snapshots: only the newest per mower matters. They sit in one slot per

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The pattern settings of a native start (`StartMow.pattern`, the contracts' `MowPattern`):
  * which patterns the start sheet offers, what it pre-fills (the mower's saved mow defaults,

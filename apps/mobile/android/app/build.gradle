@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 apply plugin: 'com.android.application'
 
 // Release version and signing come from the environment (apps/mobile/scripts/build-android.sh,

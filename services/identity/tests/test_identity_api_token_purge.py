@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Deleting revoked API tokens for good: one (``DELETE ...?purge=true``) or all of the account
 (``POST .../api-tokens/purge-revoked``). Revoke first, ``users.manage``, account isolation,
 audit by name and prefix, the audit history of the token stays, no tuple is left behind."""

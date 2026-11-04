@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The third-party images pinned under "Image sources" in infra/compose/.env.example (one
 # NAME_IMAGE=<image:tag> line per image) as references into a mirror registry.
 #

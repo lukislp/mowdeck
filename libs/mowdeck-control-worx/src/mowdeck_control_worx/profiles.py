@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The capability profile of the Worx provider (ADR 0071).
 
 One family for Worx Landroid, Kress and LandXcape (one cloud, one protocol). What a mower

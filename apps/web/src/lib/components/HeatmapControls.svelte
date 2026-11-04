@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The heat layer strip under the mower map: the layer switcher (off, coverage, RTK, WLAN,
   mobile), the period, the cell size, "refresh", the legend of the active scale and the state

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Translate a neutral mowing request into a native mower job.
 
 This is the seam between the Planner (neutral plans, ADR 0030) and the mower: when the mower can

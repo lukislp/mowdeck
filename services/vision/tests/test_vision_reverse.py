@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """AI assist on a drive link without reverse (the Mammotion cloud, ADR 0049): the context says
 so, a plan with a backwards step is not offered, and one approved before the link changed is
 refused before anything moves (never driven with the step dropped)."""

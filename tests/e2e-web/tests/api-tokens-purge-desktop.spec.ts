@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Deleting revoked API tokens (desktop, 1280 x 800): one revoked token is removed from its row,
  * the rest with "Widerrufene entfernen" after a confirmation sheet that names the count. Each

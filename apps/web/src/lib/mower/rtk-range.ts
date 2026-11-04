@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The time range of the RTK signal map on the detail page (today, 7 days, 30 days) and the
  * paged loading of its positions: Telemetry returns at most `MOWDECK_TELEMETRY_QUERY_MAX_ROWS`

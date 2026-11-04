@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Commands: send to one mower or to every mower of a site or group, follow the results, keep
 the record (the command audit) for the retention period.
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import type { IconName } from '@mowdeck/ui';
 
 /** A built-in route module of the shell (design 3.1). */

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Serving the push notification image to the iOS Notification Service Extension (ADR 0056).
 
 The request carries no login, only the signed URL (:mod:`notifications.domain.push_image`), so

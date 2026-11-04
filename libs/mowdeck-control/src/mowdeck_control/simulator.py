@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A deterministic simulated mower, so Phase 1 needs no hardware.
 
 :class:`SimulatedMower` implements :class:`~mowdeck_control.connection.MowerConnection`. It is a

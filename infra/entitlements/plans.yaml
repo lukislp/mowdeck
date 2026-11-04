@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Plans of the Entitlements service (ADR 0028). Seeded at every start, upserted by key.
 #
 # * A plan is (re)written when it is new or its entry here changed since the last start; an

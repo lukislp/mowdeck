@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Display names of map areas and the event of custom area names.
 
 Fleet stores a custom name per mower and area id (the mower keeps its own names; MowDeck never

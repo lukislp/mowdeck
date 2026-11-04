@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /** The scale bar of the maps: the longest 1-2-5 length that fits in `maxPx`. */
 export function scaleFor(metresPerPx: number, maxPx = 96): { width: number; label: string } {
   if (!Number.isFinite(metresPerPx) || metresPerPx <= 0) return { width: 0, label: '' };

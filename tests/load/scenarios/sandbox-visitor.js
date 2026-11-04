@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // (e) Sandbox visitors (ADR 0076): every virtual user is one visitor who stays for the whole
 // level. It loads the app, clicks "Try the demo" (which claims a sandbox of its own), opens the
 // mower list and one mower page, starts one of its mowers and then keeps the live view (ADR 0018)

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Setup tour (ADR 0062): a new account sees the setup card on the mower list and the tour
  * starts by itself; a step can be skipped, the progress follows the user to another browser

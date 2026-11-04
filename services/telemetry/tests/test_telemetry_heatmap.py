@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Heatmaps: the pure binning (synthetic tracks), the use case over the memory store, the
 position columns the ingest fills, and the route."""
 

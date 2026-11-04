@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Applies the rules to incoming states and connection events, and runs the offline timer.
 
 The watch of a mower is read ``FOR UPDATE`` and written back in one transaction, so two

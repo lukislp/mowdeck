@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Two views must never show the same stream without saying so. The two front cameras sit apart,
  * so their pictures always differ a little; when two tiles show (nearly) identical pixels for a

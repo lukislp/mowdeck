@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Notifications: the event of the Notifications service and the Web Push payload.
 
 The Notifications service derives notifications from the mower states and the connection

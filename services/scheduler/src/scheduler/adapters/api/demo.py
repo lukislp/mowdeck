@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What the Scheduler refuses in the public demo (ADR 0068): only the development weather
 switch. Schedules, skip, run now and the mowing angles work; the weather is the static provider
 (no request to a weather service)."""

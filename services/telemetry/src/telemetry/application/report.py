@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The theft report PDF (ADR 0058), for the police and the insurer.
 
 Built server side with fpdf2 and its built-in Helvetica (no font files, no network). The track is

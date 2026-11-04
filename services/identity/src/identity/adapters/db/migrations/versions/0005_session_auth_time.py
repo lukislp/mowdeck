@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Step-up authentication (ADR 0053): when and how the user last authenticated interactively,
 kept on the login session and copied on every refresh rotation.
 

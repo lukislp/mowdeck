@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Recipient checks through ``mowdeck-authz`` (one batch per event): ``can_view``, or
 ``can_drive`` for kinds that ask the recipient to act on the mower (``vision_proposal``)."""
 

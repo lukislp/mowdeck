@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Mammotion error lexicon (ADR 0067): every code of PyMammotion's table in plain words.
 
 Registered through the entry point group ``mowdeck.error_lexicons`` under ``mammotion``

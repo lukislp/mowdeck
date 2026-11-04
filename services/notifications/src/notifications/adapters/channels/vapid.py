@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """VAPID keys (RFC 8292) for Web Push, with ``py-vapid``.
 
 Formats: the private key is the base64url encoded raw 32 byte P-256 scalar (what

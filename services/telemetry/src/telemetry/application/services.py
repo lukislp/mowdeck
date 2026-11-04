@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The use cases of telemetry, wired once at startup."""
 
 from dataclasses import dataclass

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Translations of enum values and problems, and locale aware formatting. Every enum maps through
  * one exhaustive switch, so a new contract value fails the type check until it is translated.

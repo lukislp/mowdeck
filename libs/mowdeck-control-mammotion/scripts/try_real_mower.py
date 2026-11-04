@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Try the Mammotion adapter against a real mower (spike 0001, owner run).
 
 Connects through ``mowdeck-control-mammotion`` exactly as the Device-Gateway does, prints the

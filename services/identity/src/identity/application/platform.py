@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The operator level (``platform:main``): the account list and the operator admins.
 
 Operator admins manage accounts and plans but see no mower data (project plan, "Konten").

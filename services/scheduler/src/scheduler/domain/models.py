@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entities of the Scheduler. Field names equal the column names in ``adapters.db.tables``."""
 
 from dataclasses import dataclass, field

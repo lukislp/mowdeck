@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``entitlements.plan.set``: the Billing service sets an account's plan (``source=billing``)."""
 
 from datetime import timedelta

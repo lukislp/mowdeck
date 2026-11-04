@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pattern templates per account: save, list, use in a plan, delete."""
 
 from typing import Any

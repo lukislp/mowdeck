@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """A fake Mammotion cloud for development and the browser tests (ADR 0034).
 
 The Device-Gateway uses it instead of the real cloud when ``MOWDECK_FAKE_MAMMOTION_CLOUD`` is

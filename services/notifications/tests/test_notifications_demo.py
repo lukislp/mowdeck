@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Public demo (ADR 0068): nothing leaves the server; the inbox keeps working."""
 
 from typing import Any

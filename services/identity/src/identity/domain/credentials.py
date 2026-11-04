@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Usernames, passwords and opaque secrets (pure functions, standard library only).
 
 * Usernames: 3 to 64 characters, NFKC normalised, compared case-insensitively; letters, digits

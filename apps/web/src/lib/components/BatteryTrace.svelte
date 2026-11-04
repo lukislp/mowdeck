@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The battery level of the last 24 hours as a line (no chart library): 0 to 100 % on a sunken
   plate with dashed guides at 20, 50 and 80 %, the band below 20 % in the error tint, the line in

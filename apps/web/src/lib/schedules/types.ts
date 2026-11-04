@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Scheduler API types as the schedules module uses them (from the generated OpenAPI types). */
 import type { components } from '#lib/generated/scheduler.js';
 

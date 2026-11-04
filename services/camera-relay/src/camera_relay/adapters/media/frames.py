@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``FrameGrabber`` port with ffmpeg: frames of a relay path as JPEG.
 
 Frames are read from the viewer path ``r/<relay_id>/<camera>`` (H.264 with a 1 s GOP, so the

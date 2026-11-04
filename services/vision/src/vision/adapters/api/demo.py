@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What Vision refuses in the public demo (ADR 0068), and the sandbox purge (ADR 0076).
 
 The demo's AI assistant is the installation default with the rule based fake model

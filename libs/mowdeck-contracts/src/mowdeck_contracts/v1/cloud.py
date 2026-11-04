@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Linked vendor cloud accounts (ADR 0034): device discovery, Fleet to Device-Gateway.
 
 Fleet stores the linked vendor accounts of a MowDeck account but never talks to a vendor cloud

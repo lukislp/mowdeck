@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API: CRUD, validation, authorization per target, cross-account isolation, run-now,
 preview, weather, the dev endpoint and the operational endpoints."""
 

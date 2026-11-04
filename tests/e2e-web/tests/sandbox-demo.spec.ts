@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Demo sandboxes (ADR 0076) in the public demo (ADR 0068), against a demo stack with sandboxes
  * (CI job e2e-demo; locally `MOWDECK_E2E_DEMO=1 pnpm e2e:stack up`). Runs in the projects `demo`

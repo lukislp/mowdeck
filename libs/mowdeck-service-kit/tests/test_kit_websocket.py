@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """WebSocket routes under the API prefix and the uvicorn options of ``run()``.
 
 The kit's middlewares (correlation id, error handler, HTTP metrics) are pure ASGI and pass

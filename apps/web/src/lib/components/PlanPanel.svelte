@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The plan of the account (`GET /entitlements/me`): the plan's name on a plate with its status and
   the end of a trial or grace period, the limits as gauges with the current use where the app

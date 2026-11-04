@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Install test of the MowDeck chart in a kind cluster (https://kind.sigs.k8s.io), locally (Docker
 # Desktop or Docker Engine) and in .github/workflows/helm-kind.yml:
 #

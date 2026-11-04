@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Test helpers: the recorded-shape fixture, a scripted transport and a manual clock."""
 
 import copy

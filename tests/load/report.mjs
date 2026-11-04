@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Turns the samples of tests/load/load.mjs (docker stats, Postgres, NATS, Realtime metrics) and
  * k6 summaries into the Markdown tables of docs/ops/load-testing.md. Pure functions, tested by

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure rules of the drive calibration and the driving speed (ADR 0042), next to the bridge in
  * the mower settings: the start conditions as green and red rows, the progress and the measured

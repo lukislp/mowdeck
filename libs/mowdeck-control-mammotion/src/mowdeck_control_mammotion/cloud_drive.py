@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Manual driving over the Mammotion cloud (ADR 0049): a :class:`~mowdeck_control.DriveSession`
 on PyMammotion's remote-drive session (:class:`~mowdeck_control_mammotion.port.RemoteDriveLink`).
 

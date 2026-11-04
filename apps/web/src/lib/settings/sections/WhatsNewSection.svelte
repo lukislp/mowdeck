@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Neuigkeiten: the history of "Was ist neu", every release of this build up to the running
   version, newest first. Always shown (before About), for every user.

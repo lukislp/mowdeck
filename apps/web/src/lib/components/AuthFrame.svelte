@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Frame of the sign-in and registration pages: a nameplate on the metric grid (the same grid
   the map uses as background) and the form column. No hero, no illustration. Under the form the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """NATS: a manual run goes over core NATS to Fleet (``fleet.commands.issue``), Fleet publishes the
 command on JetStream, the gateway's results come back, and the map and capability snapshots on
 the ``DEVICE`` stream give the Scheduler the mower's areas, location and capabilities.

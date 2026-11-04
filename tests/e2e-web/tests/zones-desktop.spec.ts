@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Virtual zones (ADR 0070) on a mower whose vendor shares no map but reports a GPS position: the
  * online fake Worx mower `Wanda` of the fake clouds (`GATEWAY_FAKE_CLOUDS`, Worx enabled in

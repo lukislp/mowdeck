@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Cloud provider plugins: how a vendor adapter links accounts and connects their mowers (ADR 0066).
 
 A vendor whose mowers are reached through its cloud ships a package (Apache-2.0, or GPL-3.0 when

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The committed OpenAPI documents of the web app (apps/web/openapi) match the services."""
 
 import importlib.util

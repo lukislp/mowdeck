@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The event bus abstraction shared by the JetStream and in-memory implementations.
 
 Delivery semantics (identical for both implementations):

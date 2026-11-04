@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The Husqvarna error lexicon (ADR 0067): every code of aioautomower's table, consistent with
 ``MowerState.error_category`` and registered through ``mowdeck.error_lexicons``."""
 

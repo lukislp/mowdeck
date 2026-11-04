@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Property-based tests (fast-check) of the runtime config: `/config.json` is written by the
  * operator's deployment and parsed before anything else, so no value may break the app and

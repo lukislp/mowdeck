@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A channel that writes each message to the service log (development and tests)."""
 
 from mowdeck_service_kit import get_logger

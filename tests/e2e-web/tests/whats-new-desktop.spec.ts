@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * "Was ist neu": a version bump shows the sheet once, with the changes since the version this
  * device saw, and Settings → Neuigkeiten keeps the history. The build's version and `whatsNew`

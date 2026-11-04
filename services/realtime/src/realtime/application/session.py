@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """One WebSocket connection: authentication, subscriptions, re-checks and the writer.
 
 Life of a session (``serve``):

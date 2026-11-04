@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Online or offline from the gateway's link heartbeat (ADR 0040), and the age of the values as a
  * separate fact.

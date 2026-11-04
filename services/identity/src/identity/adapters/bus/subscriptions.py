@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions of Identity.
 
 Only one: ``identity.grants.changed`` from other Identity instances drops the cached

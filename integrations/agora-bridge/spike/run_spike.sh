@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 # Step 0 spike run on the host of the stack (throwaway container, host network to reach the
 # stack's NATS on 127.0.0.1:4222). Does not touch the Compose project.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Virtual zones through the API and the bus (ADR 0070): availability by capability and data,
 drawing, the current zone after states, time per zone, the vendor zone link, rights, and the
 aerial photo following the zones."""

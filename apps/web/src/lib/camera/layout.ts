@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The camera panel's layout (stereo cameras): one camera (`single`) or both front cameras side
  * by side (`both`, stacked on phones), kept per browser in `localStorage` (`mowdeck.cameraLayout`).

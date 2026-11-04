@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Mammotion cloud as a MowDeck cloud provider (ADR 0034, ADR 0066).
 
 Registered under the entry point group ``mowdeck.cloud_providers`` as ``mammotion``

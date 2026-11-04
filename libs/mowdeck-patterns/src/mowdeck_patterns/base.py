@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The plug-in interface :class:`MowPattern` and the base class of the built-in patterns.
 
 A pattern is a class with a ``key``, a ``name``, a JSON Schema of its settings and a

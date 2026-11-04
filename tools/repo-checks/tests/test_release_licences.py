@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Nothing a release publishes violates a licence (LICENSING.md, docs/ops/release.md).
 
 Static half of the release licence guard; the release workflow's job ``licence-gate`` checks the

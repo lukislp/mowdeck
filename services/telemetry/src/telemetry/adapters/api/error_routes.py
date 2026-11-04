@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of the error lexicon under ``/api/v1/telemetry`` (ADR 0067).
 
 Vendor error codes in plain words: title, description, likely cause, steps, severity and the

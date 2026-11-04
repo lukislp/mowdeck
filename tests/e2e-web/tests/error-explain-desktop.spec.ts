@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Error codes in plain words (ADR 0067, desktop 1280 x 800). A simulated mower that gets stuck
  * after 20 s of mowing (`stuck_after_seconds`) reports the code `stuck`; the mower page explains

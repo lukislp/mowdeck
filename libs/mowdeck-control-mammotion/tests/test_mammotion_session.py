@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Shared cloud sessions, device discovery and the fake cloud (ADR 0034)."""
 
 import asyncio

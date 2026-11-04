@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Guards for running released images with Compose (docs/ops/compose.md, "Updating to a release").
 
 Every MowDeck service that a release publishes takes its image from

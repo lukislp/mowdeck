@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The ``notifications.sent`` event and the Web Push payload."""
 
 from datetime import UTC, datetime

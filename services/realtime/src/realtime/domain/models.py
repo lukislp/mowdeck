@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Value objects of a realtime connection (pure, no I/O)."""
 
 from dataclasses import dataclass

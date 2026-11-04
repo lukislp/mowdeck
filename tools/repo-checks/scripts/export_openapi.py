@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Export the OpenAPI document of every service for the web app's generated TypeScript types.
 
 Usage (from the repository root)::

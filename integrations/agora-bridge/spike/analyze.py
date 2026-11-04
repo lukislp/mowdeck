@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """Summarise a spike run: per uid frame count, fps, key frame interval (GOP), frame sizes,
 capture timestamps and a latency estimate (receive wall clock minus capture time, only

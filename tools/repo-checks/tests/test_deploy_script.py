@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``infra/compose/deploy.sh``: the documented release update with the maintenance window.
 
 The script runs against fake ``docker`` and ``git`` commands and a stub ``verify-release.sh``

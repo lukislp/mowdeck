@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spot mowing on a phone (390 x 844, touch), against the stack's simulated mower: "Spot mähen"
  * puts the map full screen, a tap places the spot and the spot sheet opens as a bottom sheet at

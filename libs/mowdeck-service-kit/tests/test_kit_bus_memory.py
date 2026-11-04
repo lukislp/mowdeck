@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """InMemoryBus semantics and the envelope publish helpers."""
 
 import asyncio

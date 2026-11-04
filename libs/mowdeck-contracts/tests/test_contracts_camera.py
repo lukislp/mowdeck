@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Camera session contracts (ADR 0032)."""
 
 from datetime import UTC, datetime

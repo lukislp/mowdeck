@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the start sheet's job options (run: pnpm --filter e2e-web screens): the
  * "Mehr" section opened with obstacle detection, path order, laps around no-go zones and the

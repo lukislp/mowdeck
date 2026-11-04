@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Maintenance commands (ADR 0048) on the Mammotion connections: what is declared, what goes
 out (once, with user priority, never through ``send_and_wait``) and when it is refused."""
 

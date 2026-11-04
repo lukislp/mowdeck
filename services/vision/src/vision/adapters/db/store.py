@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store on SQLAlchemy Core (async, asyncpg).
 
 A second open proposal for the same mower violates the partial unique index

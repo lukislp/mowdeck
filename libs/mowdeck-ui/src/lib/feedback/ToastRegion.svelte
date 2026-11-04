@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- Toasts above the command bar (never over the emergency stop); newest last. -->
 <script lang="ts">
   import Icon from '../icons/Icon.svelte';

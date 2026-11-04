@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``set_setting`` (ADR 0046): relation ``can_manage_mowers``, plan feature ``control``, audit."""
 
 from fleet_support import API, fake_gateway, harness

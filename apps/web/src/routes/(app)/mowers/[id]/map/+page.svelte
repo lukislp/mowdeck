@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Theft alarms link to `/mowers/<id>/map?lat=..&lon=..` (Notifications' `_where`). The map lives
   on the detail page, so this route forwards there and keeps the reported position.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Health history over the bus and HTTP: totals, days, battery, blade reset, threshold event."""
 
 from datetime import timedelta

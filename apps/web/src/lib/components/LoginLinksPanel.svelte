@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   "Linked accounts" in the account settings (ADR 0051 GitHub, ADR 0052 Apple): the signed-in
   user's links to external login providers. Linked providers are a compact list (mark, name,

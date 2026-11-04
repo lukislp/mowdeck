@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Property checks of the built-in patterns on sample shapes."""
 
 from collections.abc import Callable

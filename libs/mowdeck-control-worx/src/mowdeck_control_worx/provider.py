@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Worx cloud as a MowDeck cloud provider (ADR 0066).
 
 :class:`WorxProvider` owns one :class:`~mowdeck_control_worx.pool.AccountPool` per gateway: the

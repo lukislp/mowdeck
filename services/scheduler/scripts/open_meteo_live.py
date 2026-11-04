@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fetch one Open-Meteo forecast for a real location and show the rain decision.
 
 Not part of the test suite (it needs the internet); the tests use the recorded answer in

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Geometry helpers: local metres to WGS84 and back, polygons.
 
 The local frame is the one of :class:`~mowdeck_contracts.v1.MowerMap`: ``(x, y)`` in metres,

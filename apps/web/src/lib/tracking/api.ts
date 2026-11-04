@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Authenticated calls of the theft tracking view (Telemetry, `/mowers/{id}/tracking`). */
 import { apiFetch, telemetryApi, unwrap } from '#lib/api/client.js';
 import { problemFromBody } from '#lib/api/problem.js';

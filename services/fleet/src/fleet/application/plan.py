@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan enforcement (ADR 0028): each enforcement point is one call through the Entitlements
 client of ``mowdeck-service-kit`` (cached per account, fail-open only while billing is disabled).
 

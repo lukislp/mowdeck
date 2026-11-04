@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Sign in with GitHub (ADR 0051): linking, the login, unlinking, the round trip's state and PKCE,
 refusals, rate limits, the app hand-off and the settings.
 

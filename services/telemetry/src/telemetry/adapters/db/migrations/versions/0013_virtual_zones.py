@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Virtual zones (ADR 0070): the drawn zones, where each mower is, time per zone and day.
 
 Additive only: three new tables.

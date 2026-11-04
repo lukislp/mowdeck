@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of the Planner, served at ``/.well-known/mowdeck-module``.
 
 Identity reads it (``MOWDECK_IDENTITY_MODULE_URLS``) and shows the permission in role

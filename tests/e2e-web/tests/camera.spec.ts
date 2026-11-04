@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 5, Task 25: the live camera (ADR 0032) with the simulated mower, whose sessions have the
  * provider `fake`: the camera panel sits inline in the detail page's side column (after the status block, before the areas) and

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The entry point object of the Worx provider (``mowdeck.cloud_providers``: ``worx``).
 
 Importable without pyworxcloud: the gateway loads every installed spec, also of disabled

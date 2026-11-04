@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The demo purge may delete an account's audit rows (ADR 0076).
 
 The append-only trigger of ``audit_log`` still refuses every ``UPDATE`` and every ``DELETE``,

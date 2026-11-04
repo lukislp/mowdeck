@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP behaviour: correlation ids, logging, problem+json errors, health endpoints."""
 
 import json

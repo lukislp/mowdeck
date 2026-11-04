@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The sheet after an update: "Was ist neu in vX.Y.Z" with the changes since the version this
   device last saw (at most a handful; the rest is in Settings → Neuigkeiten). Non-modal like the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The aerial photo under the mower map: tiles for the area around the account's map only.
 
 Telemetry is the one place that knows the map (the geographic reference and every outline) and

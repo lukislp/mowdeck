@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Consumers over the in-memory bus and the memory store: states, results, directory, seed."""
 
 import asyncio

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Correlation ids: one id per request or message, carried through all services.
 
 The id is read from ``X-Correlation-ID`` (or ``X-Request-ID``), generated when missing or

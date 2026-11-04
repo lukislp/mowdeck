@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The provider conformance kit (ADR 0069) on the fake Worx cloud."""
 
 from mowdeck_control_worx.descriptor import BRAND, DEFAULT_BRAND, EMAIL, PASSWORD

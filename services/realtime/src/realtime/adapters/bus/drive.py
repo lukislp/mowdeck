@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual driving over the bus: Fleet's session requests and the frames (ADR 0026).
 
 * ``fleet.drive.start`` / ``fleet.drive.stop``: core NATS requests to Fleet (queue ``fleet``).

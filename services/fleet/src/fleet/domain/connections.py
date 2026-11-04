@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Option schemas of the connection kinds: what each adapter needs, described as data.
 
 The schemas drive two things: Fleet's validation of ``connection_options`` before a mower is

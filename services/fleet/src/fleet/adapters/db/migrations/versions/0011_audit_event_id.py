@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Audit rows from events (ADR 0045): ``audit_log.event_id`` with a unique index.
 
 Fleet writes the camera relay's stream starts and stops as audit rows from the ``CAMERA``

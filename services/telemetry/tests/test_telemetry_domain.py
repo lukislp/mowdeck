@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pure rules: write decisions, heartbeat de-duplication, bins and downsampling."""
 
 from datetime import UTC, datetime, timedelta

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Reproducible builds (docs/dev/reproducible-builds.md).
 
 * ``scripts/compare_builds.py`` compares two build outputs file by file, without exceptions;

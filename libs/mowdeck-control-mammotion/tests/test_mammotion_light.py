@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The camera headlamp: capability, the connect-time read, ``SetLight`` and the mapped state."""
 
 import asyncio

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * JPEG frames of the camera panel for AI assist. The panel marks every tile's picture (a
  * `<video>`, or the simulator's test pattern `<canvas>`) with `data-camera-video`, plus

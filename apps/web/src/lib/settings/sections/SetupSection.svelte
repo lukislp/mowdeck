@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Einrichtung: the way back into the setup tour (ADR 0062) for every user, with its status and
   progress, and the guided tour (ADR 0073): its outcome and "Start the tour" (from its first

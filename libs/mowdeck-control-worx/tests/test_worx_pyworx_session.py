@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The real session on pyworxcloud, against a stand-in ``WorxCloud`` (no network)."""
 
 import asyncio

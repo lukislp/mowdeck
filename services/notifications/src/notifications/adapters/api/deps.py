@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the caller gate and error mapping.
 
 Everything belongs to the caller: the user is the verified token's ``sub``, the account its

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The error lexicon of the simulated mower (vendor ``simulated``, ADR 0067).
 
 It explains the two codes :class:`~mowdeck_control.simulator.SimulatedMower` reports by itself

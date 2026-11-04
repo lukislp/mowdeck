@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Setup tour (ADR 0062): a user's own choices in the web app's onboarding tour.
 
 One row per user: whether the tour runs, the steps they skipped and the "first time here" hints

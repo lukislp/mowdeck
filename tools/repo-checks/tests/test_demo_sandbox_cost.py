@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The sandbox cost script's lifecycle helpers (ADR 0079): percentiles, the sandbox counts and
 one visitor's claim and logout against a fake gateway."""
 

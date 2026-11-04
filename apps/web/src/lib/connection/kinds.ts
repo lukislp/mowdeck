@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The connection kinds this installation accepts, with their option schemas
  * (`GET /api/v1/fleet/connection-kinds`), loaded once per page load.

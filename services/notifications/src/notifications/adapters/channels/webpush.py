@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Web Push (RFC 8030) with VAPID (RFC 8292) and ``aes128gcm`` payload encryption (RFC 8291).
 
 ``pywebpush`` encrypts the payload for the subscription (``WebPusher.encode``) and ``py-vapid``

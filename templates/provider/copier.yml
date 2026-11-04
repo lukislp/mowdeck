@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Copier template for a MowDeck provider package (a vendor adapter, ADR 0066 and ADR 0069).
 #
 #   uv run copier copy --trust templates/provider libs/mowdeck-control-<vendor>
@@ -88,7 +91,7 @@ licence:
 licence_text:
   type: str
   when: false
-  default: "{% if sdk_licence == 'gpl' %}GPL-3.0{% else %}Apache-2.0{% endif %}"
+  default: "{% if sdk_licence == 'gpl' %}GPL-3.0-only{% else %}Apache-2.0{% endif %}"
 
 _tasks:
   # The full licence text from the repository's LICENSES/ (the template lives two levels below).

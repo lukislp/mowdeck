@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Turn shapes at lane ends (ADR 0043): arcs, bulb turns, three-point turns and fallbacks."""
 
 import math

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Whether the return to the dock asks to end or keep the running job. Only a mower whose
  * connection keeps a paused job on the way home (`capabilities.dock_keeps_job`) offers the

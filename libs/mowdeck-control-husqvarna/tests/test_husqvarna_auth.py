@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Client-credentials token, its cache, refusals and the request throttle."""
 
 from collections.abc import Mapping

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Property-based test (fast-check) of the reconnect backoff: full jitter, never negative,
  * never above the cap, whatever the attempt count and the random source return.

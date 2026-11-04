@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * One standalone Matter node per mower (no bridge): every mower is commissioned on its own, like
  * a lamp, which Apple Home handles far better than bridged robot vacuums. One process serves all

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): the purge of one expired visitor account.
 
 The API tests run the real app on the memory store; the store test runs on the memory store

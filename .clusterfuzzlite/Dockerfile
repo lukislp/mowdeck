@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # ClusterFuzzLite build image (docs/dev/fuzzing.md): the OSS-Fuzz Python builder (clang,
 # libFuzzer, compile_python_fuzzer) plus Python 3.13, which the workspace requires; the
 # builder's own interpreter is 3.11. uv installs a standalone CPython 3.13 into a virtual

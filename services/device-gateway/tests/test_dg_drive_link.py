@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The drive link of spot runs through the gateway, against a simulated mower with a Bluetooth
 bridge: a signal below ``LINK_MIN_RSSI_DBM`` at the bridge refuses the start with the reason,
 and a bridge that drops during a run ends it ``link_lost``. No manufacturer package is

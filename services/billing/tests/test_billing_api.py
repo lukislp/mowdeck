@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The HTTP API: health, descriptor, status, authorization, checkout, portal, subscription."""
 
 from billing_support import API, harness

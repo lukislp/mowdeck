@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Device snapshots: the newest map and capabilities of every mower.
 
 Revision ID: 0003

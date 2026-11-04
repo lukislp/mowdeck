@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """MediaMTX's control API (``/v3``), reachable by the relay only, and the ``MediaPlane`` port.
 
 The relay authenticates with the internal publisher credential (MediaMTX asks the relay's own

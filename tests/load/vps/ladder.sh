@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Load test of the real public demo host, level by level (docs/ops/load-testing.md, "Measuring
 # the real demo host"). Run it ON the demo host, as its operator, in an announced window, with
 # tests/load/vps/sample.sh running in a second shell:

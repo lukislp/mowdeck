@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Automatic analyses on errors (ADR 0035): the trigger of a proposal, the users' opt-in (in
 ``user_preferences``, created by revision 0004) and the per-mower error watch.
 

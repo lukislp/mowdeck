@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The share address of a tracking link: `<origin>/track#<token>`. The token travels in the URL
  * fragment, so it never reaches a server log or a Referer header; the public page reads it from

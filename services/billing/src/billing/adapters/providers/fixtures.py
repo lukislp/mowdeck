@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Stripe shaped webhook fixtures and their signatures, for tests and the local demo.
 
 :func:`sign` builds a ``Stripe-Signature`` header exactly like Stripe (``t=<unix>,v1=<hex>``,

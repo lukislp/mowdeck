@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The RTK signal map of `MowerMap`: pure functions that bin the driven route's points (each
  * carries the RTK fix it was reported with) into a square metric grid in the mower's local

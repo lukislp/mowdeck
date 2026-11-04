@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The system page of the operator console: which services answer their public `GET` endpoints
  * through the gateway, with status and latency measured in this browser. The services' `/readyz`

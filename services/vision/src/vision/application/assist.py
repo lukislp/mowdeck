@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Use cases of AI assist: request an analysis, approve or reject, retry, read, sweep.
 
 Every proposal belongs to the account of the mower; reads and decisions are only possible for

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the AI assist choice (run: pnpm --filter e2e-web screens): a mower stuck
  * in a two-area job, the fake model `fake/unsure_resume` 55 % sure that the job can continue

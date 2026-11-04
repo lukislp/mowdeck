@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Helpers for the realtime tests (a plain module: the repository has no conftest.py).
 
 ``harness()`` builds the real app with the in-memory bus, the in-memory OpenFGA fake (it

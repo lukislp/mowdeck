@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the main pages at phone (390 x 844) and desktop (1280 x 800) width,
  * written to apps/web/screenshots/<page>-<size>.png (run: pnpm --filter e2e-web screens). The

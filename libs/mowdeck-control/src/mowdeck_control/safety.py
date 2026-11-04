@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Blade rules for manual driving, kept as pure functions so they are easy to test and reuse.
 
 Rules (plan: "Risiken", "Sicherheit beim Fahren"):

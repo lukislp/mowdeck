@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * State of "Was ist neu": the notes of the running build, the version this device last saw
  * (`localStorage`, key `mowdeck.whats-new-seen`) and whether the sheet is open. The version

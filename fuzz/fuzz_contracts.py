@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Wire models of libs/mowdeck-contracts (v1): what services accept from the network.
 
 Realtime validates every WebSocket frame of a browser, Fleet the command bodies of the API,

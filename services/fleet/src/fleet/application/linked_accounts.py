@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Linked vendor cloud accounts (ADR 0034, ADR 0066): link, list, re-read, delete; their device
 lists; the withheld credentials the Device-Gateway fetches for their mowers.
 

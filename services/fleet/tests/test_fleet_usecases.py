@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Use cases with the memory store, the OpenFGA fake and the in-memory bus (no HTTP)."""
 
 from collections.abc import AsyncIterator

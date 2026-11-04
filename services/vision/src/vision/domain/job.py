@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The mowing job a stuck mower was running, as the vision model sees it (pure, no I/O).
 
 A stuck mower in the middle of a multi-area job is often best helped by continuing that job

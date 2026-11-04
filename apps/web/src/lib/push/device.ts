@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Web Push on this device: whether the browser can do it, the subscription flow (permission,
  * `pushManager.subscribe` with the server's VAPID key, `POST /push-subscriptions`) and which of

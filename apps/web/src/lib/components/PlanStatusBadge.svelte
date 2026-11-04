@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!-- A plan status (active, trial, grace, expired) as a state word with glyph in the state colours. -->
 <script lang="ts">
   import { statusLabel, statusTone } from '#lib/plan/labels.js';

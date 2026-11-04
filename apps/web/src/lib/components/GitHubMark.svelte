@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The GitHub mark (the Invertocat), for "Sign in with GitHub" and the linked account in the
   settings. Filled with the current text colour; decorative (the button or row names GitHub).

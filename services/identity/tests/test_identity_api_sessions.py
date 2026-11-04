@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Registration, login, me, refresh rotation and reuse, logout, JWKS, rate limits."""
 
 from datetime import timedelta

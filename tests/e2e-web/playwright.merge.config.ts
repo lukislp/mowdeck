@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Used only by `playwright merge-reports --config=playwright.merge.config.ts <blob dir>` in CI
  * (job e2e-web of .github/workflows/ci.yml): the blob reports of the shards become one HTML

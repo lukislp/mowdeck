@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The simulated mower: lifecycle, path, battery, RTK, sensors, driving, state stream."""
 
 import asyncio

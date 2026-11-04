@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The client address behind the gateway: one rule for every service (client_address)."""
 
 from typing import Any

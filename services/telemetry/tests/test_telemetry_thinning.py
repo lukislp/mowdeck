@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Position downsampling (ADR 0053): the pure policy, the nightly window (DST), the retention
 round over the memory store, settings, and the heatmap on thinned data."""
 

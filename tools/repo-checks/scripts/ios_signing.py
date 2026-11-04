@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Provisioning profile checks and signing entitlements for the TestFlight job.
 
 Used by ``apps/mobile/scripts/apple/release-ios.sh`` (``.github/workflows/apple-testflight.yml``).

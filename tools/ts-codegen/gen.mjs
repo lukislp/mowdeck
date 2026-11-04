@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Generates the web app's API types (apps/web/src/lib/generated) from committed sources:
 //   1. apps/web/openapi/<service>.json (exported from the services: `uv run poe openapi`)
 //      -> <service>.ts with openapi-typescript (paths, components, operations)

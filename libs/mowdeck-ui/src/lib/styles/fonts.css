@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Lukas Körber
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /* Self-hosted IBM Plex (Latin and Latin Extended only), font-display: swap. */
 @import '@fontsource-variable/ibm-plex-sans/wght.css';
 @import '@fontsource/ibm-plex-mono/latin-400.css';

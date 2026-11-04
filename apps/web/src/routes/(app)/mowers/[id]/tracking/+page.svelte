@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Theft tracking of one mower (Telemetry): the recorded track on a map, the state of the session
   (started by what, ends automatically when, last position and its age, silent mower), and the

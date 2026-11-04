@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The firmware of an RTK base station (ADR 0047): installed and offered version, the state with
   the last check, a progress bar while it installs, "Nach Updates suchen" (through a linked

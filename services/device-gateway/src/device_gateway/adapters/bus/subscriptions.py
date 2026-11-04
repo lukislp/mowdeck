@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions of device-gateway: commands of all mowers, the Fleet registry events and the
 photo requests of Vision (``gateway.mower.*.photo``, core NATS, every instance; only the instance
 that holds the mower answers).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Linked vendor cloud accounts (Fleet's `/linked-accounts`, ADR 0034): which devices of an
  * account can be added, the selection and the per-mower drafts of the add-mower flow, the body

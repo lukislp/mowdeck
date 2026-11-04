@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Run the simulated mower for a few seconds and print its state, without the platform.
 
 Usage::

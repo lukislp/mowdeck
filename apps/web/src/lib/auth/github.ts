@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign in with GitHub (ADR 0051): the round trip of `oauth.ts` for the provider `github`.
  */

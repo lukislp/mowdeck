@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Keeping OpenFGA in line with the database (the database is the source of truth).
 
 The unit is the **subject** (``user:<id>`` or ``api_token:<id>``): its desired tuples are

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The Scheduler service and the internal Fleet requests it uses.
 
 Commands of a schedule go through Fleet, so Fleet keeps the single command record and audit:

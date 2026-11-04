@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The mower map of the instrument panel, on Leaflet 1.9: areas with uppercase labels, hatched
   no-go zones, obstacles, dashed transfer paths, the dock (a 1.2 x 0.9 m footprint drawn to scale,

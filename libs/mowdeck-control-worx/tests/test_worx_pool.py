@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One session per account and the login guard that keeps logins rare (ban risk, ADR 0066)."""
 
 import asyncio

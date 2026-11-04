@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Prometheus metrics of the runner."""
 
 from prometheus_client import CollectorRegistry, Counter

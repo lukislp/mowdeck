@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One shared :class:`~mowdeck_control_worx.session.WorxSession` per account, and a login guard.
 
 The vendor throttles logins and has blocked accounts that logged in too often (ADR 0066). So

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Connection forms generated from Fleet's option schemas (`GET /api/v1/fleet/connection-kinds`):
  * the form state for a kind, validation that mirrors Fleet's rules, the options to send, and

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Command line tools of notifications.
 
 ``python -m notifications.cli generate-vapid-keys`` prints a new VAPID key pair as environment

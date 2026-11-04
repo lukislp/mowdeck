@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The mower's own settings (ADR 0046): the controller's rule 14 and the simulator."""
 
 from datetime import timedelta

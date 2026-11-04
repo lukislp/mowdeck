@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The mower's own settings on Mammotion mowers (ADR 0046).
 
 Which settings a mower declares (:func:`settings_of`), how each is read and written, and how

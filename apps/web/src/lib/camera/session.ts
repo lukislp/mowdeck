@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Live camera sessions (ADR 0032): the types of `POST /api/v1/fleet/mowers/{id}/camera/session`,
  * the refresh timing and the error words. The session holds a short-lived secret token: it lives

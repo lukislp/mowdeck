@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Argon2id password hashing and AES-GCM encryption of signing keys at rest.
 
 Argon2id profiles (``MOWDECK_IDENTITY_ARGON2_PROFILE``):

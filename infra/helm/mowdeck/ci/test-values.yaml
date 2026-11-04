@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Placeholder secrets for `helm lint`, `helm template` and kubeconform in CI (infra/helm/check.sh).
 # Not secret and not usable anywhere: never copy them into an installation.
 secrets:

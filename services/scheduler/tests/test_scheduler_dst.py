@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """DST and day boundaries: next runs and rain verdicts with the clock frozen at the edges.
 
 Europe/Berlin falls back on Sunday 25 October 2026 at 01:00 UTC (03:00 CEST becomes 02:00 CET,

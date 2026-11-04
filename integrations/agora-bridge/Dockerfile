@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 #
 # The agora-bridge image (ADR 0045). BUILD IT YOURSELF; IT IS NEVER PUBLISHED. The image contains

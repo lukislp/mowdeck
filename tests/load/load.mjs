@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Load test of MowDeck against a throwaway Compose stack shaped like the public demo's host
  * (docs/ops/load-testing.md). Never point it at the public demo or any real installation: it

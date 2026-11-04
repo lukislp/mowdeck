@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   "Mähwinkel drehen" in the start sheet (ADR 0061): a switch, the step chips and what the start
   will mow with, next to a small dial. With rotation on, the start turns the last angle the

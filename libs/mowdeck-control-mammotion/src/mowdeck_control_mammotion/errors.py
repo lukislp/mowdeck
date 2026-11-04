@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Manufacturer-neutral categories for Mammotion error codes, and the codes a mower reports.
 
 Pure, no I/O. Every code of PyMammotion's error table (``pymammotion/data/error_codes.csv``, about

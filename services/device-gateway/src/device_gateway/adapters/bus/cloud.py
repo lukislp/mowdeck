@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Cloud account discovery (ADR 0034, ADR 0066): ``gateway.cloud.discover`` and
 ``gateway.cloud.providers``, core NATS request/reply.
 

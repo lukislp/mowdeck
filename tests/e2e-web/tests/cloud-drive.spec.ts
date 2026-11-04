@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Manual driving over the Mammotion cloud (ADR 0049, desktop), against the fake Mammotion cloud
  * of the test stack (`GATEWAY_FAKE_MAMMOTION_CLOUD`, see stack.env): its mowers offer the

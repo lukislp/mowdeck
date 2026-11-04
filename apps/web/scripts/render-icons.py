@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Render the app icons (PNG and SVG) without dependencies.
 
 The mark: the mower marker of the map (a chevron in the "mowing" signal green) on graphite with

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Device settings declared as capabilities (ADR 0046).
 
 A mower keeps settings of its own that change how it behaves, not what it does right now: its

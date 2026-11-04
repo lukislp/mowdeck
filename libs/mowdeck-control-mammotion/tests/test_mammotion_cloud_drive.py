@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Manual driving over the Mammotion cloud (ADR 0049) on a fake port and a fake remote-drive
 session: the capabilities, the session flow, the owner account refusal (50803), no reverse, the
 watchdog, blades, vendor ends, the fence warning, the emergency stop, the dual link's choice of

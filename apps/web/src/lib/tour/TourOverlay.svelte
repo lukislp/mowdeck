@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The guided tour (ADR 0073) on top of the app: a viewfinder frame around the element a step
   points at (the rest of the page dimmed and not clickable, so nothing is triggered by accident,

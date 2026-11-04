@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A small configurable fake adapter: correct by default, broken on request.
 
 Each flag breaks one contract, so the kit's tests can prove that the matching check catches it.

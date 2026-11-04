@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The tile sources (HTTP) and the tile cache (a bounded directory on disk).
 
 Every upstream request identifies MowDeck (``User-Agent: MowDeck/<version> (+<repo>)``), sends no

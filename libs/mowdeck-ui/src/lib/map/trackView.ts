@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The view limits of the theft tracking map (`TrackMap`): the box its base map serves tiles in
  * (the tracked positions plus the server's margin, cut to the source's coverage) and the lowest

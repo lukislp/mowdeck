@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mower reports through the Mammotion adapter (libs/mowdeck-control-mammotion).
 
 The mower (over the cloud or the Bluetooth bridge) sends protobuf ``LubaMsg`` frames; a corrupt

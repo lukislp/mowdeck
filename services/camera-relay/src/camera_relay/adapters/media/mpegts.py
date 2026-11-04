@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A minimal MPEG transport stream writer for one H.265 or H.264 video stream.
 
 The bridge source hands each camera's access units to an ffmpeg that publishes them to

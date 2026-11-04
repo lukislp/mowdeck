@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """One shared :class:`~mowdeck_control_husqvarna.account.HusqvarnaAccount` per application.
 
 The rate limits of the Automower Connect API count per application key, and one websocket

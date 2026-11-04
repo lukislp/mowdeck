@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   "Fahrgeschwindigkeit" in the mower settings (ADR 0042): the vendor's speed setting for manual
   driving, by which the mower scales the stick. The big readout shows the reported value

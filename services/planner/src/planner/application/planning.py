@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plans and coverage: the use cases around ``mowdeck-patterns``.
 
 * :meth:`Planning.compute`: area (a map area, a spot polygon in local metres or WGS84, or both)

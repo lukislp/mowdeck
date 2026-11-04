@@ -1,4 +1,8 @@
 {{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
+{{- /*
 In-cluster PostgreSQL through the CloudNativePG operator (https://cloudnative-pg.io), which must
 be installed beforehand: one Cluster, one login role per service (managed roles with passwords
 from basic-auth Secrets) and one Database resource per service owned by its role, like

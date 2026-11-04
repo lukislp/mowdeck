@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Permission rules: the catalogue, default roles, role validation and anti-escalation.
 
 Two kinds of permission keys exist:

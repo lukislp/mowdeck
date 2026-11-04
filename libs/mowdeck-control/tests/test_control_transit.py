@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The transit planner (ADR 0041): routes on the neutral map through transfer paths and areas,
 around no-go zones, from the dock; no route when the map does not connect start and goal."""
 

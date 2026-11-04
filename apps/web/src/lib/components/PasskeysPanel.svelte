@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The signed-in user's passkeys (ADR 0050): each one as a key tag with name, provider or device,
   added and last used, synced or bound to one device; add (password again, then the device's

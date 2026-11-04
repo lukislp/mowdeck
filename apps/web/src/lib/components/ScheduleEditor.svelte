@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The page body of `/schedules/new` and `/schedules/[id]`: loads the schedule, the targets,
   the rights and the mowers' capabilities (what the start settings may offer), shows the form with the preview beside it (the rain verdict, the forecast strip,

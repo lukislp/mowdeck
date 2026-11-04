@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What the assistant may propose and what a proposal is (ADR 0075).
 
 The assistant only proposes; the web app executes a confirmed proposal through the regular

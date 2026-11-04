@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Automatic AI analysis on errors (ADR 0035): what the switch on the AI provider page may do,
  * and how a proposal says that a mower error started it. The opt-in belongs to the user

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Aerial photo tiles: the pure geometry (Web Mercator tiles, the map's bounding box, the
 upstream request).
 

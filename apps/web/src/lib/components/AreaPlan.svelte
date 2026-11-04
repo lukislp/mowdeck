@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A schematic plan of the mower's map in its local metre frame: metric grid (1 m and 5 m),
   areas, no-go zones (hatched), dock, and the order badges of selected areas. Display only; the

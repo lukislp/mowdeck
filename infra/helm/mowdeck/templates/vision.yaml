@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Vision: AI assist for stuck mowers with human approval (ADR 0033); camera snapshot and map
 context to a vision model (any family through LiteLLM), drives approved maneuvers through
 fleet.drive.* (Compose services vision and vision-migrate). The users' provider keys are

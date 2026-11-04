@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The last known position as text, for the police or anyone who has to find the mower even
   where no map layer covers the place: decimal latitude and longitude (6 places, dot decimal),

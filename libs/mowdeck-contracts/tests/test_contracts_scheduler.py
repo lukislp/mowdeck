@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Contracts of the Scheduler and the internal Fleet requests it uses."""
 
 from datetime import UTC, datetime

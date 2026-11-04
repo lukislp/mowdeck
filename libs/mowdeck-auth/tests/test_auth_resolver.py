@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The kit principal resolver: 200 with a valid token, 401 problem details otherwise."""
 
 from typing import Annotated

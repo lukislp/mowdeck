@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Consumers, rules and fan-out together: states in, inbox items and deliveries out."""
 
 import asyncio

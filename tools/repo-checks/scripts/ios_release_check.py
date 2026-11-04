@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Checks that keep the iOS app shell uploadable to TestFlight, before any Mac minute is spent.
 
 App Store Connect rejects an upload only after the build, the signing and the upload (ITMS

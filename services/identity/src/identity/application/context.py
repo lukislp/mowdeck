@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Configuration of the use cases and the per-request context (who, from where, which trace)."""
 
 from dataclasses import dataclass, field

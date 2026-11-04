@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Batched ingestion (ADR 0078): a batch stores exactly what the same states one by one store,
 in order, skips only the states that name another account, stores nothing when the database
 fails, changes nothing when delivered again; and the bus handler acknowledges per state.

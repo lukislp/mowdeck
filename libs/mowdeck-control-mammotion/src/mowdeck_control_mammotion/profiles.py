@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The capability profiles of the Mammotion provider (ADR 0071).
 
 What a Mammotion mower offers depends on its model family (``DeviceType`` from the device

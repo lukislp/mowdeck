@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The real PyMammotion port and the ESPHome proxy wiring, with the network calls replaced."""
 
 import asyncio

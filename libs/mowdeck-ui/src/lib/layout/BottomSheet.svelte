@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   A non-modal bottom sheet with three snap points for phones, over a map that stays visible and
   tappable above it: `peek` (the peek snippet: a summary and the primary action), `half` (45 % of

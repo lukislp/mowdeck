@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Tenant isolation: who is calling and which account they act for.
 
 Rule: **the account id only ever comes from the verified principal**, never from the request

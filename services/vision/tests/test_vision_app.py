@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Startup and shutdown, settings, the module descriptor, the bus handlers of the view."""
 
 import asyncio

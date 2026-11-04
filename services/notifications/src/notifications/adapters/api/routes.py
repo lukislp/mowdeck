@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of notifications under ``/api/v1/notifications``.
 
 Everything except the VAPID public key needs a user of an account (see

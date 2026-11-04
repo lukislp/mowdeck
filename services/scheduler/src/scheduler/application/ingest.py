@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Facts about mowers from the bus: the latest activity (busy check, last position), the map
 (geo origin for the weather, area ids for "all areas") and the capabilities (what a schedule
 may set for the mower).

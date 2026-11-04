@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The driven route of the detail page: the time window the user picked, the initial track from
  * `GET /telemetry/mowers/{id}/positions` and the live points appended from the socket. Pure, so

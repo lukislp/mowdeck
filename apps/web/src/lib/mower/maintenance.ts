@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Maintenance actions of a mower (ADR 0048): `leave_dock`, `sync_map`, `resync_rtk`,
  * `relocate_dock` and `restart_mower`, each a command without parameters. The connection lists

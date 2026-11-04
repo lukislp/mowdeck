@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The names of a mower's cameras in the user's language: from the camera's `placement`, else
  * from well-known ids (Mammotion slots `0` front left, `1` front right, `2` rear; the simulator's

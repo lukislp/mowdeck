@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Scheduler: mowing schedules with a rain pause; fires through Fleet
 (Compose services scheduler and scheduler-migrate). */ -}}
 {{- $c := .Values.config }}

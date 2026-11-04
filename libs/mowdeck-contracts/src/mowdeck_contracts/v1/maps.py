@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Mower map geometry in local metres plus a geo reference.
 
 Mowers with RTK (for example Mammotion LUBA) store their map in a device-local east-north frame

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A small PNG of a mower's map for the iOS map widget (ADR 0059).
 
 WidgetKit cannot run a map view or draw large vector data within its memory limits, so the

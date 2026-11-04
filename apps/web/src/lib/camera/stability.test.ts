@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Stability of the live camera: options, diagnostics, rejoin with backoff, option changes. */
 import { describe, expect, it, vi } from 'vitest';
 

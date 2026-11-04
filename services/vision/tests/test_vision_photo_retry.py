@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The automatic analysis gets its photo or says why it has none (live case 2026-10-24): a LUBA
 on weak Wi-Fi (-79 dBm) stopped with error 1201; the camera relay's photo request timed out
 (``frame-timeout``) and the automatic analysis was skipped silently (``no_photo``). Now the

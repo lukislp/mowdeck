@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The "Image sources" lines of infra/compose/.env.example are the one list of third-party images.
 
 Every image default in the Dockerfiles (``ARG *_IMAGE=`` and literal ``FROM``) and in the Compose

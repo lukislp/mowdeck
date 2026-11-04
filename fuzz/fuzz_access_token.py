@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bearer credentials: access tokens (libs/mowdeck-auth), API tokens and JWKS documents.
 
 Every service verifies the ``Authorization`` header of every request locally, and Identity

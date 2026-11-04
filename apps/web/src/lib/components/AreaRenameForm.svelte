@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Rename one map area in MowDeck: the name field, the mower's own name as a hint (the mower keeps
   it; MowDeck never writes to the mower), save, "Zurücksetzen" (drop the custom name) and cancel.

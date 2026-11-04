@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The speed setting for manual driving (ADR 0042) on the Mammotion connections."""
 
 from datetime import timedelta

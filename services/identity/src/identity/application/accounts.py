@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Accounts: registration, renaming, deletion with a grace period, reconcile."""
 
 from dataclasses import dataclass

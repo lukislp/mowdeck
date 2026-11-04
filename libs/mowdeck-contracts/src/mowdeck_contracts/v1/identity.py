@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Events published by the Identity service.
 
 All are wrapped in :class:`~mowdeck_contracts.v1.EventEnvelope` and published on

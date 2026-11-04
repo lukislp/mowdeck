@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Manual drive (ADR 0026) with the live camera (ADR 0044): a session over the Realtime socket,
   the joystick, the speed limit, the two-step blade switch, the session readouts and either the

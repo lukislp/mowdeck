@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera requests over core NATS: sessions (ADR 0032, ``gateway.mower.*.camera.session``) and
 releases (ADR 0045, ``gateway.mower.*.camera.release``).
 

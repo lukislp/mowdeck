@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """When a schedule fires: weekly on chosen days, every N days from an anchor date, or once on the
 anchor date, always at a wall-clock time in the schedule's time zone.
 

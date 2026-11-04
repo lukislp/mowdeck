@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """iOS widget credentials end with the login session that created them (ADR 0059).
 
 ``api_tokens.session_id``: the session family a widget credential was created in; once that

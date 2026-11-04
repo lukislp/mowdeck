@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Additional links (Bluetooth bridge scans) and firmware checks (ADR 0038)."""
 
 from datetime import UTC, datetime

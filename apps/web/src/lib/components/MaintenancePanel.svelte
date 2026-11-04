@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Maintenance of the mower (ADR 0048): the actions its connection declares
   (`MowerCapabilities.maintenance`), each a row with what it does, the reason it cannot run now

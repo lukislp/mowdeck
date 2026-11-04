@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Personal access tokens (ADR 0064): a user's own API tokens for scripts, managed under
  * `/api/v1/identity/me/api-tokens`. The scopes are a curated list, the lifetime is always limited

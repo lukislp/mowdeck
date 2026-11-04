@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bridge scans, firmware checks and link secrets (ADR 0038) against the simulator."""
 
 import asyncio

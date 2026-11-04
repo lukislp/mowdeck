@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   RTK base stations of the account (ADR 0047): register one from a linked vendor account's
   device list (or the simulator's), assign and unassign the mowers that use it, see its state as

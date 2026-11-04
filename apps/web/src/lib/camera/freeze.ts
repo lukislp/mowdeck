@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Picture freeze detection (ADR 0044). The drive view must never show a frozen picture as if it
  * were live, and it holds the mower while the picture stands. The camera stage reads a frame

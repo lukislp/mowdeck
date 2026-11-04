@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Phase 1 gate (docs/phases.md): run with ``pnpm e2e:stack acceptance`` (throwaway stack).
 
 The criterion, step by step (usernames are unique per run):

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Structured answers (``POST /me/provider/structured``, ADR 0075): the interface optional
 modules use to reuse the caller's AI provider. Resolution, limits, accounting, the fake's
 minimal answer and the LiteLLM request shape (mocked ``acompletion``, no network)."""

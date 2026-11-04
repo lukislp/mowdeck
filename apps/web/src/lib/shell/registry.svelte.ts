@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The module registry of the shell (design 3.2): built-in route modules, enabled at runtime by
  * the `ui_areas` that the deployed services announce through Identity (`GET /ui-areas`).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Schedule texts and tones in the active locale: rain verdicts and run outcomes as badges in
  * the state colour language (exhaustive switches, so a new contract value fails the type check).

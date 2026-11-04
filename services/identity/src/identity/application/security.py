@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The security center of a user (ADR 0065): sessions and devices, security events, alerts.
 
 * **Sessions.** A login session is a refresh token family (``sessions.family_id``, the ``sid``

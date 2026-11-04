@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Realtime: live states, command results and manual driving over the WebSocket
 /api/v1/realtime/ws (Compose service realtime). Replicas need no sticky sessions. */ -}}
 {{- $c := .Values.config }}

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Billing contracts: plan.set request and reply, the subscription.changed event."""
 
 from datetime import UTC, datetime, timedelta, timezone

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Request handlers of the relay (core NATS request/reply, queue group ``camera-relay``).
 
 * ``relay.camera.attach``: ``RelayAttachRequest`` in, ``RelayAttachReply`` out.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rendering of message keys into localized text.
 
 The templates are data (``notifications/messages/<language>.json``, one object of message key

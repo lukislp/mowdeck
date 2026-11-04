@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Helpers of the Phase 2 gate: unique names per run, API setup where the UI is not under test,
  * UI login, and a guard that fails a test on any Content Security Policy violation.

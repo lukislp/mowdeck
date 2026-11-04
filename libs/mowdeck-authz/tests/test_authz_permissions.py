@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """PERMISSION_RELATIONS must match the packaged model exactly."""
 
 from typing import Any

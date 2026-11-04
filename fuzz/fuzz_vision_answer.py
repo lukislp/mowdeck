@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The vision model's answer (services/vision, AI assist for stuck mowers, ADR 0033).
 
 The answer is text from a third-party model that looked at a camera image, so it is untrusted

@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """``python -m agora_bridge.server``: the bridge protocol over TCP, one process per connection.
 

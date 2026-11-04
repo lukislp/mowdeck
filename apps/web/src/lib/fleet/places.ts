@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sites and groups in the web app: form state, client checks and request bodies for Fleet's
  * `/sites` and `/groups`, the mower list sections by site, and the fleet filters. Pure and unit

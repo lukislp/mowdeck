@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Geometry building blocks of the patterns: insets, stripe runs, offset rings, transfers.
 
 Patterns only decide *which* runs to cut and in which order (:class:`Run` lists). Turning those

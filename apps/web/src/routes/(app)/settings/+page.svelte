@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The one settings page: every settings module the user may see as a section under its anchor
   (account and profile, security, notifications, users, AI provider, Matter, linked accounts, API tokens, API access; the

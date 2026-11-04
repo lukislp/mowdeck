@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * MowDeck Matter server (ADR 0063): every mower of the configured accounts as its own Matter node,
  * plus the admin API for the web app's pairing codes. Started with `node src/main.ts` (Node 24

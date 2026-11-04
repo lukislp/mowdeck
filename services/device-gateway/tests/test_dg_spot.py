@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Spot runs through the gateway (ADR 0039) against the simulator only: the ``accepted`` result
 at once and the final one at the run's end, ``MowerState.spot_run`` in the telemetry, the plan
 as the path snapshot, rule 12 and ``spot_stop``. No manufacturer package is imported."""

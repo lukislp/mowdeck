@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The state of an RTK base station as a linked mower reports it (`MowerState.base_station`):
   how the corrections reach the mower (LoRa with its channel, internet or network RTK) and whether

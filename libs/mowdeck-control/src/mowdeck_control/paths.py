@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A simple boustrophedon (back and forth) stripe path for the simulated mower.
 
 The path stays ``margin`` metres inside the area and away from forbidden zones. Every leg is

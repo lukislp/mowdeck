@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Authentication and request pacing for the Automower Connect API.
 
 :class:`TokenSource` exchanges the user's application key and secret for a bearer token with the

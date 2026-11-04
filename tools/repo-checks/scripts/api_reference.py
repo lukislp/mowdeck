@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Render the HTTP API reference (Markdown) from the services' OpenAPI documents.
 
 Usage (from the repository root)::

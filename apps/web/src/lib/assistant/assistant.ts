@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Chat control (the optional assistant add-on, ADR 0075): the calls, the gate and the
  * execution of a confirmed proposal.

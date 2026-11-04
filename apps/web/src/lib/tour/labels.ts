@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Texts of the guided tour (ADR 0073). A step can have a demo note: what the public demo locks
  * there (ADR 0068) is explained, never triggered.

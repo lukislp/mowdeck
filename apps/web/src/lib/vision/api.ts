@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * AI assist (Vision service, `/api/v1/vision`): typed calls of the openapi-fetch client. Every
  * call returns the data or throws the {@link ApiProblem}; the store and the pages take a

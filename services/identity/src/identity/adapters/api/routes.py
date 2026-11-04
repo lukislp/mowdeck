@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routers of identity under ``/api/v1/identity``."""
 
 from identity.adapters.api.account_routes import router as account_router

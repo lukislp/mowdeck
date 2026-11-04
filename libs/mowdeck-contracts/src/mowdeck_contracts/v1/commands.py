@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The command API of Fleet (``/api/v1/fleet``), shared with clients (web app, Home Assistant).
 
 A client sends a :class:`CommandRequest` for one mower (or for every mower of a site or group).

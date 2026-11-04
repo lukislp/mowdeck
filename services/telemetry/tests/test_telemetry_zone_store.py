@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Zone store contract on the memory store and on PostgreSQL (migration included; ADR 0070)."""
 
 from collections.abc import AsyncIterator

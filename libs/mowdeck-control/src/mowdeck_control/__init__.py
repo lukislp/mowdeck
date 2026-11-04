@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowDeck control: drive any mower through one interface, with the safety rules built in.
 
 * :class:`MowerConnection` and :class:`DriveSession`: the adapter interface.

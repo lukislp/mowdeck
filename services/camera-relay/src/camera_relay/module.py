@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of camera-relay, served at ``/.well-known/mowdeck-module``.
 
 The relay has no public routes and no permissions of its own: Fleet checks ``can_view`` and the

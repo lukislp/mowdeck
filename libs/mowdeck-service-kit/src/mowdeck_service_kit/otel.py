@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Optional OpenTelemetry tracing (install the ``otel`` extra).
 
 Tracing is enabled when ``MOWDECK_OTEL_EXPORTER_OTLP_ENDPOINT`` is set. Spans are exported via

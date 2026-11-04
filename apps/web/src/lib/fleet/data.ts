@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Loading and labels shared by the fleet pages: sites (the default site included), groups and
  * mowers the user can see, and the translated words of bulk outcomes and assignment levels.

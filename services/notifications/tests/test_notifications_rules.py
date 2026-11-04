@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The rules engine: every kind, hysteresis, cooldown and the offline timer (manual times)."""
 
 from datetime import timedelta

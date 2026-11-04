@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Passkeys (ADR 0050): WebAuthn credentials of users, the challenges of registration and login
 ceremonies, and the one-time codes that hand a login in the system browser to the native app.
 

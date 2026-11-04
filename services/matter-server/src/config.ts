@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Settings from the environment (`MOWDECK_MATTER_*`, plus the shared `MOWDECK_*` names). A
  * secret comes from a file (`*_FILE`, Compose and Kubernetes secrets); it is never read from a

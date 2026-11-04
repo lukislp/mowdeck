@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Operator console, accounts: every account of the installation (Identity) with its plan
   (Entitlements), paged oldest first, with a search over the whole installation (name, owner, id,

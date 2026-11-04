@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes for linked vendor cloud accounts under ``/api/v1/fleet/linked-accounts`` (ADR 0034,
 ADR 0066).
 

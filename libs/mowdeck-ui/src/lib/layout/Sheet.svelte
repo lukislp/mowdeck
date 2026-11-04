@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   A non-modal sheet (area picker and similar). On phones it rises from the bottom but stops
   above the command bar (`--md-sheet-bottom`), so the emergency stop stays visible and usable.

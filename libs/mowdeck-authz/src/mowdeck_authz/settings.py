@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Connection settings for OpenFGA, read from ``MOWDECK_OPENFGA_*`` environment variables.
 
 | Variable | Meaning |

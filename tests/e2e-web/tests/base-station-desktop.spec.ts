@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * RTK base stations under Fleet (desktop, 1280 x 800), ADR 0047. With the simulator: the empty
  * page explains, the simulated base station is added from the sheet, a mower is assigned and the

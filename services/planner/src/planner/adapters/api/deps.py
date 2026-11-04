@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the plan feature gate and the error mapping.
 
 Account scoping: the account is always the verified token's ``acc`` (``CurrentAccountId``);

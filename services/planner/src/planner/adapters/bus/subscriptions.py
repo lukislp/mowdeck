@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions of the Planner.
 
 * ``device.mower.>`` (JetStream ``DEVICE``, durable and queue group ``planner-device``, newest

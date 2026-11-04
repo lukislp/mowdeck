@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!-- The socket's state as a small indicator: a square lamp and a word. -->
 <script lang="ts">
   import { m } from '#lib/paraglide/messages.js';

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Mower state (telemetry) and mower commands.
 
 Value ranges here are generic sanity limits shared by all mower models. Model-specific limits

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Write the seed corpus of every fuzz target: ``python fuzz/seeds.py OUT_DIR``.
 
 Each ``fuzz_<name>.py`` builds its seeds with the code it fuzzes (``seeds()``), so the corpus

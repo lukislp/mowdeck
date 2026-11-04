@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The rule based fake vision provider (development, demos and tests; no network).
 
 The model string selects the behaviour: ``fake/recover`` (the default) answers ``recover`` with

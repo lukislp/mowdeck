@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The server's small HTTP API, behind Traefik at `/api/v1/matter` (Compose: the host network,
  * reached through `host.docker.internal`; Kubernetes: the pod's Service):

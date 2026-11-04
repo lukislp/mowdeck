@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Virtual zones (ADR 0070): polygons the owner draws for a mower whose vendor shares no map.
 
 Everything here is pure: the validation of a drawn ring, the point-in-zone test in a local

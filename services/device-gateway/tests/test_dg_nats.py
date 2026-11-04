@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Full flow through a real NATS JetStream server (skipped without MOWDECK_TEST_NATS_URL).
 
 docker run -d --name mowdeck-test-nats -p 4222:4222 \

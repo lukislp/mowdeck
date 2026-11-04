@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Local metres to WGS84 and back: an exact port of `mowdeck_control.geo` (local tangent plane,
  * equirectangular). The map contract keeps geometry in the mower's local frame; only the

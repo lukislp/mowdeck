@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Apple Watch app of the iOS shell (ADR 0060), as far as the settings page needs it.
  *

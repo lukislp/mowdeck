@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Assistant (ADR 0075): the optional chat control add-on (Compose service assistant, profile
 "assistant"). Off by default (services.assistant.enabled=false). It turns a typed request into a
 proposal the user confirms in the web app and executes nothing itself. HTTP only: it reads

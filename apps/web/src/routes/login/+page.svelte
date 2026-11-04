@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Sign-in: a passkey (ADR 0050), GitHub (ADR 0051), Apple (ADR 0052) or username and password.
 

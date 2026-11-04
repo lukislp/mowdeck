@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Personal access tokens (ADR 0064): the purpose of an API token.
 
 ``integration`` for every existing token (created by an account admin, or an iOS widget

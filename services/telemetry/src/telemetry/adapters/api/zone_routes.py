@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of the virtual zones under ``/api/v1/telemetry`` (ADR 0070).
 
 Reading the zones, the current zone and the time per zone needs ``can_view`` on the mower;

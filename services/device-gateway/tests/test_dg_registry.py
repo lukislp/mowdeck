@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The volatile registry: Fleet events, the Fleet request, reconnects and heartbeats."""
 
 from uuid import uuid4

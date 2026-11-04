@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A small deterministic phrase parser: the assistant without any AI (ADR 0075).
 
 Used in demo mode (no external AI may be called, ADR 0068), when the operator chooses

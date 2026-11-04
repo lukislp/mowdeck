@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # OSV-Scanner configuration, also read by the OpenSSF Scorecard Vulnerabilities check. It sits
 # next to pnpm-lock.yaml and uv.lock because OSV-Scanner looks for it beside the lock file.
 # Every entry is an explicit, time-boxed acceptance; CONTRIBUTING.md says when to remove one.

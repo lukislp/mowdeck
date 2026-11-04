@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Members and sub-users of an account.
 
 * Sub-users are created by the account with a username and a password (no e-mail needed) and

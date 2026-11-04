@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The setup tour of the web app (ADR 0062): the user's own choices, kept per user so the tour
 follows them from the browser to the iPhone app.
 

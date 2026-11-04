@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``agora`` source driver: a camera source bridge over TCP, one muxer per camera.
 
 The relay image never contains a vendor SDK (ADR 0045). The Agora SDK runs in the optional

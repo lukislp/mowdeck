@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Automatic analysis on errors (ADR 0035): which states start one, and the limits.
 
 Pure functions, no I/O. A state starts an automatic analysis when the mower *enters* a

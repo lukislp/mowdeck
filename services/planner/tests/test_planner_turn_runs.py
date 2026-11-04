@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Spot runs per turn style (ADR 0043): the Planner's stripes with shaped lane ends, driven by
 the generic spot run on the simulator at 1 Hz reports with 2 cm noise. Arc and multi-point
 stripes need no rotation on the spot; the three-point turns reverse with the blades off and

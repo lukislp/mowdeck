@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entry point of fleet: wires the layers into one FastAPI app.
 
 ``python -m fleet.main`` (the container command) loads the settings from the environment,

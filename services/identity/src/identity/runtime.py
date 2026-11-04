@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Wiring shared by the HTTP app (``main``) and the operator CLI (``cli``).
 
 :class:`Runtime` builds the collaborators from the settings (or test overrides) synchronously,

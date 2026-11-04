@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Stripe adapter: Checkout Sessions (subscription mode), the customer portal, webhooks.
 
 Calls go through ``stripe.StripeClient`` (async methods over httpx). ``api_base`` points the

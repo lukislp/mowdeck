@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Renders the runtime configuration of the web app at container start (a hook of the nginx
 # image's entrypoint in /docker-entrypoint.d). The container runs read-only, so both files go to
 # the tmpfs at /tmp:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory store for tests and the OpenAPI export (same behaviour as the SQL store)."""
 
 import copy

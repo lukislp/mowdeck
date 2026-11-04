@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Render the capability matrix (Markdown) from the installed providers' capability profiles.
 
 Usage (from the repository root)::

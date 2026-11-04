@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """JetStream and core NATS: the whole recover flow over a real server (telemetry and maps from
 the streams, the photo request, Fleet's requests, frames on ``command.mower.<id>``), and a
 late subscriber that still finds the newest state and map (``last_per_subject``).

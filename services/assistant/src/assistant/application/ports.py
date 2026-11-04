@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ports: what the use cases need from the outside world, as protocols.
 
 Every port acts with the caller's own access token against MowDeck's public API (ADR 0075):

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The bus side: ``entitlements.check`` round trip with the kit client, account events, the
 feature catalogue from module descriptors, the plan seeding at startup."""
 

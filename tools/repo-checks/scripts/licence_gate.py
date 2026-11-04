@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Licence gate of a release image: nothing proprietary or Agora-made is published.
 
 The release workflow builds every image once for linux/amd64 (loaded into the local Docker
@@ -63,9 +66,9 @@ AGORA_BUNDLE_MARKERS = (
 LICENCE_FILES = (
     "usr/share/doc/mowdeck/LICENSE",
     "usr/share/doc/mowdeck/LICENSING.md",
-    "usr/share/doc/mowdeck/LICENSES/AGPL-3.0.txt",
+    "usr/share/doc/mowdeck/LICENSES/AGPL-3.0-only.txt",
     "usr/share/doc/mowdeck/LICENSES/Apache-2.0.txt",
-    "usr/share/doc/mowdeck/LICENSES/GPL-3.0.txt",
+    "usr/share/doc/mowdeck/LICENSES/GPL-3.0-only.txt",
 )
 # What the Dockerfile of a released image must contain (static check, dockerfile_problems):
 # the licence texts, and the AGPL-3.0 section 13 source address (LICENSING.md).

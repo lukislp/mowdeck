@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The relay session of one ``(account_id, mower_id)``: the functional core of the relay.
 
 States: ``IDLE -> STARTING -> LIVE -> DRAINING -> STOPPING -> IDLE``, and ``FAILED`` with a

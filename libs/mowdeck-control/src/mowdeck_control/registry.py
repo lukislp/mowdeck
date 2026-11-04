@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Registry of connection factories, one per :class:`~mowdeck_contracts.v1.ConnectionKind`.
 
 Adapters register in code with :func:`register_connection` or, from another package, through

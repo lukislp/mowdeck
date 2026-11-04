@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Timings and limits of the relay, and the admission rules of Vision leases.
 
 The defaults are the ones of ADR 0045, taken from ``mowdeck_contracts.v1.relay`` where the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The position track of a mower over core NATS: ``tracks.positions.query``.
 
 Services do not call each other over HTTP. The Planner computes the mowed coverage (and the

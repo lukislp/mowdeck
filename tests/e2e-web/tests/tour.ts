@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Helpers of the guided tour specs (ADR 0073, `tour-*.spec.ts`). The suite turns the tour's
  * automatic start off for every other spec (playwright.config.ts, `storageState`); these specs

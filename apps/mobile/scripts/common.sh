@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Shared helpers of the MowDeck app shell scripts (sourced, not run). Works the same in a
 # Terminal on the Mac and over SSH from the PC.
 #

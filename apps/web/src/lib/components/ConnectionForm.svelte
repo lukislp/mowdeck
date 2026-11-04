@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The options of one connection kind, generated from Fleet's schema: a plate with the kind and
   what it does, the options (alternatives as a segmented choice, switches for flags, write-only

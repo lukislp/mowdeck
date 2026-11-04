@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The seed job of the public demo (infra/compose/demo/seed.py, ADR 0068) against a recorded API."""
 
 import importlib.util

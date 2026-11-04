@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The address of the client behind the gateway, for rate limits, throttling and audit logs.
 
 A service is only reachable through the gateway (Traefik in Compose, the Ingress controller in

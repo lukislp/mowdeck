@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowDeck access tokens: EdDSA JWTs issued by Identity and verified by every service.
 
 * :class:`JwtVerifier` checks a token against the public keys of a :class:`KeySource`

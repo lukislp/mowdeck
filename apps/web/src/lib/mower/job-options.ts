@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The job options of a native start besides the pattern (ADR 0030, amendment 2026-10-24):
  * obstacle detection, laps around no-go zones, path order and the start progress. A mower

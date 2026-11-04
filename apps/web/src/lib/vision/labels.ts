@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Human readable texts of AI assist: drive steps ("Back 1.0 s", "Forward and left 1.5 s"),
  * situations, proposal states, risk flags and step outcomes. Pure (the locale is a parameter,

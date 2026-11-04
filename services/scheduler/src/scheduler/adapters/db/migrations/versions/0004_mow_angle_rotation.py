@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing angle rotation (ADR 0061).
 
 * ``schedules.rotation_step_deg``: step rotation per schedule, null (off) for every existing

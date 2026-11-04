@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Maintenance on the mower settings page (desktop, 1280 x 800): the simulated mower's five
  * actions in page order; each asks first in a sheet that explains it, and cancelling sends

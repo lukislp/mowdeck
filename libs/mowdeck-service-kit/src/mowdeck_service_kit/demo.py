@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Public demo mode (ADR 0068): labels every response and refuses the unsafe actions.
 
 A demo installation (``MOWDECK_DEMO_MODE=true``) is a showcase with simulated mowers that anybody

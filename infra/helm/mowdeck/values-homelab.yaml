@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Homelab overlay: one node (k3s, kind, a mini PC or a Raspberry Pi 5 with 4 GB), one replica per
 # service, small requests, the in-cluster PostgreSQL (CloudNativePG, one instance) and a single
 # NATS server with JetStream.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual drive sessions (joystick over Realtime, ADR 0026).
 
 Additive: a new table only, so a running older Fleet keeps working during the rollout.

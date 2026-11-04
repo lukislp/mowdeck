@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** A permission catalogue as Identity serves it, for the token tests. */
 import type { CatalogueEntry } from './token-permissions';
 

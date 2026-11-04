@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Typed API clients, one per service, generated from the committed OpenAPI documents
  * (`src/lib/generated`). They share one fetch wrapper: bearer token, correlation id, one retry

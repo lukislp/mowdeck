@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Starts without map areas (ADR 0066 amendment): a mower whose connection knows no area geometry
  * declares the starts it offers in `capabilities.start_plans` (start now, a zone of its own, the

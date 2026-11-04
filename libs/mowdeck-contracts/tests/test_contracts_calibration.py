@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Drive calibration contracts (ADR 0042): link options round trip, the speed-setting rescale,
 the speed-setting capability and the new commands."""
 

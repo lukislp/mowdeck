@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The AI assist sheet's state for one mower: which provider a request would use, the proposal
  * on screen (an open one of the mower, one opened by link, or a new request) polled about once a

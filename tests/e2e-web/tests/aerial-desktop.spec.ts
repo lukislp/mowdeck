@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The aerial photo under the mower map (ADR 0054), desktop and phone, against the stack's fake
  * WMS (tests/e2e-web/fake-wms), which paints a synthetic garden at the simulator map's

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing defaults per mower: the API, its authorization, the audit and ``MowerOut``."""
 
 from uuid import uuid4

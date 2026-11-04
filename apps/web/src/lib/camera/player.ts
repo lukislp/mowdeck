@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Camera players: what the viewer needs from a video source. `fake` sessions draw the test
  * pattern on a canvas; `relay` sessions play MowDeck's camera relay over WHEP

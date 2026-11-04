@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway for a still image of a mower's camera (core NATS request/reply on
 ``gateway.mower.<id>.photo``, the subject Vision uses; ADR 0045). The gateway takes it with the
 mower's own photo function or through the camera relay's frame tap."""

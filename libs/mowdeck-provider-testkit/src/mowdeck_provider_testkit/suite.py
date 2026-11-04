@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The pytest suite a provider package inherits: :class:`ProviderConformance`.
 
 Usage in a provider package's tests (the class name must start with ``Test``)::

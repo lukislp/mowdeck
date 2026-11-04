@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Start settings of a schedule (desktop, 1280 x 800; ADR 0024 amendment 2026-10-24): the
  * editor offers exactly what the simulated mower declares, with the start sheet's own controls

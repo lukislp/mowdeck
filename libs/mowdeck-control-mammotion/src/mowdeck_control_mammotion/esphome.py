@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """BLE through an ESPHome Bluetooth Proxy (extra ``esphome``), as in spike 0001 step 4.
 
 The proxy runs the stock ESPHome ``bluetooth_proxy`` component. MowDeck connects to its native

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Ed25519 signing keys and their public JWK form (RFC 8037).
 
 The key id (``kid``) is the RFC 7638 thumbprint of the public key, so the same key always has

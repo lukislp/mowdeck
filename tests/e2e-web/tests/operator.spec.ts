@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 4 Task 22, operator console and plan display (desktop 1280 x 800, plus phone shots): a
  * fresh user made an operator admin through Identity's CLI (`grant-platform-admin`, run in the

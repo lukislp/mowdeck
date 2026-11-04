@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { describe, expect, it } from 'vitest';
 
 import { bulkTargets, lineStates, mergeAnswers, outcomeCounts } from './bulk';

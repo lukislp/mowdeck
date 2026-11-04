@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Webhooks: signature, exactly-once, and the status mapping to Entitlements (fake bus)."""
 
 from datetime import timedelta

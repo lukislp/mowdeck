@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of a schedule's start settings (run: pnpm --filter e2e-web screens): the
  * editor's "Mähmuster" panel with a pattern, angle, blade height, speed and the job options

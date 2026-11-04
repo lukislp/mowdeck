@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Signing keys: creation, rotation and the published JWKS.
 
 Statuses: ``next`` (published, not signing) -> ``active`` (signing) -> ``retiring`` (published

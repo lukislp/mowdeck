@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * APNs registration of the iOS shell (direct to Apple, no Firebase; ADR 0036).
  *

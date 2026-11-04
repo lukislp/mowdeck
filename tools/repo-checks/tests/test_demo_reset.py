@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """demo/reset.sh (ADR 0068, docs/ops/demo.md): its safety checks and the optional host override.
 
 Most tests run the script against a stand-in ``docker`` that records its arguments and answers

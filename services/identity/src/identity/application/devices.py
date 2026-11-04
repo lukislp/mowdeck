@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Known devices and the new-login alert (ADR 0065).
 
 Every login records the device it came from: a random id in the HttpOnly cookie

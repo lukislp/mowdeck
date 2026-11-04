@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Live Activities and widget reloads (ADR 0059): the domain values and the content rules.
 
 A *job* is on while the mower mows, is paused or drives back to the dock. The iOS app shows it as

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MowDeck umbrella chart: every MowDeck service, the web app, the migration and authorization
 # bootstrap jobs, an Ingress, and (optionally) NATS, OpenFGA and an in-cluster PostgreSQL
 # (CloudNativePG Cluster). Operations manual: docs/ops/helm.md; decision: ADR 0029.

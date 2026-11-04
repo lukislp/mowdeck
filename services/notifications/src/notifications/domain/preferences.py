@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Per-user filtering: enabled kinds, mower selection and quiet hours (time zone aware)."""
 
 from datetime import datetime

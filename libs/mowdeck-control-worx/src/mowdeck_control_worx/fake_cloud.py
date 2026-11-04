@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """A fake Worx cloud for development and the browser tests (``ProviderContext.fake``).
 
 The fake implements the adapter's session port (:class:`~mowdeck_control_worx.session.\

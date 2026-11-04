@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The job context and the ``resume`` rules (pure): which job the mower runs, which areas are
 done, current and next, the entry of the way to the next area, when ``resume`` may be proposed
 and when ``resume_mow`` may be sent; the prompt and schema that offer it."""

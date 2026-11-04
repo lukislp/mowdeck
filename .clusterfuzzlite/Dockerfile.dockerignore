@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Used by BuildKit for .clusterfuzzlite/Dockerfile (build context: repository root).
 # Allow list: the uv workspace (every member's pyproject.toml is needed to read uv.lock), the
 # fuzz targets and the ClusterFuzzLite files.

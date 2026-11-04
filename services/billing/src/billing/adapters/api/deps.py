@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the owner gate, the request base URL, error mapping.
 
 * Account endpoints act on the account of the verified token (``acc``), never on a path value.

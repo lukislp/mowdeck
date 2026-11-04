@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Delivery channels and their registry (extension point ``mowdeck.notification_channels``).
 
 A channel is any object with a ``name`` and ``async send(delivery) -> DeliveryResult`` (the

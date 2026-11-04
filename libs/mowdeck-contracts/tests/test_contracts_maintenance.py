@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Maintenance command contracts (ADR 0048): the five command kinds, the capability list and
 their place in the command union."""
 

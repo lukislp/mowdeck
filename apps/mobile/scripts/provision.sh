@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One-time (and once a year) on the Mac: create the Apple Development certificate, register the
 # iPhone and create the development provisioning profile of app.mowdeck.mobile with the Push
 # Notifications and Time Sensitive Notifications capabilities (paid developer account).

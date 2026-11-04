@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SQLAlchemy table definitions. Alembic compares migrations against :data:`metadata`.
 
 Column names equal the field names of the rows in ``telemetry.domain.models``. Every table

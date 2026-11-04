@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1.7
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MowDeck web app: SvelteKit static build served by an unprivileged nginx (uid 101, port 8080).
 # Build context: the repository root (pnpm workspace). Run read-only with a tmpfs on /tmp.
 # Base images: public defaults, overridable with --build-arg (the pinned list is

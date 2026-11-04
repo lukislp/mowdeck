@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pull requests run the ci.yml jobs their changes need, and CI-only changes release nothing.
 
 * ``scripts/ci_scope.py`` maps changed paths to ci.yml jobs: CI configuration needs none of the

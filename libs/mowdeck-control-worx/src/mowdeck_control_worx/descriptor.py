@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """What the Worx provider asks the user for (ADR 0066): public data, no vendor SDK.
 
 Worx Landroid, Kress and LandXcape mowers share one cloud (Positec), reached through three brand

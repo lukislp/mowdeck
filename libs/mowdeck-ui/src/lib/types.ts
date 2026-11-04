@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /** Mower activities as in the contracts (`MowerActivity`); the library keeps its own copy so it
  * has no dependency on generated API types. */
 export const ACTIVITIES = [

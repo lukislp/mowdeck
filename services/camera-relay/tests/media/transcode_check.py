@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Runs inside the relay container of the media test stack (``docker compose exec``).
 
 Replays the synthetic H.265 stream (``camera-h265.h265``, 271 frames, 10 fps) in real

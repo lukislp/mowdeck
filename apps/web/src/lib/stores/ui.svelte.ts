@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Small per-tab UI state: toasts, theme, install offer, service worker update. Only the theme
  * choice and the install hint flags are kept in localStorage (`mowdeck.theme`,

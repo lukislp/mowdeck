@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The reconcile loop: what the media server sees, fed to the use cases every 2 s.
 
 One pass (:meth:`Reconciler.run_once`):

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The agora source driver against a fake bridge server: join, frames to muxers, renewal and
 rejoin, crash, stop, availability and secrets (ADR 0045 step 7)."""
 

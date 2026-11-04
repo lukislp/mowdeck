@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Dual link (ADR 0038): the Mammotion cloud plus a Bluetooth bridge next to the mower.
 
 :class:`MammotionDualConnection` is a

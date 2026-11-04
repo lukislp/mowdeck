@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The tuples Fleet owns: where an object sits in ``account > site > group > mower``.
 
 Only ``account`` and ``parent`` relations, written through ``TupleWriter(owner="fleet")``

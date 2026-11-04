@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   An old route of a settings section (`/account`, `/settings/users`, ...): forwards to its
   anchor on the one settings page and keeps the query and an anchor of its own.

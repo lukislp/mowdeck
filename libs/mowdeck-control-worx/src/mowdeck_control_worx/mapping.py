@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Worx data (:class:`~mowdeck_control_worx.snapshot.WorxMower`) to MowDeck contracts.
 
 Activities: the mower reports a status (``dat.ls``) and an error (``dat.le``).

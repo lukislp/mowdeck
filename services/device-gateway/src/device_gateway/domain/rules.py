@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rules of the Device-Gateway as pure functions."""
 
 from collections.abc import Iterator, Mapping

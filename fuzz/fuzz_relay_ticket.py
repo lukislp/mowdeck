@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera relay tickets (services/camera-relay): the bearer token of every WHEP request.
 
 The media server's auth callback hands the relay whatever a client sent. Properties:

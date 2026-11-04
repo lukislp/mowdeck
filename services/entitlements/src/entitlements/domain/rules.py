@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan resolution: which plan and status apply to an account at a moment."""
 
 from datetime import datetime, timedelta

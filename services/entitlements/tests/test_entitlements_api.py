@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API of entitlements: resolution with billing on and off, trial and grace transitions,
 operator endpoints, cross-account isolation."""
 

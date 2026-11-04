@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The connection of one mower: state, commands and their translation, vendor errors."""
 
 import asyncio

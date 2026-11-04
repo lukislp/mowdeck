@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign in with GitHub (ADR 0051), desktop Chromium against the test stack's fake GitHub
  * (tests/e2e-web/fake-github, only in docker-compose.e2e.yml): the browser goes to its

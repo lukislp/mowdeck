@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Live Activities for mowing jobs and reload pushes for the iOS widgets (ADR 0059).
 
 The iOS app registers per installation: its ActivityKit push-to-start token and whether it has

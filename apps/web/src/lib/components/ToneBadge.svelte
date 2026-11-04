@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A state word with a glyph in the state colour language (rain verdicts, run outcomes): colour
   never alone, the offline tone with a dashed outline. `value` lands in `data-value` for tests.

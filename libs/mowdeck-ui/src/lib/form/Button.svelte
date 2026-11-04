@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- A command button (48 px target). `primary` is ink filled; `danger` uses the error tone for
 destructive account actions (never the stop colours). -->
 <script lang="ts">

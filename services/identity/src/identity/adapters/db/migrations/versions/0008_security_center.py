@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Security center (ADR 0065): known devices, password status, new-login alerts.
 
 * ``known_devices``: the browsers and app installations a user signed in from (the SHA-256 of

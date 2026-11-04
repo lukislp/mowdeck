@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The live camera of one mower (ADR 0032) with its controls. The picture itself is
   `CameraStage` (shared with the drive view, ADR 0044): it owns the viewer and with it the one

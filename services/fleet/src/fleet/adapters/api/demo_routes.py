@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): the purge of one expired sandbox account.
 
 Only Identity's cleanup job calls this (404 outside demo mode, 403 without the seed secret).

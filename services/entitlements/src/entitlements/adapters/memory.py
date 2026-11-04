@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory ``Store`` for tests and development (same contract as ``SqlStore``).
 
 A transaction works on copies and replaces the state on commit, so a failing use case leaves

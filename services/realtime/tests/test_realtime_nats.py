@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """JetStream: a state and a command result published on NATS reach clients of two instances.
 
 Two Realtime apps share one NATS server; both receive every message (ephemeral consumers, no

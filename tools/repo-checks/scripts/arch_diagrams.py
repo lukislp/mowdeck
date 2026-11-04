@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Generate the architecture diagrams (Mermaid) from the code, so they never go stale.
 
 Usage (from the repository root)::

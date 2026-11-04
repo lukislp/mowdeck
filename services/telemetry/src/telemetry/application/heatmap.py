@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Heatmap layers over the mower's local map frame (pure computation, no I/O).
 
 Positions arrive as WGS84 rows of the track; they are converted to the map's local metres with

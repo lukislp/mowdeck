@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Past mowing days for demo mowers (ADR 0068), simulated once a day per garden (ADR 0079).
 
 The demo seed job and every demo sandbox pool fill (ADR 0076) ask for a week of history for

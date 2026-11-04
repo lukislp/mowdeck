@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Public demo mode (ADR 0068): the response label, the policy and the seed secret."""
 
 from typing import Annotated

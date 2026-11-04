@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 2 gate (docs/phases.md), steps 1 to 11 of the design, on a phone (390 x 844):
  * an owner registers, adds a simulated mower in the UI, sees it docked, chooses the areas on the

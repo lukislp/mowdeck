@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The frame tap: still frames and frame streams of a relay session for Vision (ADR 0045).
 
 Vision (through the Device-Gateway) gets its camera frames from the relay instead of a headless

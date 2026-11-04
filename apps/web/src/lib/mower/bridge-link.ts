@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure parts of the Bluetooth bridge sheet: the form checks, the order and preselection of the
  * scanned mowers, and the texts of a scan that gave no result (design 3). No DOM, no runes, so

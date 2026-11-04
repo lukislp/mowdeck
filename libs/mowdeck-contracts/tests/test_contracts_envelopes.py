@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Envelope validation rules and JSON round trips."""
 
 from datetime import UTC, datetime, timedelta, timezone

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Links and firmware (ADR 0038) against the simulator only: the bridge switch, the firmware
 safety rules of the controller, the update flow and the fake bridge scan."""
 

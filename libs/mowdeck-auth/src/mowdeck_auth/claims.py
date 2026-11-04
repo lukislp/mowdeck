@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Access token claims and their mapping to :class:`~mowdeck_contracts.v1.Principal`.
 
 | Claim | Principal field | Content |

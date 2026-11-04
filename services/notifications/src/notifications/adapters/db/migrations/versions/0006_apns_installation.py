@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """One APNs registration per app installation.
 
 ``apns_devices`` gets a nullable ``installation_id`` (a UUID the iOS shell keeps in the

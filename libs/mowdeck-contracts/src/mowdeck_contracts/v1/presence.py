@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Who is watching an account live (public demo sandboxes, ADR 0076).
 
 In a demo installation Realtime announces on the core NATS subject :data:`ACCOUNT_PRESENCE`

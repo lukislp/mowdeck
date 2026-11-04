@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``can_view`` and ``can_drive`` on mowers through ``mowdeck-authz`` (OpenFGA, cached for its
 TTL)."""
 

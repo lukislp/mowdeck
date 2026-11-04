@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Bulk commands of the fleet pages ("pause all", "all to dock"). Fleet has them per site and
  * per group (`POST /sites/{id}/commands`, `POST /groups/{id}/commands`) and checks every mower

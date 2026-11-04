@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Sign in with Apple (ADR 0052): the client secret, the ID token validation, linking, the login,
 unlinking, refusals and the settings.
 

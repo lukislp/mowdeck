@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The provider spec, its descriptor, the mower options and how the gateway loads it."""
 
 import inspect

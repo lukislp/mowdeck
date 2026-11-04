@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure rules of the spot sheet (the flow itself is `spot-sheet.svelte.ts`): the limits of the
  * spot, the turn style (ADR 0043), the Planner request for a spot and its pattern, the preview as a mow path for the map,

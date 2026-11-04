@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * WebAuthn in the browser (passkeys, ADR 0050): feature detection and the JSON encoding.
  *

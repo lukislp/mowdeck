@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera photos of error and theft events (ADR 0056).
 
 ``notification_images`` holds one photo per event (JPEG bytes, a day at most, ``data`` NULL when

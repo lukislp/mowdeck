@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The mower's own lifetime battery cycle counter on the health totals (Mammotion ``bat_cycles``).
 
 Revision ID: 0008

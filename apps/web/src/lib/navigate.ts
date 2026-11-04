@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Client-side navigation to a path that comes from outside the code: a `?next=` parameter, a
  * tapped notification, a deep link of the native shell, a message of the service worker.

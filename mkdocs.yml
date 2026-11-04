@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 site_name: MowDeck
 site_description: Self-hosted, manufacturer-independent control centre for robotic lawn mowers
 repo_url: https://github.com/lukislp/mowdeck

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // (a) Demo visitors (ADR 0068): load the app with an empty cache, "Try the demo", the mower list,
 // one mower page, then hold the live view (ADR 0018) for minutes while telemetry arrives. Every
 // virtual user is one concurrent visitor with its own client address.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Picks the player for a session's provider: `fake` the test pattern, `relay` the WHEP player
  * of MowDeck's camera relay (ADR 0045), `agora` the direct vendor path (ADR 0032). The Agora

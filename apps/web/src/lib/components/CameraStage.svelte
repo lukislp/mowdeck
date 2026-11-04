@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The picture of a mower's live camera (ADR 0032, ADR 0044): it owns the viewer (one camera
   session while it is mounted; unmounting or leaving the page leaves the channel) and draws its

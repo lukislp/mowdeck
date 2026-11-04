@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Worx error lexicon (ADR 0067): every code of pyworxcloud's table, consistent with
 ``MowerState.error_category`` and registered through ``mowdeck.error_lexicons``."""
 

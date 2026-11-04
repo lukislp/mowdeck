@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The generated NATS permissions against a real server (ADR 0074).
 
 Skipped unless ``MOWDECK_TEST_NATS_AUTH_URL`` points at a NATS server with JetStream that runs

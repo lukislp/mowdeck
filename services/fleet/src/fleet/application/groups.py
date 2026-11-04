@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Groups: sets of mowers inside one site or across the sites of an account."""
 
 from collections.abc import Mapping

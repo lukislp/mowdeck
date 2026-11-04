@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A software WebAuthn authenticator for the passkey tests (a plain module, no conftest.py).
 
 :class:`SoftAuthenticator` answers ``navigator.credentials.create()`` and ``.get()`` options the

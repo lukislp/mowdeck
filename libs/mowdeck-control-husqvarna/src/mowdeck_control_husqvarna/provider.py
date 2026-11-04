@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The Husqvarna cloud as a MowDeck cloud provider (ADR 0066).
 
 :class:`HusqvarnaProvider` owns one :class:`~mowdeck_control_husqvarna.pool.AccountPool` per

@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{/*
 Migration Job of one service: `python -m <module>` (Alembic upgrade head), never inside the
 service process. Call with (dict "ctx" $ "component" "identity" "key" "identity" "image" "identity"

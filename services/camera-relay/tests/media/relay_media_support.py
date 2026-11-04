@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The media test stack (compose.yml) and a fake Device-Gateway on its NATS.
 
 Runs only with ``MOWDECK_TEST_RELAY_MEDIA=1`` and a built relay image

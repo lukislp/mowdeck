@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // ESLint flat config of matter-server, the one TypeScript service. The workspace config
 // (../../eslint.config.js) leaves services/ to the Python tooling, so this package brings its own
 // with the same rules for plain TypeScript. Prettier owns formatting.

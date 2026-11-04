@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Shared helpers of the fuzz targets (standard library only).
 
 Every target is a module ``fuzz_<name>.py`` next to this file with

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Every way a session ends closes its connection exactly once: removal, a link change, a
 replacement, the gateway shutting down, and a removal while a close is still running."""
 

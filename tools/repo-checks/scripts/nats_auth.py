@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The NATS users of MowDeck and the subjects each one may use (ADR 0074).
 
 Usage (from the repository root)::

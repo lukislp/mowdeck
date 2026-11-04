@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** RFC 9457 problem details as the services send them (``application/problem+json``). */
 
 export interface ProblemFieldError {

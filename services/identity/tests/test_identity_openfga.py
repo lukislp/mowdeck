@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Integration with a real OpenFGA: Identity writes the tuples, OpenFGA answers the checks.
 
 Runs when ``MOWDECK_TEST_OPENFGA_URL`` (and ``MOWDECK_TEST_OPENFGA_TOKEN``) is set, like the

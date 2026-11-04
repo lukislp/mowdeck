@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   One linked vendor account on the settings page (ADR 0034, ADR 0066): the vendor and the
   account's identity, its status (connected, needs attention, provider not enabled), the

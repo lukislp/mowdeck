@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The demo entry of the sign-in page (ADR 0068) with demo sandboxes (ADR 0076): the note, the
  * visitor flag, a fresh sandbox for a visitor whose sandbox is gone, "the demo is full" with its

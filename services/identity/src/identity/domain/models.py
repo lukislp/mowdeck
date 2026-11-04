@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entities of Identity. Plain mutable dataclasses; repositories store and load them.
 
 Field names equal the column names of the database tables, so the adapters map them 1:1.

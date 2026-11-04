@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Bluetooth bridge sheet's flow, without any markup (design 3): step 1 host, port and key,
  * step 2 the scan through the proxy (one at a time, cancelled when the sheet closes) and the

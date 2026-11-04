@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Cache invalidation across processes (install the ``fastapi`` extra, which brings the kit).
 
 Identity publishes ``identity.grants.changed`` (payload

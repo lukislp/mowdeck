@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Operator console, one account: Identity's record (name, kind, status, owner, created), the plan
   Entitlements stores for it and the plan that applies now, and the plan history (newest first:

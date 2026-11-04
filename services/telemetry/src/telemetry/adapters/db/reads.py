@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """One pooled connection for all reads of a request (docs/ops/load-testing.md).
 
 A read of the stores normally checks a connection out of the pool, pings it, runs one query and

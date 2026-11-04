@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The typed state on the mower page (desktop, 1280 x 800): the reception and health panel shows
  * the simulated mower's RTK fix, satellites, correction age, Wi-Fi signal, uplink, self-check and

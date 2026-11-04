@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** A coarse clock for "x s ago" texts: one shared tick, so a list of 50 ages costs one timer. */
 class Clock {
   now = $state(Date.now());

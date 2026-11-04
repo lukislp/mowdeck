@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Test helpers: keys, minted tokens and a fake JWKS endpoint.
 
 ::

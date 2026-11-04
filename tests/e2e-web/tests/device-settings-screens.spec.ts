@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the mower's own settings (run: pnpm --filter e2e-web screens): the
  * section "Am Mäher" of the simulated mower right after a change the mower applied, light and

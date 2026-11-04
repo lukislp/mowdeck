@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Adding mowers (desktop). The add-mower form offers exactly the kinds of Fleet's
  * `GET /api/v1/fleet/connection-kinds`. Cloud mowers come from a linked Mammotion account: the

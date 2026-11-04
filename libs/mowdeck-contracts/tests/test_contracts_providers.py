@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Cloud provider descriptors and their credential checks (ADR 0066)."""
 
 from typing import Any

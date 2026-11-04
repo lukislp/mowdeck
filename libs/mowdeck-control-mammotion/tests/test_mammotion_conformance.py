@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The provider conformance kit (ADR 0069) on the fake Mammotion cloud."""
 
 from collections.abc import Iterator

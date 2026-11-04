@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """RTK base stations (ADR 0047): register, list, rename, remove; link mowers to them; ask for and
 install their firmware through a linked mower.
 

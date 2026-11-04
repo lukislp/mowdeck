@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # shellcheck shell=bash
 # gh_retry: run a GitHub CLI (or other GitHub API) command and retry it when GitHub answers with a
 # rate limit, so a workflow step waits for the GITHUB_TOKEN quota instead of failing on it.

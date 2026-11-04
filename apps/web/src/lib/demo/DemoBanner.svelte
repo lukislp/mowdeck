@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The demo band (ADR 0068): pinned above every page of a demo installation, in the browser and
   inside the app shells, and never dismissible. It sits in the strip the page frame reserves at

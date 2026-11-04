@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Heat layers of the mower map: the layer and period choice, the time window of a period and
  * the request to Telemetry's heatmap endpoint

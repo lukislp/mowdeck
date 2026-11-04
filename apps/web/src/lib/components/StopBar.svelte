@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The emergency stop of a mower sub-page (drive, health) as a fixed command bar without other
   actions: one tap sends `emergency_stop` through Fleet, the status follows the command result.

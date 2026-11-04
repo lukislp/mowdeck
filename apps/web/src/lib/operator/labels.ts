@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Words for the operator console: account kinds and statuses (Identity), probe verdicts. */
 import { m } from '#lib/paraglide/messages.js';
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Verifying access tokens locally: no call to Identity per request.
 
 Rules (in this order; the first failure rejects the token with a :class:`TokenError`):

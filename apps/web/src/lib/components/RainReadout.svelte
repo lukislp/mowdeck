@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The rain readout of the mower page's instrument column: what falls now (or "trocken"), the
   next hours as a strip, and the rain pause when the mower's schedule holds. Without site

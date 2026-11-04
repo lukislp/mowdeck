@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- A section of a page: uppercase label on a hairline, optional actions, content. -->
 <script lang="ts">
   import type { Snippet } from 'svelte';

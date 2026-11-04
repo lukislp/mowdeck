@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Health history: running totals, UTC day totals and blade changes per mower.
 
 Revision ID: 0004

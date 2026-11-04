@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The Helm chart (infra/helm/mowdeck) and the Compose stack cannot drift apart.
 
 * Every service of infra/compose/docker-compose.yml has a template in the chart (a workload, a

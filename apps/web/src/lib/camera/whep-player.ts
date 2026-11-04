@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The player of `relay` sessions (ADR 0045): MowDeck's camera relay serves every camera of the
  * mower over WebRTC with WHEP, through the same origin (`/media/whep/...`), so no vendor SDK and

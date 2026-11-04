@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // ESLint flat config of the web frontend workspace (apps/web, apps/mobile, libs/mowdeck-ui,
 // tests/e2e-web, tools/ts-codegen). Prettier owns formatting; this config owns correctness and the
 // i18n rule.

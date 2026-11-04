@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** The page the shell shows when the stored server cannot be reached (`server.errorPath`). */
 import '@mowdeck/ui/styles/fonts.css';
 import '@mowdeck/ui/styles/tokens.css';

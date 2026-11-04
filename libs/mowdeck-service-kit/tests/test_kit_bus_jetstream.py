@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """JetStreamBus integration tests against a real NATS server.
 
 Skipped unless ``MOWDECK_TEST_NATS_URL`` points at a NATS server with JetStream enabled, e.g.::

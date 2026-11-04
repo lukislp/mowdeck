@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The frame tap (Vision through the relay): leases for exactly the request, reuse of a running
 session, the Vision limits, no lease leak on cancellation or timeout, account separation and
 frame streams."""

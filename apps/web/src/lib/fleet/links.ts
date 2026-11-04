@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fleet's link endpoints of a mower (ADR 0038): the Bluetooth bridge next to the primary
  * connection, typed from `openapi/fleet.json`. The live state of an open link arrives with the

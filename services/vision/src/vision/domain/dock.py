@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Return to dock as a recovery option (pure, manufacturer independent).
 
 The generic ``return_to_dock`` command lets the mower drive home on its own mapped areas and

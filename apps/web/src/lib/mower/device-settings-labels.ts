@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Words of the mower's own settings (de and en through Paraglide): the known keys of the
  * contract (`SETTING_KEYS`) with a hint, their options and the groups. A key, option or group the

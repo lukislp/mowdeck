@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The spot of a spot-mowing run on the map: a circle around a tapped point or a drawn polygon,
  * both in the mower's local metres. Pure geometry, unit tested without a DOM

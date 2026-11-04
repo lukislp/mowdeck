@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Keep the packaged JSON form of the authorization model in sync with ``model.fga``.
 
 ``infra/openfga/model.fga`` is the source of truth. ``mowdeck-authz`` ships its JSON form

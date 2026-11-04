@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Names others read (sites, groups, areas, mowers) lose bidi overrides and zero-width
 characters, so nobody can spoof a label for the other people of the account."""
 

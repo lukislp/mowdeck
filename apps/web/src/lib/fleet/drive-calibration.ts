@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fleet's drive calibration of a mower (ADR 0042): `PUT` stores a measured fit, `DELETE` removes
  * it (spot runs then use the default values), and `MowerOut.drive_calibration` shows the stored

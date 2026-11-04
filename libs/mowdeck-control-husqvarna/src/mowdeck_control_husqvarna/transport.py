@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The HTTP and websocket port of the adapter.
 
 Every byte the adapter exchanges with Husqvarna goes through an :class:`HttpTransport`: the token

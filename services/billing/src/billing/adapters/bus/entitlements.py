@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``EntitlementsGateway`` over core NATS: ``entitlements.plan.set`` (internal request)."""
 
 from mowdeck_contracts.v1 import PlanSetReply, PlanSetRequest

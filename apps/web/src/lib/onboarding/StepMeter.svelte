@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The tour's progress as an instrument scale: one segment per step, filled when done, hatched
   when skipped, a hairline when open; the count in mono beside it. Screen readers get the

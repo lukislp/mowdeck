@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The GPL source offer of a release (scripts/source_offer.py, docs/ops/release.md)."""
 
 from __future__ import annotations

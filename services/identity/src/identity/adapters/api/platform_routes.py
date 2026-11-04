@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The operator level under ``/api/v1/identity/platform`` (Betreiber-Konsole, Phase 4).
 
 Only operator admins: ``can_manage_accounts`` on ``platform:main`` in OpenFGA (account owners

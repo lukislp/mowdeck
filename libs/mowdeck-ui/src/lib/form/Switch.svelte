@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   An on/off setting as a 48 px row: label (and hint) on the left, a square toggle on the right
   that says ON or OFF in words besides its position, so the state never depends on colour.

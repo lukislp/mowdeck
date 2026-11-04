@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Render the source images of the app icons and splash screens into apps/mobile/resources/.
 
 The artwork is the web app's icon (apps/web/static/icons/icon.svg): graphite mowing lanes with

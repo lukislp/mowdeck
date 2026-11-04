@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """create_app lifecycle, graceful shutdown, bus wiring, tracing, db helpers and run()."""
 
 import asyncio

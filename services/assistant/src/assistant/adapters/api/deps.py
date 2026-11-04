@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the caller with its token, the error mapping."""
 
 from typing import Annotated, ClassVar

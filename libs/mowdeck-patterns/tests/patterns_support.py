@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Sample shapes shared by the tests of mowdeck-patterns (imported, not a conftest)."""
 
 from mowdeck_patterns import Area, MowerSpec

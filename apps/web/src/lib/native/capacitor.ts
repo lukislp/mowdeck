@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Capacitor bridge of the native app shells (apps/mobile, ADR 0036), as the web app sees it.
  *

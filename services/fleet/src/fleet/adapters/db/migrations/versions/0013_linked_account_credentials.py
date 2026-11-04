@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Credential fields of any cloud provider on linked accounts (ADR 0066).
 
 Additive: ``linked_accounts.public_credentials`` (JSONB, the non-secret credential fields of the

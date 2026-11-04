@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Plan enforcement for services: the Entitlements client, its problem types and a FastAPI gate.
 
 Every enforcement point is one call::

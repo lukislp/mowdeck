@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``PlanCatalog`` over HTTP: the public ``GET /api/v1/entitlements/plans`` of Entitlements.
 
 Plans are data in Entitlements (ADR 0028); Billing only adds prices. Names, descriptions and

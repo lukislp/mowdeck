@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Billing models: accounts, customers, subscriptions, invoices, webhook events and the
 provider independent view of a provider event (:class:`ProviderEvent`).
 

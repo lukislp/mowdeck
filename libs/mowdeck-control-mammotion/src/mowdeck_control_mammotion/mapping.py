@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Pure translation between PyMammotion data structures and MowDeck contracts.
 
 Nothing here does I/O. The functions read the real PyMammotion data classes (re-exported by

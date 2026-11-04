@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Telemetry heartbeat while a drive session is open (AI assist watches it every few seconds)."""
 
 import asyncio

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MowDeck foundation stack (self-hosted mode).
 #
 # Start:  docker compose -f infra/compose/docker-compose.yml up -d --wait

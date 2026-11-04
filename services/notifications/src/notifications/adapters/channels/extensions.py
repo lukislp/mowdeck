@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Documented extension points for further channels (interfaces only, no implementation).
 
 A new channel is a package with a class that satisfies

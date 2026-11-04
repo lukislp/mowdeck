@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pure rules: answer validation and evaluation, start and abort rules, geofence,
 verification, model families and base URL policies, the scene context."""
 

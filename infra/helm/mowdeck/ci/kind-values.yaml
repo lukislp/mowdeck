@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Values of the kind install test (infra/helm/kind-test.sh, .github/workflows/helm-kind.yml), on
 # top of values-homelab.yaml: placeholder secrets, plain HTTP through a port-forward and the
 # development settings the Phase 1 acceptance test expects from the Compose example file.

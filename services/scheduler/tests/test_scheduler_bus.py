@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bus adapters: the state and map handlers, the Fleet gateway, the event publisher, the app's
 startup and shutdown, and the ``fleet.commands.issue`` round trip on the in-memory bus."""
 

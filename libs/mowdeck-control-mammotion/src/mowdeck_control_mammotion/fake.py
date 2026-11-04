@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """An in-memory :class:`~mowdeck_control_mammotion.port.MammotionPort` for tests and dry runs.
 
 :class:`FakeMammotionPort` holds a real PyMammotion ``MowerDevice`` (built by

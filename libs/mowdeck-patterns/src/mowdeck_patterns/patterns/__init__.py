@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The built-in patterns (registered as entry points in this package's ``pyproject.toml``)."""
 
 from typing import Any

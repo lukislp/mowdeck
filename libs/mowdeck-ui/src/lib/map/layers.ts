@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The layer model of `MowerMap`: pure functions that turn a map snapshot, the mower state and
  * the driven route into layer descriptors in map coordinates. `MowerMap.svelte` only draws

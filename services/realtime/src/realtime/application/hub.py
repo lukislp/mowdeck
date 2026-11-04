@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The hub of one Realtime instance: open sessions, the mower index and the fan-out.
 
 Every instance receives every ``telemetry.mower.*`` and ``command.result.mower.*`` message

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A fake GitHub for the identity tests (ADR 0051): the OAuth endpoints and ``GET /user`` behind
 an ``httpx.MockTransport``, strict like the real one.
 

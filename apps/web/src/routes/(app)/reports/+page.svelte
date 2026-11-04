@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Reports per site (or the whole account) and period (today, 7 days, 30 days, custom; UTC days
   as Telemetry counts them): mowing hours, blade hours, distance, jobs, faults by code and

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @vitest-environment node
 /**
  * The `source` of /config.json as nginx/40-mowdeck-runtime-config.sh renders it from the image's

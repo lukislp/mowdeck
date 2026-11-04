@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """NATS: ``entitlements.check`` over core NATS with the kit client, ``identity.account.created``
 on JetStream, and ``entitlements.plan.changed`` dropping the client's cache.
 

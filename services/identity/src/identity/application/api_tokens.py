@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """API tokens: long-lived credentials with explicit grants, capped at the creator's rights.
 
 A token is its own subject (``api_token:<id>``) with ``member`` on its account and ``grant_*``

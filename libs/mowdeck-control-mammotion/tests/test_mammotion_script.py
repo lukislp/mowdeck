@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The owner script runs end to end on the fake port (``--dry-run``)."""
 
 import importlib.util

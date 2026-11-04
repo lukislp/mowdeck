@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """RTK base station (ADR 0047) in the Mammotion adapter: the mapping from the mower's reports,
 the ``basestation_info`` details, the base station's firmware through the vendor's firmware
 service, the discovery's device type and the fake cloud. Fakes only, no network."""

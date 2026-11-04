@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /** Names of the design tokens (CSS custom properties in tokens.css), for code that needs
  * computed values (for example map layers): read them with `tokenValue`. */
 export const STATE_TOKENS = [

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The system prompt, the answer schema and the message layout shared by every model family.
 
 Structured output: models that support a JSON schema get it as ``response_format`` (LiteLLM maps

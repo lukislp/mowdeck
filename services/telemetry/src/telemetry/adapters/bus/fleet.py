@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Seeds the mower directory from Fleet (``fleet.mowers.list``, core NATS request/reply).
 
 The durable consumers start at new messages, so a Telemetry deployed after Fleet would miss the

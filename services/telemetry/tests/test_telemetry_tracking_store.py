@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tracking store contract on the memory store and on PostgreSQL (migration included)."""
 
 from collections.abc import AsyncIterator

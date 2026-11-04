@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The "assign plan" sheet: plan, status, an optional end of a trial or grace period (a local date,
  * sent as the end of that day) and the required reason (kept in the history). Without an end date

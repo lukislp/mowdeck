@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The permission catalogue: keys of the authorization model plus module descriptors.
 
 * Every key of ``mowdeck_authz.PERMISSION_RELATIONS`` is always present (``in_model``), with

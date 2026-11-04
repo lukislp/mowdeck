@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One shared Mammotion cloud session per set of credentials (ADR 0034).
 
 PyMammotion's ``MammotionClient`` holds every device of the account it logged in with, and a

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Stereo frames: proposals remember what each image was and whether it was a stereo pair;
 users keep their AI assist preferences.
 

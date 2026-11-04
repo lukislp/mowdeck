@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Connection options of a Husqvarna mower (``ConnectionConfig.options``).
 
 The gateway merges the linked account's credential fields (``app_key``, ``app_secret``) into the

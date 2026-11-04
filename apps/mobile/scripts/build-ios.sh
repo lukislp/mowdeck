@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Build the signed iOS app on the Mac: bundled pages, `cap sync ios`, `xcodebuild archive` with
 # automatic development signing (the certificate and profile from provision.sh). The web app is
 # not bundled; the app loads it from the MowDeck server (ADR 0036), so a server update needs no

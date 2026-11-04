@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Words for plan values: status (with the tone and glyph of `ToneBadge`), source, limits and
  * features. Statuses, sources and limits map through exhaustive switches, so a new contract value

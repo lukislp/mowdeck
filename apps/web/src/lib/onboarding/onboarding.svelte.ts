@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * State of the setup tour (ADR 0062): the user's choices from Identity (`/me/onboarding`, so
  * they follow the user from the browser to the iPhone app) and the facts read from the real

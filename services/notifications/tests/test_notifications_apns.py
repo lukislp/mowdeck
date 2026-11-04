@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """APNs: the provider token, requests per severity, answer mapping, the factory and settings,
 the device API, fan-out to devices, the outbox removing unregistered devices, and robustness: the
 request deadline, client replacement, one stream at a time against an APNs-like HTTP/2 server."""

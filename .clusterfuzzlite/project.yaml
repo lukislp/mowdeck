@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # ClusterFuzzLite project (https://google.github.io/clusterfuzzlite/): Python fuzz targets in
 # fuzz/, built with Atheris by .clusterfuzzlite/build.sh. See docs/dev/fuzzing.md.
 language: python

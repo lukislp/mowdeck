@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Who is acting: the authenticated principal.
 
 The fields mirror the claims of the short-lived access tokens issued by the Identity service

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Prices of the plans for the Billing service (ADR 0031). Plans themselves (limits, features,
 # trial days) are data in infra/entitlements/plans.yaml; this file only says at which price of
 # the payment provider a plan is sold.

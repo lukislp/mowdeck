@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Firing schedules: the ticker's work, manual runs and the follow-up of started jobs.
 
 Every replica ticks (``MOWDECK_SCHEDULER_TICK_SECONDS``). A tick claims due schedules one at a

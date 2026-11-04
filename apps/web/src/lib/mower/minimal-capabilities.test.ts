@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A minimal adapter (ADR 0066): a vendor that only connects, reports its state and starts,
  * pauses and docks the mower. MowDeck shows what a mower can do and nothing more, so every

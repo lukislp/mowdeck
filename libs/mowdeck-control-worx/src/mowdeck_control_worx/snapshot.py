@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """One Worx mower as the cloud describes it, read from plain JSON (no vendor SDK).
 
 The cloud lists an account's mowers at ``GET /api/v2/product-items`` (one "product item" each:

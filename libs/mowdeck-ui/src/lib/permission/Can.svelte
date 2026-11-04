@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   Permission gate: renders `children` when `allowed`, otherwise `fallback` or nothing. The app
   computes `allowed`; the gate only avoids offering what the server would refuse and never

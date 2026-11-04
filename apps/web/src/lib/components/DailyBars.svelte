@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   One metric of the last 30 UTC days as a strip of bars (no chart library): ink bars on a hairline
   baseline, scaled to the peak, the newest day on the right, the peak and the total as readouts

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Recurrence: weekly and every N days, in the site's time zone, across DST changes."""
 
 from datetime import UTC, date, datetime, time, timedelta

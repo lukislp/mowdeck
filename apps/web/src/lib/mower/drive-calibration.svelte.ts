@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The drive calibration block's flow, without any markup (ADR 0042): the free-room confirmation,
  * the start (`drive_calibrate`), the STOP (`spot_stop`, which also ends a calibration), storing a

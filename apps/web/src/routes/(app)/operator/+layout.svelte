@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The operator console (operator admins of the installation only): accounts, plans and system as
   tabs. The pages render once the operator probe answered 200; for everybody else a notice says

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Foundation
 
 /// Small, non-secret state the app and the widget extension share through the App Group

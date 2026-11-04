@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Login, refresh with rotation and reuse detection, logout, API token exchange, me, password.
 
 * Access tokens: EdDSA JWT, 10 minutes, claims from the database at issue time.

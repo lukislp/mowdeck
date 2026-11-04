@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Theft tracking mode (ADR 0058): state machine, lease, events, share links, public view,
 report, permissions, retention."""
 

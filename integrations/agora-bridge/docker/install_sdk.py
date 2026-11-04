@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """Image build step: place agora-python-server-sdk and the native SDK without running their
 installers.

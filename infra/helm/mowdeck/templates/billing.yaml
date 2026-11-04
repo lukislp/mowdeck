@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Billing: subscriptions and payments with the Stripe adapter (ADR 0031); sets the account
 plan in Entitlements (Compose services billing and billing-migrate, profile "billing").
 Off by default (services.billing.enabled=false): then nothing of it is rendered, which is what

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authentication plug-ins: every login method sits behind one of two interfaces.
 
 * :class:`CredentialAuthenticator`: credentials in the request (password, API token, passkey).

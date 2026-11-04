@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The public demo (ADR 0068) in the web app. The services enforce the demo; the app only labels
  * it, so nobody mistakes it for a real installation: the banner on every page (also inside the

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @vitest-environment node
 /**
  * The drive view's chips and labels stay readable in both themes.

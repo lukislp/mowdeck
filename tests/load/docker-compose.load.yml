@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Override for the load test stack (tests/load, docs/ops/load-testing.md). Use it on top of
 # docker-compose.yml and docker-compose.demo.yml, never on its own and never on a real
 # installation or the public demo:

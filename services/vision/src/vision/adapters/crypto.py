@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """AES-256-GCM for the users' provider secrets at rest (``MOWDECK_VISION_SECRETS_KEY``).
 
 The key is 32 bytes given as base64 (standard or url-safe) or 64 hex characters, like

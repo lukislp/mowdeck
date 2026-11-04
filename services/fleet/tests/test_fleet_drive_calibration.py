@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Drive calibration (ADR 0042): the gates of ``drive_calibrate`` and ``set_drive_speed``, the
 managed calibration options of the drive link, and ``PUT``/``DELETE
 /mowers/{id}/drive-calibration`` on a mower with a bridge link, on a simulated mower

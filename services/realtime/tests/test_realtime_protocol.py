@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The WebSocket protocol end to end: uvicorn in-process, real sockets, in-memory bus and OpenFGA.
 
 Authentication (timeout, bad token, service principal, expiry, refresh), subscriptions with

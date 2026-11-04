@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The coverage table of the CI job summary (tools/repo-checks/scripts/coverage_summary.py)."""
 
 from __future__ import annotations

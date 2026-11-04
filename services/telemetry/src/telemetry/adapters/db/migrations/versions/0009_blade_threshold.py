@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A blade hours threshold per mower on the health totals (null: the configured default).
 
 Revision ID: 0009

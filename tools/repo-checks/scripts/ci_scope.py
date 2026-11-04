@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Which jobs of ci.yml a pull request needs, and whether a change set is CI only.
 
 Two users, both on the runner's ``python3`` (3.12 or newer):
@@ -175,7 +178,8 @@ RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
         ),
         frozenset({"web"}) | STACK,
     ),
-    ((".gitignore", ".editorconfig"), NONE),
+    # REUSE.toml is checked by `reuse lint` in ci-config, which runs on every pull request.
+    ((".gitignore", ".editorconfig", "REUSE.toml"), NONE),
 )
 """Path patterns (fnmatch, ``*`` also matches ``/``) and the jobs they need; the first matching
 rule wins and a path without one needs every job."""

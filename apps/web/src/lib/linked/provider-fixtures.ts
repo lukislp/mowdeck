@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Provider descriptors for the app's unit tests (ADR 0066): the app knows no vendor, so its
  * tests use two neutral ones, `acme` (e-mail and password, tested on hardware) and `zeta`

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan enforcement in Realtime (ADR 0028): ``drive_start`` needs the feature
 ``manual_drive``; the refusal is ``drive_not_allowed`` and Fleet is never asked."""
 

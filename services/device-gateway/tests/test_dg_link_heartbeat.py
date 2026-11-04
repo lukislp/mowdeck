@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The link heartbeat (ADR 0040): ``heartbeat_at`` advances while the link is alive, the values
 and their ``observed_at`` stay, and a lost link stops the heartbeats with one offline state."""
 

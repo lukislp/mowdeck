@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Fan out state snapshots to any number of async subscribers.
 
 Adapters use :class:`StateBroadcaster` to implement ``watch_state()``; the controller uses it to

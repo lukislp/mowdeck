@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The adapter interface between MowDeck and one mower: :class:`MowerConnection`.
 
 An adapter translates between MowDeck contracts and one way of talking to a mower (simulated,

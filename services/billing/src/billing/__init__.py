@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions and payments: checkout, customer portal and provider webhooks that set the
 account plan in Entitlements (ADR 0031)."""
 

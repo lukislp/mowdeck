@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of the assistant under ``/api/v1/assistant`` (ADR 0075).
 
 ==========================================  ==============  =================================

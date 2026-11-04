@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   One row of the mower list (72 px, no card chrome): name and connection on the left, activity,
   battery and RTK as aligned columns, last update age. The whole row is one link.

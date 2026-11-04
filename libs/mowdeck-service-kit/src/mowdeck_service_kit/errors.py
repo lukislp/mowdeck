@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Uniform error handling: every error response is an RFC 9457 problem document.
 
 Raise a :class:`ServiceError` subclass from application code; the handlers installed by

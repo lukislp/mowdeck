@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Dependabot reaches every workspace member, and vendor library updates wait for the owner.
 
 * the uv workspace globs end without "/" (Dependabot's uv fetcher skips members otherwise, so

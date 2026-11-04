@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   Page frame: navigation (rail on desktop, bottom bar on phones) and the content. Pages with
   their own bottom command bar pass `navOnPhone={false}` so the command bar owns the thumb zone.

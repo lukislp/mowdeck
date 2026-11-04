@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The running guided tour (ADR 0073): which step is shown, the element it points at, and the
  * stored outcome. Everything outside (navigation, the DOM, the services, storage) comes in

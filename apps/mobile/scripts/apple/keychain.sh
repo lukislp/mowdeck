@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Signing material for the TestFlight job (.github/workflows/apple-testflight.yml). Everything
 # lands in one throwaway directory under RUNNER_TEMP and in a temporary keychain; "cleanup"
 # removes both and runs in an always() step. The Mac scripts next door (build-ios.sh and

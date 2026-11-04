@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions of Fleet.
 
 * ``fleet.mowers.list`` (core NATS request, queue ``fleet``): the registrations of a gateway

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Husqvarna data to MowDeck state, capabilities, map and device list."""
 
 from datetime import UTC, datetime, timedelta

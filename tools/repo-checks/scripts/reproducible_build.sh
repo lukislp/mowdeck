@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Builds every artefact MowDeck generates from its source files into one directory, for the
 # reproducible build check (.github/workflows/reproducibility.yml, docs/dev/reproducible-builds.md):
 #

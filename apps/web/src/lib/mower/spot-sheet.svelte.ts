@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The spot sheet's flow, without any markup: spot mode on the map (a circle around a tap, or a
  * polygon of up to eight taps, or the polygon of a missed spot), the pattern, spacing, speed,

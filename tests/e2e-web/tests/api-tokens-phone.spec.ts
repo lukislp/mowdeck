@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * API tokens on a phone (390 x 844, touch): with several revoked tokens on the account, creating
  * a token from the bottom of the form brings its one-time secret into view without scrolling

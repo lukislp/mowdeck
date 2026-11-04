@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The WebSocket endpoint ``GET /api/v1/realtime/ws``.
 
 The route only adapts Starlette's WebSocket to the :class:`~realtime.application.ports.Socket`

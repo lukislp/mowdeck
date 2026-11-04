@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Public demo (ADR 0068): the one-click sign-in, the seed call and what the demo refuses."""
 
 from typing import Any

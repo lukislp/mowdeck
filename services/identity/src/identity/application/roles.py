@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Roles (permission bundles of an account) and role assignments at a level.
 
 * Owner and Admin are fixed relations. Admin is assigned through its system role at account

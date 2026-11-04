@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Sites: create, list, read, change, delete; and the hidden default site of every account."""
 
 from collections.abc import Mapping

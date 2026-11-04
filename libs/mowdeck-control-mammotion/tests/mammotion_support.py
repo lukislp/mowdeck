@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Helpers for the Mammotion adapter tests (no conftest: imported explicitly)."""
 
 import base64

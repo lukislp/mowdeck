@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """External identities (ADR 0051): provider accounts (GitHub) linked to users, and the single-use
 OAuth round trips (state and PKCE challenge) of a sign-in or a link.
 

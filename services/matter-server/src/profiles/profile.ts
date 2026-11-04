@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A Matter device profile: how a mower appears on the Matter side. Matter has no mower device
  * type up to 1.5, so the one profile today is the Robotic Vacuum Cleaner (`rvc.ts`); when the CSA

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Connection options of the live camera (ADR 0032), kept per browser in `localStorage`
  * (`mowdeck.cameraOptions`). The defaults favour a stable picture over minimal latency.

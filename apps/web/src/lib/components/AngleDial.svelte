@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A round patch of lawn mowed in stripes at the next angle (ADR 0061), with the angles of the
   runs after it as numbered marks on the rim. The stripes turn to a new angle with a short

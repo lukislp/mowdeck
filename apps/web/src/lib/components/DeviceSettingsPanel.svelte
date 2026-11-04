@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The mower's own settings (ADR 0046), generated from its declaration (`MowerCapabilities.settings`):
   one row per setting, grouped (weather, battery, lights, driving, safety, voice, working hours),

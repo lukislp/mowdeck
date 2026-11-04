@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Proposals remember whether the photo was taken with the mower's light on.
 
 Revision ID: 0003

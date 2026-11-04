@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * API access (ADR 0064), desktop: a user creates a personal access token in the settings after a
  * step-up, sees the secret once with a quick start for this installation, scripts against the

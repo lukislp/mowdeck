@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Identity: accounts, users, roles, sessions, API tokens; issues the access tokens and
 publishes /.well-known/jwks.json (Compose services identity and identity-migrate). */ -}}
 {{- $c := .Values.config }}

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Step-up authentication: critical actions need a recent interactive confirmation (ADR 0058).
 
 ::

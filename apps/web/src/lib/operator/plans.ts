@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The plan editor of the operator console: a plan as form values (limits as text, empty means
  * unlimited), the checks Entitlements makes (`PlanIn`: key pattern, name, limits as whole numbers

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The uvicorn server of realtime: WebSockets are closed with 1001 before uvicorn stops.
 
 On shutdown uvicorn closes every open WebSocket itself with 1012 (service restart) before the

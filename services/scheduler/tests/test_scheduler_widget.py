@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The iOS widget overview (ADR 0059): next runs, rain verdict, access."""
 
 from uuid import uuid4

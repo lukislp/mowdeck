@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The account list of the operator console: Identity's accounts of the installation
  * (`GET /identity/platform/accounts`: name, kind, status, owner, created) joined by id with

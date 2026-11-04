@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Capability profiles: what MowDeck offers on one model family of a provider (ADR 0071).
 
 ``MowerCapabilities`` is what one connected mower declares at run time; it depends on the exact

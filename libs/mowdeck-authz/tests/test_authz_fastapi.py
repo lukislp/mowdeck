@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """FastAPI integration: require (401/403/200), require_or_not_found (404), kit delegation."""
 
 from collections.abc import Sequence

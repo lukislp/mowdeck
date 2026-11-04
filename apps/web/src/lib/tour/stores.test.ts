@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @vitest-environment node
 /** Where the tour keeps its outcome (ADR 0073), with demo sandboxes (ADR 0076). */
 import { describe, expect, it, vi } from 'vitest';

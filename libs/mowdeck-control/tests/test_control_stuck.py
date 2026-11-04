@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Getting stuck, being driven free, and the still images of the simulator."""
 
 import asyncio

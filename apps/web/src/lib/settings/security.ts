@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The security section (ADR 0065): the signed-in user's sessions and devices, security events
  * and alert setting under `/api/v1/identity/me/...`. Identity describes a device by its user

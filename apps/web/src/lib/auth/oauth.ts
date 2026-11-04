@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign in with an external login provider (GitHub, ADR 0051; Apple, ADR 0052): the same round
  * trip for each one. `github.ts` and `apple.ts` bind these functions to their provider.

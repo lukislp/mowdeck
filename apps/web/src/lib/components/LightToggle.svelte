@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The mower's camera light (the headlamp) as an instrument tile: a lamp, the state the mower
   reports (on, off or unknown) and one switch. The switch shows the reported state, never an

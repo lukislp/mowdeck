@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What Fleet refuses in the public demo (ADR 0068).
 
 The visitor drives the prepared simulated mowers: commands, camera, manual drive, spot runs,

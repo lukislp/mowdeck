@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Operational endpoints outside ``/api/v1`` (health model: ADR 0077).
 
 * ``GET /healthz``: liveness, 200 while the process serves requests. Never touches a dependency.

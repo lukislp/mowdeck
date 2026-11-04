@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entitlements schema: plans, account plans, the assignment history, the feature catalogue.
 
 Revision ID: 0002

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Batch subscriptions (ADR 0078): the worker that batches deliveries, the in-memory bus and,
 with ``MOWDECK_TEST_NATS_URL``, JetStream (acknowledged only after the handler, flushed on
 unsubscribe, redelivered after a failure)."""

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The metric grid of the local map: a Leaflet `GridLayer` drawing 1-5-10-50-... m lines on canvas
  * tiles, so it covers the whole visible map at any pan and zoom. Pure spacing logic lives in

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of an automatic analysis that got no camera photo (run: pnpm --filter
  * e2e-web screens): the assist sheet opened by the notification's link shows why ("Das WLAN des

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Presence of the watched accounts on the bus (demo sandboxes, ADR 0076).
 
 ``presence.accounts`` (core NATS, :data:`~mowdeck_contracts.v1.ACCOUNT_PRESENCE`): the

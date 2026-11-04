@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Day headings of the inbox: "today", "yesterday" or the date, in the browser's time zone.
  * Pure and unit tested (`days.test.ts`).

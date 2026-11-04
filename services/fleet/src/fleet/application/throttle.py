@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Login throttle of linked accounts (ADR 0034): protects the vendor account from lockout.
 
 Every create and re-read of a linked account is a login at a vendor cloud. A user (or a

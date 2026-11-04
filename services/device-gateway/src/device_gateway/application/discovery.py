@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Device discovery of a linked vendor cloud account (ADR 0034, ADR 0066).
 
 Fleet asks on ``gateway.cloud.discover`` when a user links a vendor account or re-reads it, and

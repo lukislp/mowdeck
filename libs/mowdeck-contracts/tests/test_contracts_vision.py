@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Vision contracts: photo request and reply, the proposal event, drive origin, new fields."""
 
 from datetime import UTC, datetime, timedelta

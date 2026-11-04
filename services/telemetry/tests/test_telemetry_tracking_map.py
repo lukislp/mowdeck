@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The base map under a theft tracking track (ADR 0058): street map and aerial photo tiles,
 served only around the tracked positions, for the owner and for a share link."""
 

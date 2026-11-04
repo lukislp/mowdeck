@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The use cases: is the assistant ready for the caller, and a proposal for one request.
 
 Nothing here executes anything. A proposal is the validated list of actions the web app shows

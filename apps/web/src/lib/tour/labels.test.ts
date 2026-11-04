@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** The tour's demo notes with the shared demo user (ADR 0068) and with sandboxes (ADR 0076). */
 import { beforeEach, describe, expect, it } from 'vitest';
 

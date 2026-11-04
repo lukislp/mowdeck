@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization questions the use cases ask (through ``mowdeck_authz.Authorizer``).
 
 Schedules are guarded by their target: ``can_view`` to see a schedule, ``can_edit_schedule``

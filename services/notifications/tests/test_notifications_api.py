@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API: operational endpoints, every route, validation and cross-account negatives."""
 
 from uuid import uuid4

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Both message files have the same keys, no empty texts and the same {parameters} per key.
 // A message is either a plain string or a list of variants (inlang message format, used for plural
 // forms): then every variant text must be non-empty and the union of their parameters counts.

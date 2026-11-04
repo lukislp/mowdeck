@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """In-process event bus with the same semantics as :class:`JetStreamBus`, for tests.
 
 Messages are delivered synchronously inside ``publish`` (handlers run before ``publish``

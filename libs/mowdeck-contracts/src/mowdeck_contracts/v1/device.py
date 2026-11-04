@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Last-value snapshots the Device-Gateway publishes per mower: its map, its capabilities and
 the mow path of the running job.
 

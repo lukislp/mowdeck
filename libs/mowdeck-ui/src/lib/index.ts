@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /** @mowdeck/ui: the MowDeck design system (instrument panel). No fetch, no global state, no
  * i18n runtime: every text arrives as a prop. */
 export { default as Icon, ICON_PATHS, type IconName } from './icons/Icon.svelte';

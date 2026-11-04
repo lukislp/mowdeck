@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store on SQLAlchemy Core (async, asyncpg). Upserts use ``ON CONFLICT``.
 
 The webhook ledger relies on the primary key ``(provider, event_id)``: two deliveries of one

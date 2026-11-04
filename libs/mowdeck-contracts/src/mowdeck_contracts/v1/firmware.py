@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Mower firmware: what is installed, what the vendor offers, how an update goes (ADR 0038).
 
 The Device-Gateway asks the vendor cloud for the firmware state of a mower (once after connecting,

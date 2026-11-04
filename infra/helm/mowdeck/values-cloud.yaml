@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Cloud overlay: several nodes, a public domain with TLS, two replicas of every stateless service
 # with PodDisruptionBudgets, autoscaling by CPU, a three node NATS cluster, three OpenFGA replicas
 # and PostgreSQL either as a three instance CloudNativePG Cluster (below) or managed by your

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """RTK base station (ADR 0047) against the simulator: the state, the firmware port, the update
 rules of the controller and the connection option."""
 

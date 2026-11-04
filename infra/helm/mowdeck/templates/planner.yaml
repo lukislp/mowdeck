@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Planner: mowing patterns and spot mowing (ADR 0030); computes, validates and previews
 routes, coverage and gaps, and keeps the pattern templates (Compose services planner and
 planner-migrate). CPU-bound: scale it on CPU. */ -}}

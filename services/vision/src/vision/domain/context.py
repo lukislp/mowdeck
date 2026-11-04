@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The scene context the vision model gets next to the images (pure, no I/O).
 
 Geometry is given in the **mower frame**: ``forward`` metres ahead of the mower and ``left``

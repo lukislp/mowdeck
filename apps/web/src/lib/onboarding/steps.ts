@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The setup tour (ADR 0062) as plain data: its steps, which of them apply to this user and
  * device, their state from the real facts (a mower exists, a schedule exists, ...) and the

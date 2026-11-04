@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A fake Apple for the identity tests (ADR 0052): authorize check, token endpoint and the key
 set behind an ``httpx.MockTransport``, strict like the real one.
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Shared implementation of the Mammotion connections on a :class:`MammotionPort`.
 
 :class:`MammotionBase` implements :class:`~mowdeck_control.MowerConnection` once: state mapping

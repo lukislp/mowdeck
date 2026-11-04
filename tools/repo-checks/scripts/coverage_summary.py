@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Coverage of a CI run as a Markdown table for the job summary (``$GITHUB_STEP_SUMMARY``).
 
 Usage (CI, ``.github/workflows/ci.yml``)::

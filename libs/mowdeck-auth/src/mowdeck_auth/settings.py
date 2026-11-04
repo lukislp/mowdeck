@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Verification settings, read from ``MOWDECK_AUTH_*`` environment variables.
 
 | Variable | Meaning |

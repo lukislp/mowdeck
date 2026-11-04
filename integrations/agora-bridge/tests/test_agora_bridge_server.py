@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """The TCP server: one bridge process per connection, bytes copied verbatim, the exit record."""
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Map and capability snapshots from the bus: the Planner's directory of mower facts."""
 
 from mowdeck_contracts.v1 import MowerCapabilitiesSnapshot, MowerMapSnapshot

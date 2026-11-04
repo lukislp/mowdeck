@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Path preview requests: ``gateway.mower.*.path.preview``, core NATS.
 
 Fleet asks the gateway that holds the mower to let it plan the route of a start without starting

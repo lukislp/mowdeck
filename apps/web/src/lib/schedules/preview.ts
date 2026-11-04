@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The preview of a schedule (`GET /schedules/{id}/preview`) as the pages show it: the next
  * firing (skipped ones flagged), the rain verdict as one of five badges, and the forecast hours

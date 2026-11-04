@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Identity schema: accounts, users, memberships, roles, assignments, sessions, API tokens,
 signing keys, audit log (append-only), login attempts, permission catalogue; support grants and
 invitations as schema only.

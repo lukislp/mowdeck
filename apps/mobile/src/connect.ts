@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The first-launch flow without the DOM: validate the typed address, then ask the server for
  * its web app manifest to make sure a MowDeck server answers there. The request goes through

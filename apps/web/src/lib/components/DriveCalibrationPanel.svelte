@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   "Fahrverhalten kalibrieren" in the mower settings (ADR 0042), under the manual driving section.
   Before a run: the start conditions as green and red rows (the same square lamps as the spot

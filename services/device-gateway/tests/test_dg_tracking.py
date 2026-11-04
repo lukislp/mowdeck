@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tracking leases (ADR 0058): ``gateway.mower.<id>.tracking`` against the simulator."""
 
 import asyncio

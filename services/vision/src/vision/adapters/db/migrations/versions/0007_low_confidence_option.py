@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A recommendation below the confidence threshold is offered next to the fallback (ADR 0033
 addendum 2026-10-24): ``low_confidence``, the alternative action, why the recommendation was
 not offered, and which option the approval chose.

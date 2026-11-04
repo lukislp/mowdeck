@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``tracks.positions.query``: the position track for the Planner's coverage."""
 
 from uuid import uuid4

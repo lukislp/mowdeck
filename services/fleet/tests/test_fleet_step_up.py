@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Step-up (ADR 0053): deleting a mower and removing a linked account need a recent confirmation."""
 
 from datetime import UTC, datetime, timedelta

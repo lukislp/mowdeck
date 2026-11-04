@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Step-up dependency: fresh, stale, missing, clock skew, API tokens, configuration."""
 
 from datetime import UTC, datetime, timedelta

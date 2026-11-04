@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bus interfaces: ``fleet.mowers.list`` with shards, account events, cache invalidation."""
 
 from uuid import UUID, uuid4

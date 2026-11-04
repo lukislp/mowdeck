@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes the relay events on ``camera.mower.<id>.relay.<kind>`` (stream ``CAMERA``)."""
 
 from collections.abc import Callable

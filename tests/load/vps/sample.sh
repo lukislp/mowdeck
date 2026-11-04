@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Resource sampler of the demo host during a load test (docs/ops/load-testing.md, "Measuring the
 # real demo host"). Run it ON the host in its own shell before tests/load/vps/ladder.sh and stop it
 # with Ctrl+C afterwards:

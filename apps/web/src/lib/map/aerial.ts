@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The aerial photo under the mower map: what Telemetry offers for a mower
  * (`GET /api/v1/telemetry/mowers/{id}/aerial`), the authenticated tile loader and the remembered

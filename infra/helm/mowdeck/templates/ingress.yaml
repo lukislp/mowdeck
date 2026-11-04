@@ -1,4 +1,8 @@
 {{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
+{{- /*
 Ingress with the path routes of the Compose Traefik labels:
   /api/v1/<service>       each API service (Prefix)
   /.well-known/jwks.json  Identity (Exact)

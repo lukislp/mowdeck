@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The shared account session: start, websocket events and the rate-limit-friendly refresh."""
 
 import asyncio

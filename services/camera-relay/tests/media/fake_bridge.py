@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A stand-in for agora-bridge in the media test stack: a synthetic H.265 stream through the
 bridge protocol (docs/dev/camera-relay-bridge-protocol.md), standard library only.
 

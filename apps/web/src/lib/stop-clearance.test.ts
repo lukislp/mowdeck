@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { STOP_CLEARANCE, STOP_INSET_START, publishStopClearance } from './stop-clearance';

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The job card of the mower page (`MowerState.job`): progress, the area the mower works in,
  * elapsed and remaining time and the mowed area. Pure and unit tested (`job.test.ts`).

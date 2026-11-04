@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The manual drive pad: a round, high-contrast pad with a 72 px thumb. Hold it with a finger or
   the mouse (pointer capture keeps the drag outside the pad) or with the arrow keys when focused.

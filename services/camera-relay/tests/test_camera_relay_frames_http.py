@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The frame tap's HTTP routes, the mower states from telemetry and the ffmpeg frame grabber's
 pieces (command lines, JPEG quality steps, the MJPEG splitter)."""
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes for sites and groups under ``/api/v1/fleet`` (with their bulk commands)."""
 
 from typing import Annotated, Literal

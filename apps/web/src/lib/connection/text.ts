@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Translated texts of the connection forms. The forms come from Fleet's schemas; this file only
  * names what the app has translations for (the kinds and options of the Mammotion adapters).
