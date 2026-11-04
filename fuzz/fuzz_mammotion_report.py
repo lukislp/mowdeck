@@ -93,21 +93,22 @@ def test_one_input(data: bytes) -> None:
     _check(_device(_frames(inp)), since)
 
 
-def _report(**fields: object) -> bytes:
+def _report(work: RptWork | None = None) -> bytes:
     data = ReportInfoData(
         dev=RptDevStatus(sys_status=13, charge_state=0, battery_val=76, self_check_status=0),
         rtk=RptRtk(status=4, gps_stars=31, age=1),
         locations=[RptDevLocation(real_pos_x=120000, real_pos_y=-45000, real_toward=9000)],
-        work=RptWork(man_run_speed=40, knife_height=55, progress=0x00320064),
+        work=work or RptWork(man_run_speed=40, knife_height=55, progress=0x00320064),
         connect=RptConnectStatus(wifi_rssi=-60, mnet_rssi=-90),
-        **fields,  # type: ignore[arg-type]
     )
     return bytes(LubaMsg(sys=MctlSys(toapp_report_data=data)))
 
 
 def seeds() -> list[bytes]:
-    """A mowing report, a docked report and the RTK origin and dock buffer."""
+    """A mowing report, a docked report, the RTK origin and dock buffer, and a mowing report with
+    negative packed job fields (signed on the wire; once a JobProgress the contract refused)."""
     mowing = _report()
+    negative = _report(RptWork(man_run_speed=40, progress=-1331400, area=-1))
     docked = bytes(
         LubaMsg(
             sys=MctlSys(
@@ -131,7 +132,12 @@ def seeds() -> list[bytes]:
         body = b"".join(len(f).to_bytes(2, "big") + f for f in frames)
         return b"\x01" + bytes([len(frames) - 1]) + body
 
-    return [framed(mowing), framed(docked, origin), framed(origin, mowing, mowing)]
+    return [
+        framed(mowing),
+        framed(docked, origin),
+        framed(origin, mowing, mowing),
+        framed(negative),
+    ]
 
 
 def main() -> None:

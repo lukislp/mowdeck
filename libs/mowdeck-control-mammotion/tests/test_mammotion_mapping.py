@@ -1184,6 +1184,25 @@ def test_job_of_unknown_zone_and_missing_estimate_stay_null() -> None:
     assert job.elapsed_s is None and job.remaining_s is None and job.progress_percent == 0
 
 
+def test_job_of_negative_packed_fields_read_as_unsigned_halves() -> None:
+    # Fuzzing finding (nightly ClusterFuzzLite run, 2026-11-04): ``progress`` and ``area`` are
+    # signed on the wire, and an arithmetic shift of a negative value gave a negative
+    # ``remaining_s`` that JobProgress refused, stopping the mower's state updates.
+    device = sample_device()
+    device.report_data.dev.sys_status = int(WorkMode.MODE_WORKING)
+    device.report_data.dev.charge_state = 0
+    device.report_data.work.progress = -1331400  # 0xFFEB_AF38: 65515 min left of 44856
+    device.report_data.work.area = _packed(42, 310) - (1 << 32)  # the same word, signed
+    state = _state(device)
+    assert state.job is not None
+    assert state.job.progress_percent == 42 and state.job.mowed_m2 == 310.0
+    assert (state.job.elapsed_s, state.job.remaining_s) == (0, 44856 * 60)
+    device.report_data.work.area = -1  # 0xFFFF_FFFF
+    job = mapping.job_of(device)
+    assert job is not None
+    assert job.progress_percent == 100 and job.mowed_m2 == 65535.0
+
+
 @pytest.mark.parametrize("mode", [WorkMode.MODE_READY, WorkMode.MODE_CHARGING])
 def test_job_of_without_a_job_is_none(mode: WorkMode) -> None:
     device = sample_device()
