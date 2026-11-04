@@ -486,6 +486,13 @@ _GNSS_SOLUTION: Final[Mapping[RTKStatus, GnssSolution]] = {
 _PACKED_LOW: Final = 0xFFFF
 
 
+def _halves(value: int) -> tuple[int, int]:
+    """The high and low unsigned 16-bit halves of a packed report field. The field is a signed
+    integer on the wire, so a negative value (a corrupt frame) must not shift into a negative
+    high half: both halves are masked to 0..65535, as the 32-bit word would read unsigned."""
+    return (value >> 16) & _PACKED_LOW, value & _PACKED_LOW
+
+
 def job_area_id(device: MowerDevice) -> str | None:
     """The map area id (:func:`map_of` keeps the zone hash as text) of the area the mower works
     in (``location.work_zone``), None when the hash is not one of the map's areas (0, a
@@ -508,20 +515,18 @@ def job_of(device: MowerDevice, *, has_report: bool = True) -> JobProgress | Non
     if not has_report or not path_job_running(device):
         return None
     work = device.report_data.work
-    area = _int(work.area)
-    packed_time = _int(work.progress)
-    total_min = packed_time & _PACKED_LOW
-    left_min = packed_time >> 16
+    percent, mowed_m2 = _halves(_int(work.area))
+    left_min, total_min = _halves(_int(work.progress))
     elapsed_s = remaining_s = None
     if total_min > 0:
         remaining_s = min(left_min, total_min) * 60
         elapsed_s = max(0, total_min - left_min) * 60
     return JobProgress(
-        progress_percent=max(0, min(100, area >> 16)),
+        progress_percent=min(100, percent),
         area_id=job_area_id(device),
         elapsed_s=elapsed_s,
         remaining_s=remaining_s,
-        mowed_m2=float(area & _PACKED_LOW),
+        mowed_m2=float(mowed_m2),
     )
 
 
