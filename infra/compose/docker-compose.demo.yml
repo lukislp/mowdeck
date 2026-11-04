@@ -50,6 +50,7 @@ services:
       - --entrypoints.websecure.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
       - --entrypoints.web.http.middlewares=demo-headers@docker,demo-ratelimit@docker
       - --entrypoints.websecure.http.middlewares=demo-headers@docker,demo-ratelimit@docker
+      - --providers.file.filename=/etc/traefik/mowdeck/internal-tls.yml
       - --api.dashboard=false
       - --ping=true
       - --log.level=INFO
@@ -98,8 +99,9 @@ services:
       MOWDECK_IDENTITY_DEMO_SANDBOX_MAX_HOURS: ${DEMO_RESET_HOURS:-6}
       MOWDECK_IDENTITY_DEMO_SANDBOX_PER_ADDRESS_PER_HOUR: ${DEMO_SANDBOX_PER_ADDRESS_PER_HOUR:-6}
       MOWDECK_IDENTITY_DEMO_SANDBOX_HISTORY_DAYS: ${DEMO_HISTORY_DAYS:-7}
-    # No provider secrets in a demo.
-    volumes: !reset []
+    # No provider secrets in a demo: only the certificates of the internal TLS.
+    volumes: !override
+      - tls:/etc/mowdeck/tls:ro
     labels:
       # "Try the demo" has the per-address limit of a login.
       - traefik.http.routers.identity-demo.rule=Path(`/api/v1/identity/demo/session`)
@@ -212,8 +214,11 @@ services:
       # With sandboxes Identity fills each visitor's account itself; the job only waits until
       # the services are ready (the Device-Gateway starts after it).
       DEMO_SANDBOXES: ${DEMO_SANDBOXES:-true}
+      # Internal TLS: the services answer HTTPS only; urllib checks them against the stack's CA.
+      SSL_CERT_FILE: /etc/mowdeck/tls/ca-bundle.pem
     volumes:
       - ./demo/seed.py:/seed/seed.py:ro
+      - tls:/etc/mowdeck/tls:ro
     depends_on:
       identity:
         condition: service_healthy

@@ -73,7 +73,10 @@ MOWERS: list[dict[str, Any]] = [
 
 
 def _url(service: str) -> str:
-    default = f"http://{service}:8000/api/v1/{service}"
+    # Internal TLS (docs/ops/internal-tls.md): the services serve HTTPS only; urllib checks
+    # their certificates against SSL_CERT_FILE (the stack's CA). Without it: plain HTTP.
+    scheme = "https" if os.environ.get("SSL_CERT_FILE") else "http"
+    default = f"{scheme}://{service}:8000/api/v1/{service}"
     return os.environ.get(f"DEMO_{service.upper().replace('-', '_')}_URL", default)
 
 

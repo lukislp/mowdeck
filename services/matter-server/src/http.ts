@@ -17,6 +17,7 @@
  * Codes are written only into the response body, never into a log line.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 
 import { errorText, log } from './log.ts';
 import { MowDeckError, type PermissionAnswer } from './mowdeck.ts';
@@ -198,9 +199,25 @@ export function createHttpHandler(options: HttpOptions) {
   };
 }
 
-export function startHttp(options: HttpOptions, host: string, port: number): Server {
+/** Certificate and key (PEM) of the admin API: internal TLS (docs/ops/internal-tls.md). */
+export interface TlsFiles {
+  cert: string | Buffer;
+  key: string | Buffer;
+}
+
+/** Serve the API: HTTPS (TLS 1.2 or newer) with `tls`, plain HTTP without. */
+export function startHttp(
+  options: HttpOptions,
+  host: string,
+  port: number,
+  tls: TlsFiles | null = null,
+): Server {
   const handler = createHttpHandler(options);
-  const server = createServer((request, response) => void handler(request, response));
+  const listener = (request: IncomingMessage, response: ServerResponse): void =>
+    void handler(request, response);
+  const server = tls
+    ? createHttpsServer({ cert: tls.cert, key: tls.key, minVersion: 'TLSv1.2' }, listener)
+    : createServer(listener);
   server.listen(port, host);
   return server;
 }

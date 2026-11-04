@@ -20,7 +20,8 @@ The detailed, item-by-item list of what is done and what is still open lives in 
 ## Security and supply chain
 
 - **Revocation that ends access tokens in every service at once** (today a revoked session ends at the next refresh, at most 10 minutes later) ([ADR 0065](docs/adr/0065-security-center-and-new-login-alerts.md)).
-- **TLS inside the stack.** Service-to-service HTTP, NATS and PostgreSQL run unencrypted inside the Compose network or the cluster today. Services authenticate each other with JWTs, per-service NATS users and the OpenFGA key ([security assurance case](docs/dev/security-assurance.md#residual-risks-accepted)). The goal is TLS for NATS and PostgreSQL first, and NetworkPolicies in the Helm chart.
+- **The camera relay's RTSP feed over the loopback.** Every other hop inside the stack is encrypted ([internal TLS](docs/ops/internal-tls.md)); MediaMTX moves into camera-relay's network namespace so the RTSP feed between them never crosses the network either.
+- **NetworkPolicies in the Helm chart** ([security assurance case](docs/dev/security-assurance.md#residual-risks-accepted)).
 - **Per-service database roles in Compose** instead of one shared service password ([risks and technical debt](docs/architecture/11-risks-and-technical-debt.md)).
 - **Dynamic application scanning** (an OWASP ZAP baseline against the e2e stack) on top of the existing fuzzing.
 - **SPDX licence headers** in source files, checked in CI. That needs care because of the three licences ([LICENSING.md](LICENSING.md)).

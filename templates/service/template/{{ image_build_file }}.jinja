@@ -66,5 +66,5 @@ ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
 USER 10001:10001
 EXPOSE {{ http_port }}
 HEALTHCHECK --interval=10s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/startupz' % os.environ.get('MOWDECK_HTTP_PORT', '{{ http_port }}'), timeout=8)" || exit 1
+    CMD python -c "import os, urllib.request; s = 'https' if os.environ.get('MOWDECK_TLS_CERT_FILE') else 'http'; urllib.request.urlopen('%s://127.0.0.1:%s/startupz' % (s, os.environ.get('MOWDECK_HTTP_PORT', '{{ http_port }}')), timeout=8)" || exit 1
 CMD ["python", "-m", "{{ package_name }}.main"]

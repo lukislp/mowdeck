@@ -52,15 +52,15 @@ services:
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: billing
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_BILLING:?set NATS_PASSWORD_BILLING in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_BILLING_PROVIDER: ${BILLING_PROVIDER:-stripe}
       MOWDECK_BILLING_STRIPE_SECRET_KEY: ${BILLING_STRIPE_SECRET_KEY:-}
       MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET: ${BILLING_STRIPE_WEBHOOK_SECRET:-}
@@ -69,7 +69,7 @@ services:
       MOWDECK_BILLING_PRICE_IDS: ${BILLING_PRICE_IDS:-}
       MOWDECK_BILLING_GRACE_DAYS: ${BILLING_GRACE_DAYS:-14}
       MOWDECK_BILLING_APP_URL: ${BILLING_APP_URL:-}
-      MOWDECK_BILLING_ENTITLEMENTS_URL: http://entitlements:8000
+      MOWDECK_BILLING_ENTITLEMENTS_URL: https://entitlements:8000
     labels:
       - traefik.enable=true
       - traefik.http.routers.billing.rule=PathPrefix(`/api/v1/billing`)
@@ -87,7 +87,7 @@ services:
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.burst=60
       - traefik.http.services.billing.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3

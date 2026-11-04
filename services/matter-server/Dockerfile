@@ -62,6 +62,8 @@ ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
 USER 1000:1000
 VOLUME ["/data"]
 EXPOSE 8790
+# HTTPS with MOWDECK_MATTER_TLS_CERT_FILE (internal TLS; NODE_EXTRA_CA_CERTS names the CA), plain
+# HTTP without.
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=10s \
-  CMD wget -q --spider "http://127.0.0.1:${MOWDECK_MATTER_HTTP_PORT:-8790}/healthz" || exit 1
+  CMD node -e "const s=process.env.MOWDECK_MATTER_TLS_CERT_FILE?'https':'http';require('node:'+s).get(s+'://127.0.0.1:'+(process.env.MOWDECK_MATTER_HTTP_PORT||'8790')+'/healthz',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))" || exit 1
 CMD ["node", "src/main.ts"]

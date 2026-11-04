@@ -5,13 +5,17 @@
 
 | Variable | Meaning |
 | --- | --- |
-| ``MOWDECK_OPENFGA_API_URL`` | HTTP API, e.g. ``http://openfga:8080`` (required) |
+| ``MOWDECK_OPENFGA_API_URL`` | HTTP API, e.g. ``https://openfga:8080`` (required) |
 | ``MOWDECK_OPENFGA_API_TOKEN`` or ``MOWDECK_OPENFGA_API_TOKEN_FILE`` | one of the pre-shared keys |
 | ``MOWDECK_OPENFGA_STORE_NAME`` | store to resolve by name, default ``mowdeck`` |
 | ``MOWDECK_OPENFGA_STORE_ID`` | optional pin; skips the lookup by name |
 | ``MOWDECK_OPENFGA_MODEL_ID`` | optional pin; otherwise the latest model is pinned at connect |
 | ``MOWDECK_OPENFGA_CACHE_TTL_SECONDS`` | decision cache lifetime, default 5, 0 disables |
 | ``MOWDECK_OPENFGA_TIMEOUT_SECONDS`` | per request timeout, default 2 |
+
+The client trusts the CA file named by ``SSL_CERT_FILE`` (the stack's private CA plus the public
+roots). With ``MOWDECK_TLS_CA_FILE`` set (internal TLS, docs/ops/internal-tls.md) an
+``http://openfga:...`` URL is used as ``https://``: the bundled OpenFGA serves HTTPS only.
 """
 
 import os
@@ -19,9 +23,24 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
+from urllib.parse import urlsplit, urlunsplit
 
 ENV_PREFIX = "MOWDECK_OPENFGA_"
 DEFAULT_STORE_NAME = "mowdeck"
+BUNDLED_HOST = "openfga"
+"""Host name of the OpenFGA container of the Compose stack."""
+
+
+def bundled_openfga_https(api_url: str) -> str:
+    """``https://`` for an ``http://`` URL of the bundled OpenFGA, anything else unchanged.
+
+    With internal TLS the stack's OpenFGA serves HTTPS only, while an ``.env`` from an older
+    release still says ``OPENFGA_API_URL=http://openfga:8080``.
+    """
+    parts = urlsplit(api_url)
+    if parts.scheme.lower() == "http" and parts.hostname == BUNDLED_HOST:
+        return urlunsplit(("https", parts.netloc, parts.path, parts.query, parts.fragment))
+    return api_url
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +77,8 @@ class AuthzSettings:
         if api_url is None:
             msg = f"{ENV_PREFIX}API_URL is required"
             raise ValueError(msg)
+        if env.get("MOWDECK_TLS_CA_FILE", "").strip():
+            api_url = bundled_openfga_https(api_url)
         token = get("API_TOKEN")
         token_file = get("API_TOKEN_FILE")
         if token and token_file:

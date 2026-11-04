@@ -63,14 +63,17 @@ While the window is open, `mower_offline` / `mower_online` are held back for a m
 
 ## Services and ports
 
+Every hop inside the stack is encrypted and verified with certificates of the installation's own CA ([internal TLS](internal-tls.md)): the services, NATS, PostgreSQL and OpenFGA speak TLS on the ports below, also on the host ports.
+
 | Service | Image | Host port |
 | --- | --- | --- |
+| tls-init | `mowdeck/identity:dev`, built from the repository | one-shot, no network (creates and renews the CA and the certificates of the [internal TLS](internal-tls.md)) |
 | traefik | `public.ecr.aws/docker/library/traefik:v3.7.14` | 80, 443 |
-| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222 (client, a user and password per service), 127.0.0.1:8222 (monitoring, `/healthz`) |
+| nats | `public.ecr.aws/docker/library/nats:2.15.0-alpine` | 127.0.0.1:4222 (client, TLS, a user and password per service); monitoring (`/healthz`) on the container's loopback only |
 | nats-streams | `mowdeck/identity:dev`, built from the repository | one-shot, no port (creates and updates the JetStream streams) |
-| postgres | `public.ecr.aws/docker/library/postgres:17.11-alpine` | 127.0.0.1:5432 |
+| postgres | `public.ecr.aws/docker/library/postgres:17.11-alpine` | 127.0.0.1:5432 (TLS required over the network) |
 | openfga-migrate | `ghcr.io/openfga/openfga:v1.22.0` | one-shot, no port |
-| openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTP), 127.0.0.1:8081 (gRPC) |
+| openfga | `ghcr.io/openfga/openfga:v1.22.0` | 127.0.0.1:8080 (HTTPS), 127.0.0.1:8081 (gRPC with TLS) |
 | authz-bootstrap | `mowdeck/authz-bootstrap:dev`, built from `infra/openfga/bootstrap` | one-shot, no port |
 | whoami (profile `whoami`) | `ghcr.io/traefik/whoami:v1.10.3` | via Traefik at `/api/v1/whoami` |
 | identity-migrate | `mowdeck/identity:dev`, built from the repository | one-shot, no port |

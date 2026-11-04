@@ -214,11 +214,13 @@ def test_only_the_whep_endpoints_of_mediamtx_are_routed(repo_root: Path) -> None
         "traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip",
         "traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep",
         "traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889",
+        "traefik.http.services.mediamtx-whep.loadbalancer.server.scheme=https",
+        "traefik.http.services.mediamtx-whep.loadbalancer.serverstransport=mediamtx@file",
     ]
     ice = "${RELAY_ICE_BIND:-0.0.0.0}:${RELAY_ICE_PORT:-8189}:${RELAY_ICE_PORT:-8189}"
     assert mediamtx["ports"] == [f"{ice}/udp", f"{ice}/tcp"]
     env = mediamtx["environment"]
-    assert env["MTX_AUTHHTTPADDRESS"] == "http://camera-relay:8000/internal/mediamtx/auth"
+    assert env["MTX_AUTHHTTPADDRESS"] == "https://camera-relay:8000/internal/mediamtx/auth"
     assert env["MTX_WEBRTCLOCALUDPADDRESS"] == env["MTX_WEBRTCLOCALTCPADDRESS"]
     assert env["MTX_WEBRTCLOCALUDPADDRESS"] == ":${RELAY_ICE_PORT:-8189}"
     assert mediamtx["profiles"] == ["relay"]
@@ -285,8 +287,9 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
         if str(svc.get("image", "")).startswith("${MOWDECK_IMAGE_REGISTRY:-mowdeck}/")
         and "profiles" not in svc
         and not name.endswith("-migrate")
-        # One-shot jobs without an HTTP API: the OpenFGA model and the JetStream streams.
-        and name not in {"web", "authz-bootstrap", "nats-streams"}
+        # One-shot jobs without an HTTP API: the OpenFGA model, the JetStream streams and the
+        # certificates of the internal TLS.
+        and name not in {"web", "authz-bootstrap", "nats-streams", "tls-init"}
     }
     assert mowdeck_services, "no MowDeck services found in the base stack"
     for name in sorted(mowdeck_services):
@@ -316,7 +319,8 @@ def test_demo_override_puts_every_service_in_demo_mode(repo_root: Path) -> None:
         "demo-seed": {"condition": "service_completed_successfully"}
     }
     assert services["fleet"]["environment"]["MOWDECK_ALLOWED_CONNECTION_KINDS"] == "simulated"
-    assert services["identity"]["volumes"] == {"!reset": []}
+    # No provider secrets, only the certificates of the internal TLS.
+    assert services["identity"]["volumes"] == {"!override": ["tls:/etc/mowdeck/tls:ro"]}
     assert not any("profiles" in svc for svc in services.values())
     assert (compose_dir / "demo" / "seed.py").is_file()
 

@@ -363,7 +363,7 @@ export async function expectRelayLive(page: Page, testid = 'camera-video'): Prom
 export function freezeRelaySources(frozen: boolean): number {
   const script =
     'import json, urllib.request as u; ' +
-    `r = u.Request("http://127.0.0.1:8000/internal/v1/test/freeze", data=json.dumps({"frozen": ${frozen ? 'True' : 'False'}}).encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
+    `r = u.Request("https://127.0.0.1:8000/internal/v1/test/freeze", data=json.dumps({"frozen": ${frozen ? 'True' : 'False'}}).encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
     'print(json.load(u.urlopen(r, timeout=10))["changed"])';
   const output = execFileSync(
     'docker',
@@ -390,7 +390,7 @@ export function relayTimingHook(
   const body = JSON.stringify({ seconds, mower_id: mowerId });
   const script =
     'import json, sys, urllib.request as u; ' +
-    `r = u.Request("http://127.0.0.1:8000/internal/v1/test/${hook}", data=sys.argv[1].encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
+    `r = u.Request("https://127.0.0.1:8000/internal/v1/test/${hook}", data=sys.argv[1].encode(), headers={"Content-Type": "application/json"}, method="POST"); ` +
     'print(json.load(u.urlopen(r, timeout=30))["changed"])';
   const output = execFileSync(
     'docker',

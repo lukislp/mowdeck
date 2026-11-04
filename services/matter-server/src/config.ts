@@ -18,6 +18,8 @@ export interface Config {
   /** Admin API (pairing codes for the web app) and health. */
   httpHost: string;
   httpPort: number;
+  /** Certificate and key of the admin API (internal TLS, PEM files); null: plain HTTP. */
+  tls: { certFile: string; keyFile: string } | null;
   /** UDP port of the first mower node; every further node takes the next free one. */
   portBase: number;
   maxNodes: number;
@@ -66,12 +68,18 @@ export function loadConfig(env: Env = process.env, read = readFileSync): Config 
   const level = (env.MOWDECK_LOG_LEVEL?.trim() || 'info').toLowerCase();
   const portBase = int(env, 'MOWDECK_MATTER_PORT_BASE', 5540, 1024, 65000);
   const maxNodes = int(env, 'MOWDECK_MATTER_MAX_NODES', 16, 1, 64);
+  const certFile = env.MOWDECK_MATTER_TLS_CERT_FILE?.trim() || '';
+  const keyFile = env.MOWDECK_MATTER_TLS_KEY_FILE?.trim() || '';
+  if (Boolean(certFile) !== Boolean(keyFile)) {
+    throw new Error('set both MOWDECK_MATTER_TLS_CERT_FILE and MOWDECK_MATTER_TLS_KEY_FILE (or neither)');
+  }
   return {
     apiUrl: (env.MOWDECK_MATTER_API_URL?.trim() || 'http://127.0.0.1').replace(/\/+$/, ''),
     apiTokens,
     dataDir: env.MOWDECK_MATTER_DATA_DIR?.trim() || '/data',
     httpHost: env.MOWDECK_MATTER_HTTP_HOST?.trim() || '0.0.0.0',
     httpPort: int(env, 'MOWDECK_MATTER_HTTP_PORT', 8790, 1024, 65535),
+    tls: certFile ? { certFile, keyFile } : null,
     portBase,
     maxNodes,
     pollSeconds: int(env, 'MOWDECK_MATTER_POLL_SECONDS', 15, 5, 600),

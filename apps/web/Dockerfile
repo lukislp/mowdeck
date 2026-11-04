@@ -68,6 +68,8 @@ ENV MOWDECK_VERSION=${MOWDECK_VERSION} \
     MOWDECK_SOURCE_URL=${MOWDECK_SOURCE_URL} \
     MOWDECK_SOURCE_REF=${MOWDECK_SOURCE_REF}
 USER 101
-EXPOSE 8080
+# 8080: plain HTTP (only on the loopback with internal TLS); 8443: HTTPS with
+# MOWDECK_WEB_TLS_CERT_FILE and MOWDECK_WEB_TLS_KEY_FILE (nginx/40-mowdeck-runtime-config.sh).
+EXPOSE 8080 8443
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD wget -q --spider http://127.0.0.1:8080/healthz || exit 1

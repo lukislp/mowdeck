@@ -82,6 +82,15 @@ def test_settings_from_env(tmp_path: Path) -> None:
     assert "s3cret" not in repr(loaded)
 
 
+def test_bundled_openfga_url_becomes_https_with_internal_tls() -> None:
+    old = {"MOWDECK_OPENFGA_API_URL": "http://openfga:8080"}
+    assert AuthzSettings.from_env(old).api_url == "http://openfga:8080"
+    tls = {**old, "MOWDECK_TLS_CA_FILE": "/etc/mowdeck/tls/ca.crt"}
+    assert AuthzSettings.from_env(tls).api_url == "https://openfga:8080"
+    other = {"MOWDECK_OPENFGA_API_URL": "http://fga.example:8080", "MOWDECK_TLS_CA_FILE": "/ca"}
+    assert AuthzSettings.from_env(other).api_url == "http://fga.example:8080"
+
+
 def test_settings_errors(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="API_URL is required"):
         AuthzSettings.from_env({})

@@ -191,7 +191,7 @@ def load_compose(root: Path) -> dict[str, ComposeService]:
                 m
                 for key, value in env.items()
                 if not key.endswith("JWKS_URL")
-                for m in re.findall(r"http://([a-z0-9-]+):\d+", value)
+                for m in re.findall(r"https?://([a-z0-9-]+):\d+", value)
                 if m in names and m != name and _builds_from_repo(raw_services[m])
             }
         )

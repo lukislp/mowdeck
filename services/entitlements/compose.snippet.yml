@@ -44,15 +44,15 @@ services:
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: entitlements
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_ENTITLEMENTS:?set NATS_PASSWORD_ENTITLEMENTS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_ENTITLEMENTS_DEFAULT_PLAN: ${ENTITLEMENTS_DEFAULT_PLAN:-home}
       MOWDECK_ENTITLEMENTS_MODULE_URLS: http://fleet:8000,http://realtime:8000,http://scheduler:8000,http://notifications:8000,http://identity:8000,http://telemetry:8000,http://device-gateway:8000
@@ -62,7 +62,7 @@ services:
       - traefik.http.routers.entitlements.entrypoints=web
       - traefik.http.services.entitlements.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3

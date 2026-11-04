@@ -54,7 +54,7 @@ dev = [
   "mowdeck-patterns",
   # The provider conformance kit (ADR 0069), run by every adapter package's tests.
   "mowdeck-provider-testkit",
-  "mowdeck-service-kit[db,otel,testing]",
+  "mowdeck-service-kit[certs,db,otel,testing]",
   "mowdeck-wiki-sync",
   # The Agora camera source bridge (Apache-2.0, standard library only; the SDK is never
   # installed here, its tests use a fake SDK).
