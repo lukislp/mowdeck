@@ -7,13 +7,14 @@ configured with the ``MOWDECK_OPENFGA_*`` variables of ``mowdeck-authz``.
 
 import re
 from datetime import timedelta
-from typing import Literal
+from typing import Literal, Self
 
 from mowdeck_auth import DEFAULT_AUDIENCE, DEFAULT_ISSUER
 from mowdeck_service_kit import ServiceSettings, get_logger
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 
 from identity.adapters.apple import load_signing_key
+from identity.adapters.crypto import DEV_KEK, parse_kek
 from identity.application.context import AppleLogin, GitHubLogin, IdentityConfig, RegistrationMode
 from identity.application.sandboxes import SandboxConfig
 from identity.domain.models import RelyingParty, oauth_callback_url
@@ -223,6 +224,22 @@ class Settings(ServiceSettings):
 
     identity_reconcile_seconds: float = Field(default=3600, ge=0)
     """Interval of the full OpenFGA reconcile; 0 disables it."""
+
+    @model_validator(mode="after")
+    def _no_dev_key_in_production(self) -> Self:
+        key = self.identity_key_encryption_key
+        if self.environment == "prod" and key is not None and key.get_secret_value().strip():
+            try:
+                raw = parse_kek(key.get_secret_value())
+            except ValueError:
+                raw = b""  # a malformed key fails at startup with its own message (runtime)
+            if raw == DEV_KEK:
+                msg = (
+                    "MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY is the development key of .env.example; "
+                    "generate your own for production"
+                )
+                raise ValueError(msg)
+        return self
 
     def to_config(self) -> IdentityConfig:
         """The use case configuration. In demo mode nobody registers (the seed job creates the

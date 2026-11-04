@@ -24,6 +24,11 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+DEV_KEK = b"dev-only-key-encryption-key-0000"
+"""The marked development key-encryption key of ``infra/compose/.env.example``; refused in
+production (``Settings``): it is public, so whoever can read the database could decrypt the
+token signing keys with it."""
+
 ARGON2_PROFILES: dict[str, dict[str, int]] = {
     "rfc9106_low": {"time_cost": 3, "memory_cost": 65536, "parallelism": 4},
     "owasp_min": {"time_cost": 2, "memory_cost": 19456, "parallelism": 1},
