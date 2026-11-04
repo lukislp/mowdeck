@@ -89,6 +89,8 @@ def test_ci_configuration_needs_no_scoped_job(ci_scope: ModuleType, path: str) -
         ("docs/ops/release.md", {"docs"}),
         ("mkdocs.yml", {"docs"}),
         ("README.md", {"docs"}),
+        ("GOVERNANCE.md", {"docs"}),
+        ("ROADMAP.md", {"docs"}),
         ("infra/helm/mowdeck/values.yaml", {"helm"}),
         ("tests/load/report.mjs", {"compose"}),
         ("apps/mobile/src/main.ts", {"web"}),

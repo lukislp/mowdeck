@@ -136,6 +136,7 @@ nav:
       - dev/web-app.md
       - dev/home-assistant.md
       - "Camera source bridge protocol": dev/camera-relay-bridge-protocol.md
+      - "Security assurance case": dev/security-assurance.md
       - "Fuzzing and property-based tests": dev/fuzzing.md
       - "CI and pull request scope": dev/ci.md
       - dev/wiki.md
