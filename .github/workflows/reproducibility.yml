@@ -25,6 +25,7 @@ on:
       - .github/workflows/reproducibility.yml
       - tools/repo-checks/scripts/compare_builds.py
       - tools/repo-checks/scripts/reproducible_build.sh
+      - tools/repo-checks/scripts/normalize_chart.py
       - "**/Dockerfile"
       - "**/Dockerfile.dockerignore"
       - "**/pyproject.toml"
