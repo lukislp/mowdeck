@@ -161,6 +161,10 @@ config:
   # Interactive API explorer at /api-explorer (ADR 0072): meant for the public demo, whose
   # actions hit simulated mowers. On a real installation its "Test Request" changes real data.
   WEB_API_EXPLORER: "false"
+  # Strict-Transport-Security "max-age=31536000; includeSubDomains" (no preload) on pages the
+  # ingress controller received over HTTPS (its X-Forwarded-Proto); never over plain HTTP.
+  # "false" turns it off.
+  WEB_HSTS: "true"
   # Live camera through Agora (ADR 0032): "true" adds *.agora.io and *.sd-rtn.com to the CSP;
   # the video then goes through Agora's and Mammotion's servers. The published web image has no
   # Agora Web SDK (Compose's build argument WEB_AGORA_SDK=exclude, apps/web/README.md): with it

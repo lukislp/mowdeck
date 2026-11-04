@@ -16,6 +16,9 @@
 #                             description, Open Graph), so link previews, crawlers and visitors
 #                             without JavaScript see the label too; otherwise only a comment.
 #                             Only text in <head> changes, no script: the CSP hashes stay valid.
+#   /tmp/mowdeck/hsts.conf    the map of $mowdeck_hsts (http level of default.conf): the value of
+#                             Strict-Transport-Security for a request that reached the gateway
+#                             over HTTPS (X-Forwarded-Proto https), empty (no header) otherwise
 #
 # config.json also says whether the image ships /whats-new.json (`whatsNew`, written by the release
 # build only), so the app does not request a file that is not there.
@@ -48,6 +51,9 @@
 #                                meant for the public demo: "try it" calls run with the visitor's
 #                                own session. Anything else: no page, and nginx answers 404 for
 #                                every file of its frame (/_explorer/, /tmp/mowdeck/explorer.conf)
+#   MOWDECK_WEB_HSTS             true (default): Strict-Transport-Security "max-age=31536000;
+#                                includeSubDomains" (no preload) on every page served over
+#                                HTTPS; false: never. Plain HTTP never gets the header.
 #
 # The build and its source code (AGPL-3.0 section 13, LICENSING.md), baked into the image by the
 # release build and overridable here; the app shows them on the sign-in page and under Settings:
@@ -204,6 +210,32 @@ if [ "$api_explorer" = true ]; then
   echo "mowdeck: API explorer at /api-explorer (try it out with the visitor's own session)"
 else
   echo "return 404;" > "$out/explorer.conf"
+fi
+
+# HTTP Strict Transport Security: on by default, only for requests that came in over HTTPS. nginx
+# sits behind the gateway (Traefik or the ingress controller), which terminates TLS or trusts only
+# the proxies the operator listed (GATEWAY_TRUSTED_PROXIES) and replaces a client's own
+# X-Forwarded-Proto otherwise, so the header names the scheme the browser really used. An empty
+# value makes nginx leave the header out (add_header in security-headers*.conf).
+hsts_enabled=true
+case "$(printf '%s' "${MOWDECK_WEB_HSTS:-true}" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes | on | '') ;;
+  false | 0 | no | off) hsts_enabled=false ;;
+  *) echo "mowdeck: MOWDECK_WEB_HSTS is not true or false; Strict-Transport-Security stays on for HTTPS" >&2 ;;
+esac
+{
+  echo "# Strict-Transport-Security for HTTPS requests (MOWDECK_WEB_HSTS=$hsts_enabled)."
+  echo "map \$http_x_forwarded_proto \$mowdeck_hsts {"
+  echo "  default \"\";"
+  if [ "$hsts_enabled" = true ]; then
+    echo "  ~*^https\$ \"max-age=31536000; includeSubDomains\";"
+  fi
+  echo "}"
+} > "$out/hsts.conf"
+if [ "$hsts_enabled" = true ]; then
+  echo "mowdeck: Strict-Transport-Security (one year) on pages served over HTTPS"
+else
+  echo "mowdeck: Strict-Transport-Security off (MOWDECK_WEB_HSTS=false)"
 fi
 
 # The notes of "Was ist neu": only a release build writes them into the image.
