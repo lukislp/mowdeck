@@ -44,7 +44,7 @@ AI assist ("KI-Hilfe", Vision service, `/api/v1/vision`): on the mower page a st
 
 ## Docker image
 
-`Dockerfile` (build context: the repository root): `public.ecr.aws/docker/library/node:24.21.0-alpine` installs the workspace with `--frozen-lockfile` and builds; the runtime is `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine` (uid 101, port 8080) with `nginx/default.conf` and `nginx/security-headers.conf` (CSP from `build/csp.conf`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY`, COOP). `/_app/immutable/` is cached for a year, everything else revalidated, unknown paths get `200.html`; `/healthz` answers `ok`. Compose runs it read-only with a tmpfs at `/tmp`.
+`Dockerfile` (build context: the repository root): `public.ecr.aws/docker/library/node:24.21.0-alpine` installs the workspace with `--frozen-lockfile` and builds; the runtime is `public.ecr.aws/nginx/nginx-unprivileged:1.30.5-alpine` (uid 101, port 8080) with `nginx/default.conf` and `nginx/security-headers.conf` (CSP from `build/csp.conf`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, `X-Frame-Options: DENY`, COOP, and `Strict-Transport-Security` for requests the gateway received over HTTPS). `/_app/immutable/` is cached for a year, everything else revalidated, unknown paths get `200.html`; `/healthz` answers `ok`. Compose runs it read-only with a tmpfs at `/tmp`.
 
 ### Map tiles (runtime configuration)
 
@@ -57,6 +57,7 @@ The map draws a metric grid and contacts no third party unless the installation 
 | `MOWDECK_WEB_MAP_MAX_ZOOM` (`WEB_MAP_MAX_ZOOM`) | `19` | Highest zoom the tile server delivers (1 to 22) |
 | `MOWDECK_WEB_LEGAL_ENABLED` (`WEB_LEGAL_ENABLED`) | `false` | `true` shows links to `/legal/imprint`, `/legal/terms` and `/legal/privacy` on the sign-in page (`legalEnabled` in `/config.json`) |
 | `MOWDECK_WEB_API_EXPLORER` (`WEB_API_EXPLORER`) | `false` | `true` turns on the interactive API explorer `/api-explorer` (`apiExplorer` in `/config.json`, ADR 0072): the pinned, self-hosted Scalar bundle in the frame `/_explorer/` with its own CSP, "try it" with the visitor's session. Anything else: the page is a 404 and nginx serves none of the frame's files. On in the public demo |
+| `MOWDECK_WEB_HSTS` (`WEB_HSTS`) | `true` | `Strict-Transport-Security: max-age=31536000; includeSubDomains` (no `preload`) on every page whose request reached the gateway over HTTPS (`X-Forwarded-Proto: https`, set by Traefik or the ingress controller, which replace a client's own value unless the client is a trusted proxy). Plain HTTP never gets it; `false` turns it off (`/tmp/mowdeck/hsts.conf`, rendered at container start) |
 | `MOWDECK_SOURCE_URL` (`SOURCE_URL`) | the official repository | Repository of the running code, linked on the sign-in page and under Settings, About (AGPL-3.0 section 13; `source` in `/config.json`). `MOWDECK_VERSION` and `MOWDECK_SOURCE_REF` come from the image build ([Source code offer](../../docs/ops/source-code.md)) |
 
 `/config.json` also carries `whatsNew`: whether the image ships `/whats-new.json` (only the release build writes it). The app asks for the notes of "Was ist neu" only when it is `true` or absent, so a build without them logs no 404.
