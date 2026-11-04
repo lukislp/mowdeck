@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """AI assist end to end on the in-memory bus with a simulated mower: request, proposal, event,
 approval, execution through the drive channel, verification, aborts, rejection, retry."""
 

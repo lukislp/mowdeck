@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Camera relay (ADR 0045): leases on one shared video session per account and mower.
 
 The camera relay holds at most one vendor camera session per ``(account_id, mower_id)`` and

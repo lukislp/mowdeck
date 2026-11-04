@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Stylelint config of the web frontend: standard rules plus `mowdeck/use-tokens` (raw colours,
 // font stacks and radii only in libs/mowdeck-ui/src/lib/styles/tokens.css).
 import useTokens from './libs/mowdeck-ui/lint/stylelint-tokens.js';

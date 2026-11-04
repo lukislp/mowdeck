@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Map and capability snapshots on device.mower.<id>.* (stream DEVICE)."""
 
 import asyncio

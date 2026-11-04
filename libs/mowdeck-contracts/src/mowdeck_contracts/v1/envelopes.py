@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Envelopes that wrap every message on the event bus.
 
 * :class:`EventEnvelope` for domain events (``event.<domain>.<name>``).

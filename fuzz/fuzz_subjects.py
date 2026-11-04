@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """NATS subjects (libs/mowdeck-contracts) and OpenFGA references (libs/mowdeck-authz).
 
 Services take the mower id of a message from its subject and compare it with the payload;

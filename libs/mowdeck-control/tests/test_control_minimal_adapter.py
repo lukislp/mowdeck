@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A minimal adapter (ADR 0066): connect, state, start, pause, resume and dock, nothing else.
 
 MowDeck's functions are the same for every provider; what a mower can do is what its adapter

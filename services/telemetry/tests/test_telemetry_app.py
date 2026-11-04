@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Wiring: settings, defaults of build_app, readiness, the retention job."""
 
 import asyncio

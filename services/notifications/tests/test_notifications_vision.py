@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``vision.proposal.created`` becomes ``vision_proposal`` for the users who may drive."""
 
 from datetime import timedelta

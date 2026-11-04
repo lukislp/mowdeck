@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Cloud providers in Fleet (ADR 0066): the provider list, credential fields of any shape, their
 storage, the credentials a linked mower's connection gets, re-authentication, and accounts
 stored before ADR 0066.

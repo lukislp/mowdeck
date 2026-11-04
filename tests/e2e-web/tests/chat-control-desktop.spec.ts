@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Chat control (ADR 0075): the optional assistant runs in every test stack with the phrase
  * parser (tests/e2e-web/stack.env), so no AI is ever called. Identity does not list it there, so

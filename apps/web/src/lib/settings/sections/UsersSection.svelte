@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Users of the account and their roles. A role is assigned at a level: the whole account, a site,
   a group or a single mower (Identity's `POST /role-assignments`; staff of one site or group see

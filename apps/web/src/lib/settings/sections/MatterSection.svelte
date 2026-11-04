@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Matter (ADR 0063): every mower the user may control is its own Matter node for Apple Home,
   Google Home or Home Assistant. Per mower: whether it is paired and with how many controllers,

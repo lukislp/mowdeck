@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Drive calibration through the gateway (ADR 0042) against the simulator only: ``accepted``
 at once and the final result at its end, ``MowerState.drive_calibration`` in the telemetry,
 rule 12/13 while it runs, the stored calibration taken off the options before the connection is

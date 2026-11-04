@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``DriveChecker`` through ``mowdeck-authz``: ``can_drive`` on ``mower:<id>`` (fails closed)."""
 
 from uuid import UUID

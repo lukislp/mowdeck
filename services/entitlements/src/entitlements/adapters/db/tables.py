@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """SQLAlchemy table definitions. Alembic compares migrations against :data:`metadata`.
 
 * ``plans``: plans as data (limits as a JSON object, features as a JSON array).

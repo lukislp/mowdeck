@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Changing the mower's own settings with an optimistic UI: a change shows at once, goes out as
  * `set_setting`, and its command result (over the socket, or the command store's polling) decides

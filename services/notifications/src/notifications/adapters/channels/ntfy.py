@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """ntfy (https://ntfy.sh or a self-hosted server): one JSON publish per message.
 
 The message is posted as JSON to the server root (``{"topic", "title", "message",

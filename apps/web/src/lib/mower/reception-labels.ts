@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Words of the reception and health panel and of the error category (de and en through
  * Paraglide). Every enum is translated exhaustively; a self-check reason the app does not know

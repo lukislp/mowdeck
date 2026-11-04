@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plans, account plans, the history of assignments and the feature catalogue."""
 
 from dataclasses import dataclass, field

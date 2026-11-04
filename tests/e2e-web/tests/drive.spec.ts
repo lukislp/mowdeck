@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 3 gate item 4, manual drive with the joystick (desktop, 1280 x 800), against the stack's
  * simulated mower: the detail page offers "drive manually"; the drive page opens a session over

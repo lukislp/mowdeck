@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The error codes of a mower's vendor (ADR 0067), read-only: a ledger of the lexicon Telemetry
   serves for the mower's connection, searchable by code or text, filtered by category and

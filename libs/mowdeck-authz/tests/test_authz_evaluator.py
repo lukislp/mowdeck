@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The model evaluator behind InMemoryAuthorizer, on a small model with every construct."""
 
 from typing import Any

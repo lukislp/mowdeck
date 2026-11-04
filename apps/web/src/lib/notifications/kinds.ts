@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Notification kinds and channels in the app: translated names (exhaustive, so a new contract
  * kind fails the type check) and the state tone of each kind's badge (colour means state:

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Public demo (ADR 0068): only simulated mowers, no manufacturer accounts, the demo mowers
 stay as the seed job made them; commands and the rest work."""
 

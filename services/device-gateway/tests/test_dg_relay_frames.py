@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Photos through the camera relay (ADR 0045) and the order of ``capture_photo``: the
 adapter's own photo, then the relay (the capture worker of ADR 0035 is removed).
 

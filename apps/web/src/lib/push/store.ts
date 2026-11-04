@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * State the page and the service worker share about Web Push, kept in the Cache API (the only
  * storage both can reach without IndexedDB code): the VAPID key the page subscribed with, so

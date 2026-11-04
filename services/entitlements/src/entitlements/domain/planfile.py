@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The plan file (``infra/entitlements/plans.yaml``): plans as data, seeded at startup.
 
 Format::

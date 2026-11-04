@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The generated test pattern of a fake camera session (the simulator, ADR 0032): colour bars,
  * a moving sweep, the time and the mower's position, so the camera path is visible end to end

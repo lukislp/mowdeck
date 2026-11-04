@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Re-authentication before a sensitive change of the own login methods.
 
 Adding a passkey (ADR 0050) and linking a GitHub account (ADR 0051) both need the current

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fills and empties demo sandboxes in the other services over HTTP (ADR 0076).
 
 The :class:`~identity.application.ports.SandboxProvisioner` of a demo installation. It talks to

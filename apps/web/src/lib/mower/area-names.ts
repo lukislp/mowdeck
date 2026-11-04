@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Custom area names in Fleet (`PUT /mowers/{id}/area-names/{area_id}`); the mower keeps its own. */
 import { fleetApi, unwrap } from '#lib/api/client.js';
 

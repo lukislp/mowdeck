@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   "Loading …" that does not spin forever: after `after` ms (15 s) it says that loading takes
   unusually long and offers to try again (a reload, which starts every request and the session

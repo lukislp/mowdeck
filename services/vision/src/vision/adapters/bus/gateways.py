@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Requests to other services and publications over NATS.
 
 * :class:`BusFleetGateway`: ``fleet.drive.start``, ``fleet.drive.stop``, ``fleet.commands.issue``.

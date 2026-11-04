@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The running mowing job on the mower page (`MowerState.job`): the progress as a big figure and
   a bar of twenty ticks (one per 5 %), the area the mower works in (its MowDeck name), and three

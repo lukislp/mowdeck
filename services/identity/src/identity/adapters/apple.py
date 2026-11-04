@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Sign in with Apple as an OAuth 2 / OpenID Connect login provider (ADR 0052), the
 ``OAuthClient`` port on httpx and PyJWT.
 

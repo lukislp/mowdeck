@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Spot mowing (ADR 0039) on the mower page, desktop, against the stack's simulated mower: "Spot
  * mähen" puts the map into spot mode, a tap places a 1.5 m circle and opens the sheet (radius

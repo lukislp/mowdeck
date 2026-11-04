@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Command line: ``python -m mowdeck_authz bootstrap``.
 
 Creates the store (if missing) and writes the packaged model (if changed), with the same rules

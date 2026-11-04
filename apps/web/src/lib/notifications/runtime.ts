@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The app's notification singletons: the inbox store and this device's Web Push, wired to the
  * Notifications API (`/api/v1/notifications`).

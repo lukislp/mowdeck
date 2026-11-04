@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Which accounts somebody watches (public demo sandboxes, ADR 0076).
 
 Realtime announces the live sockets per account (``presence.accounts``,

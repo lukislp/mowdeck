@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The mower's camera light as a glass chip over a camera picture (the drive view, ADR 0044): the
   lamp, the word for the state the mower reports and, unless `compact`, the name. One tap asks

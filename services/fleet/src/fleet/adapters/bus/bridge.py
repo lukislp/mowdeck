@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway to look for a mower through a Bluetooth bridge (core NATS
 request/reply, ADR 0038). Fleet never speaks to a bridge itself: the gateway that holds the
 mower connects to the proxy and answers."""

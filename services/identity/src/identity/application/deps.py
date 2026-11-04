@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The collaborators every use case needs, bundled once in ``main``."""
 
 from dataclasses import dataclass

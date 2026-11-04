@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The spot sheet: the shape of the spot (a circle with its radius, or a drawn polygon with its
   corner count), the pattern (spiral or stripes with an angle), the path spacing, the speed (at

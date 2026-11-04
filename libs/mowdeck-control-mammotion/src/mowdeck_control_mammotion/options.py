@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Connection options of the Mammotion adapters (``ConnectionConfig.options``).
 
 Options come from Fleet through the Device-Gateway (``MowerRegistration.connection_options``).

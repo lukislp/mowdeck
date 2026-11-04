@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fleet schema: sites (one hidden default site per account), groups, mowers, group
 memberships, command records and the append-only audit log.
 

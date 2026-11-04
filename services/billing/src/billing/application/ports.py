@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ports: what the use cases need from the outside world, as protocols.
 
 :class:`PaymentProvider` is the extension point of ADR 0031: Stripe first (Checkout and the

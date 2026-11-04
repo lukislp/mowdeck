@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Create the OpenFGA store and write the authorization model, idempotently.
 #
 #   1. Find the store named $FGA_STORE_NAME (default "mowdeck"); create it if missing.

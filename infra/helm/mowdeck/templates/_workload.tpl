@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{/*
 One MowDeck component: ConfigMap, Deployment or StatefulSet, Service, optional HPA and PDB.
 

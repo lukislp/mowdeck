@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-process token buckets (per client IP) for the login and token endpoints.
 
 The callers key ``mowdeck_service_kit.client_address.limiter_key`` of the address: IPv4 as it

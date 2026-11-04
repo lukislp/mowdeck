@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing angle rotation (ADR 0061): a new direction on every run, so no tracks form.
 
 Two ways to rotate, one per schedule:

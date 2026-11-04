@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Rain readout and start warning of the mower page, from the Scheduler's weather answer
  * (`GET /weather/{mower_id}` -> `decision.hours`). Pure and unit tested (`rain.test.ts`).

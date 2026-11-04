@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Daily dependency PRs for the ecosystems this repository builds from, in the same shape as the
 # other lukislp repositories, at most two open PRs per ecosystem (uv: ten, see there). Commit
 # prefixes decide the release (docs/ops/release.md, "CI-only changes"): runtime dependencies

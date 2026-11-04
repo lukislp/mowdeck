@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Startup and graceful shutdown of the gateway with an in-memory bus."""
 
 import pytest

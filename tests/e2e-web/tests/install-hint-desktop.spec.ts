@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The install hint on the mower list and the "App" panel of the settings, per platform
  * (src/lib/install/context.ts): iPhone and iPad Safari get the share sheet text, a Chrome or Edge

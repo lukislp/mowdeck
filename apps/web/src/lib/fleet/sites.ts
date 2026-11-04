@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sites of the fleet: the list the pickers use and the one way a site is created (the sites
  * page and the inline "new site" of the linked-account flow).

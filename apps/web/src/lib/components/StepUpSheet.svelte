@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The re-authentication sheet of step-up (ADR 0053). It opens when the API answers `401
   reauth-required` for a critical action (deleting a mower, creating an API token, changing

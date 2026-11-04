@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The notes of "Was ist neu", grouped by release: a stamped version with its date, then one row
   per change with a kind label (Neu / Behoben), the text in the user's language and, where the

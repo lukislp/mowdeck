@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The catalog of one request: which action kinds and areas the model may choose from."""
 
 from collections.abc import Mapping, Sequence

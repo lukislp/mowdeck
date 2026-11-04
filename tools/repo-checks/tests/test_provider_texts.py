@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Every shipped cloud provider speaks the app's languages (ADR 0066).
 
 The web app is German and English; a provider's user-visible texts (summary, setup steps,

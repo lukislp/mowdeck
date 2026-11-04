@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Build the Android APK: bundled pages, `cap sync android`, `gradlew assembleRelease`.
 # Prerequisites: Node.js 24 with pnpm, JDK 21, the Android SDK (ANDROID_HOME). Runs on Linux,
 # macOS and Git Bash on Windows; the release workflow runs it on ubuntu for every v* tag.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Transit routes for spot runs (ADR 0041): from where the mower stands to the start of a spot,
 on the mower's neutral map, without I/O.
 

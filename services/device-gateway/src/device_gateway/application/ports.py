@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ports: what the gateway's use cases need from the outside world, as protocols."""
 
 from collections.abc import Callable, Coroutine, Mapping, Sequence

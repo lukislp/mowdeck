@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Init container: wait until the service database is at the newest migration of this image.
 
 Usage: python wait_for_schema.py <package>.adapters.db.migrate

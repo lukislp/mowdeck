@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Wires the session, the Realtime socket and the stores together for this tab: states go to the
  * mower store, command results to the command store (and a toast), revocations remove mowers,

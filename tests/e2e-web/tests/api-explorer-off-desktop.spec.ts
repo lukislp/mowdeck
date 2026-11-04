@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The API explorer (ADR 0072) is off on a regular installation: /config.json says so, the frame's
  * files (the Scalar bundle included) are not served, and the page is a 404. Skips on a stack that

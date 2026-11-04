@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The live camera of one mower as a small state machine (ADR 0032): request a session from
  * Fleet, create the player for its provider, renew the token before it expires and release

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The deploy maintenance window (ADR 0055).
 
 ``maintenance_window`` holds at most one row (``id = 1``): when the deploy opened the window,

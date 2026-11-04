@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The WebSocket protocol of the Realtime service (``GET /api/v1/realtime/ws``).
 
 One JSON object per text frame, discriminated by ``type``. The client authenticates with its

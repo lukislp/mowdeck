@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Passkeys of a sub-user, for admins (ADR 0050): the same reach as setting the sub-user's
   password. A lost or no longer trusted passkey can be removed; the password stays.

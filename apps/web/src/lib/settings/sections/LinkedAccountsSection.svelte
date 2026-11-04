@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Linked vendor cloud accounts (Fleet's `/linked-accounts`, ADR 0034 and ADR 0066): every account
   with its vendor, status, counts, last read and last error, "read again" (optionally with new

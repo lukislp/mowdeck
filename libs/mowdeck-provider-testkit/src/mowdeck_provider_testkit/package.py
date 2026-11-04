@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """What the installed distribution declares: entry points, ``pyproject.toml``, sources.
 
 Nothing here imports a vendor module or a provider package by name; the kit learns them from

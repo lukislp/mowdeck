@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The "Bluetooth-Bridge" panel of the mower settings (ADR 0038): the empty state with "Bluetooth-
   Bridge hinzufügen", or the stored link with what the telemetry says about it (connected or not,

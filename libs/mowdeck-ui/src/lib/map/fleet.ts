@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The layer model of `FleetMap`: every visible mower on one map. Pure functions, unit tested in
  * `src/tests/fleet.test.ts`; the component only draws the descriptors.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * API tokens in the settings (desktop, 1280 x 800): a full Home Assistant token is created from
  * its preset, its secret shown once, and the list shows exactly the granted rights as chips

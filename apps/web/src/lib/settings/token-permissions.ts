@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Permissions of a new API token: the presets, the custom selection from Identity's permission
  * catalogue (`GET /accounts/{id}/permissions`) and the request body of `POST /api-tokens`.

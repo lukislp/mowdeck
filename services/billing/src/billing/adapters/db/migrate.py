@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Run the Alembic migrations (``upgrade head``) as a separate step before the service starts.
 
 Container: ``python -m billing.adapters.db.migrate``. The Alembic configuration is

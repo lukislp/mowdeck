@@ -1,4 +1,7 @@
 #!/bin/bash -eu
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # ClusterFuzzLite build script (docs/dev/fuzzing.md): one Atheris fuzzer binary per
 # fuzz/fuzz_*.py, each with its generated seed corpus.
 cd "$SRC/mowdeck"

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   A setpoint control (blade height, speed): minus, the value as a monospaced readout with its
   scale, plus. The value is committed 600 ms after the last step, never per tap (with `immediate`

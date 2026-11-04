@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Both front cameras through the camera relay (ADR 0045): the gateway's photo of a mower without
 own stills is a frame set of the left and right front camera of the same moment. Vision asks for
 it (``max_frames`` 2) and analyses it as a stereo pair, for a manual analysis and for the

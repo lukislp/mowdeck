@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Send a command to a mower through NATS and print the result and the telemetry (development).
 
 Defaults match the bootstrap mower of ``infra/compose/.env.example``::

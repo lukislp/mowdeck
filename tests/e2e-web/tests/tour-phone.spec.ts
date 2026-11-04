@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guided tour (ADR 0073) on a 390 px phone: the card docks to the edge away from the framed
  * element, never covers it and never widens the page; it starts by itself once for a new

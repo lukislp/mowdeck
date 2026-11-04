@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Column codecs: domain values the PostgreSQL store keeps as JSON.
 
 The domain holds typed values; only this adapter knows their stored shape. A codec encodes a

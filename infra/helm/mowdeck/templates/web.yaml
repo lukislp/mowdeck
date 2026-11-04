@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* The web app (Compose service web): static SvelteKit PWA on an unprivileged, read-only
 nginx at /, same origin as the API. /config.json and the CSP are rendered from MOWDECK_WEB_MAP_*
 into /tmp at container start (also MOWDECK_WEB_LEGAL_ENABLED: links to the legal pages, and

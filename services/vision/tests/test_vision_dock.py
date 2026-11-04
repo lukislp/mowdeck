@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Return to dock as a recovery option: the route check over the generic map, the decision with
 the dock fallback, the scene context the model gets, the map image, the fake provider modes and
 the flow through the API (offered, approved, executed as the normal dock command; nothing on a

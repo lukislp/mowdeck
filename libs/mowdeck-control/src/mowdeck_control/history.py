@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Past mowing days of a simulated mower, for the public demo (ADR 0068).
 
 :func:`simulated_history` runs a :class:`~mowdeck_control.simulator.SimulatedMower` offline on a

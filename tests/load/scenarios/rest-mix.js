@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // (b) Signed-in users clicking through the app: mower list, mower page, its health page,
 // schedules, notifications and reports, with think time between pages and the token refresh of
 // the web app. In a demo stack every user is a login session of the demo user (ADR 0068).

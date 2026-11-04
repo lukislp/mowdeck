@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Health history of a mower (Telemetry, ADR 0027).
 
 Telemetry derives blade hours, mowing hours, distance, battery cycles, charge sessions and

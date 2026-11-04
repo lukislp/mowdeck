@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MediaMTX of the MowDeck camera relay (ADR 0045): the data plane only.
 #
 # camera-relay publishes every camera into this server over RTSP (inside the Compose network or

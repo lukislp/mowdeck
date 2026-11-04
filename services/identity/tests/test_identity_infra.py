@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """OpenFGA outages, healing, signing keys, crypto, module descriptors, events, CLI, tasks."""
 
 import asyncio

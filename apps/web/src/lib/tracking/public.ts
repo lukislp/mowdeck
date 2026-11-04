@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The public tracking endpoint behind a share link. A plain `fetch` on purpose: no bearer token,
  * no refresh, no cookies, no referrer and nothing from the app's auth machinery, so a visitor

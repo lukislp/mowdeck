@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A scriptable stand-in for ``openfga_sdk.OpenFgaClient`` (shared by the authz unit tests)."""
 
 import asyncio

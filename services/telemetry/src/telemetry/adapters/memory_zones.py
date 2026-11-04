@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory zone store (tests) with the semantics of the PostgreSQL store."""
 
 import asyncio

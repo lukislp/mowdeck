@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Reception and health of the mower, compact: the RTK solution with satellites and the age of
   the corrections (`MowerState.gnss`), the Wi-Fi and mobile signal in dBm with a four-bar glyph

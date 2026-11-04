@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Return to dock proposals: what approval executes (``drive`` steps or ``return_to_dock``) and
 whether it is the rule based dock fallback after the model recommended nothing.
 

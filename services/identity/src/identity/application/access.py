@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Who holds what: token claims of users and API tokens, and the anti-escalation checks.
 
 Anti-escalation (design section 3.6): an actor can only hand out what it holds itself.

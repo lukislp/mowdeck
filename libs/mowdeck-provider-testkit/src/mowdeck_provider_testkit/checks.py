@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The conformance checks, as plain functions that raise ``AssertionError``.
 
 Every check is derived from an existing contract; the docstring names its source. Where a

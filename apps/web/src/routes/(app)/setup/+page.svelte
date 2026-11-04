@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The setup tour (ADR 0062): every step that applies to this user and device as a numbered
   checklist with its state read from the real data (done, skipped, open). The next open step is

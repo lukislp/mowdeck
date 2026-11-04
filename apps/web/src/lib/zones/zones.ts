@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Virtual zones (ADR 0070): the owner's own zones for a mower whose vendor shares no map. The
  * calls of Telemetry's zone routes and the pure helpers of the zone page and the mower page

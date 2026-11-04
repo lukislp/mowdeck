@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo history from daily templates (ADR 0079): one simulation per garden and day, copies.
 
 The copies must be what the ingestion would have stored for the mower itself: the store test

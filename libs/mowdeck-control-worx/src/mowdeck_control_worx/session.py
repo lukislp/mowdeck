@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The port between the adapter and one logged-in Worx account (no vendor SDK).
 
 A :class:`WorxSession` is one login of one app account at one brand's cloud: it holds the

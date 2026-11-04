@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """BLE connection through an ESPHome Bluetooth Proxy (``ConnectionKind.BLE_BRIDGE``).
 
 Needs the extra ``esphome``. The proxy (for example a XIAO ESP32-S3 with the stock ESPHome

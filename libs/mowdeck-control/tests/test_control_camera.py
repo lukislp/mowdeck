@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The optional camera capabilities and the simulator's fake camera (ADR 0032, ADR 0045)."""
 
 from datetime import timedelta

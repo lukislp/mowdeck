@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Is the signed-in user an operator admin of the installation (`platform:main#operator_admin`)?
  *

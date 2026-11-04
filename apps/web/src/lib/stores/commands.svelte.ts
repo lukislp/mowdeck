@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Commands on their way to a mower. `send` posts the command (202 Accepted) and marks it pending;
  * the socket's `command_result` resolves it. Without a result within 8 s (or with the socket

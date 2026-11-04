@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The mowing options of one native start, shared by the start sheet (`MowSettings`) and the
   schedule editor (`ScheduleForm`), so both offer exactly the same controls: the native pattern

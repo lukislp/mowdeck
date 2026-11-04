@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The web app inside a MowDeck app shell (apps/mobile, ADR 0036): deep links, notification taps,
  * the app icon badge, local notifications from the inbox and, on iOS, the APNs registration.

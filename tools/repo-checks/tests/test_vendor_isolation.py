@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The core stays manufacturer independent (ADR 0012, 0019, 0066, 0067).
 
 Vendor code lives only in the adapter packages ``libs/mowdeck-control-<vendor>``, which plug in

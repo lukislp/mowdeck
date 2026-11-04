@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: mirror-images
 
 # Copies every third-party image pinned under "Image sources" in infra/compose/.env.example (all

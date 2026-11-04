@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guided tour (ADR 0073) wired to the app: the context from Fleet, Telemetry, the session
  * and the module registry; the outcome per user in Identity (next to the setup tour's choices,

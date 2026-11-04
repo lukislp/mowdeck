@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Health history use cases: totals, UTC day totals, battery series and blade changes.
 
 The totals are written by :class:`~telemetry.application.ingest.Ingest` while states arrive

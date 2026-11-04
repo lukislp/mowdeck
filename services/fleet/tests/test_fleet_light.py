@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``set_light``: relation ``can_control``, plan features ``control`` and ``camera``, audit."""
 
 from fleet_support import API, fake_gateway, harness

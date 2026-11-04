@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory repository of the relay sessions.
 
 The relay runs as a single replica (ADR 0045): sessions, leases and the Vision minutes of the

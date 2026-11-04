@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The schedule form: state, the client checks that mirror the Scheduler's rules
  * (`scheduler.domain.rules.validate_schedule` and the request models), the request bodies, and

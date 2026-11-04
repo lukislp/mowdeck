@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The PyMammotion surface: the only module of this package that imports ``pymammotion``.
 
 Everything the adapter needs from PyMammotion 0.10.9 goes through :class:`MammotionPort`, a

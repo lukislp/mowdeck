@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """One Automower Connect session per application key: token, websocket and a rare REST refresh.
 
 Husqvarna limits an application key to one request per second and 10,000 requests a month, so

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Bridge scan requests (ADR 0038): ``gateway.mower.*.bridge.scan``, core NATS.
 
 Fleet asks the gateway that holds the mower to look for it through a Bluetooth bridge

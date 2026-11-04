@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Mammotion faults: categories, the error log and warning events, also while the mower pauses.
 
 A trapped LUBA 2 AWD (hardware, 2026-10-18) reports ``MODE_PAUSE`` with no error mode; the fault

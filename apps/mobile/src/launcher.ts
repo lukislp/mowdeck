@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** The first-launch screen (index.html): asks for the server address and hands it to the shell. */
 import '@mowdeck/ui/styles/fonts.css';
 import '@mowdeck/ui/styles/tokens.css';

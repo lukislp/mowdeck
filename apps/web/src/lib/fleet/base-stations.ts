@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * RTK base stations (ADR 0047): Fleet's records under `/api/v1/fleet/base-stations`, the link of a
  * mower (`PUT /mowers/{id}/base-station`), and the pure rules of the base station page: which

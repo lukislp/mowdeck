@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """RTK base stations (ADR 0047): the reference station a mower takes its RTK corrections from.
 
 A base station is its own device at the vendor (own cloud id) but has no connection of its own in

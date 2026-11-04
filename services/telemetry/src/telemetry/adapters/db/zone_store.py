@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store of the virtual zones (SQLAlchemy Core, asyncpg; ADR 0070).
 
 One mower's evaluations are serialised by a transaction level advisory lock on the mower (the

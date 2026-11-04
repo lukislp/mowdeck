@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 // ESLint rule `mowdeck/no-literal-text`: user-visible text in Svelte markup must come from the
 // Paraglide messages (`m.some_key()`), never be written into a component. Reports text nodes
 // and the attributes aria-label, title, placeholder and alt when they contain letters.

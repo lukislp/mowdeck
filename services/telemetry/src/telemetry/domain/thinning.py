@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Downsampling policy of the position track (ADR 0053).
 
 Pure functions. The PostgreSQL store runs the same rules as one SQL statement per slice

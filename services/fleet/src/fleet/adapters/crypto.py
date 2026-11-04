@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """AES-256-GCM encryption of linked account passwords at rest (ADR 0034).
 
 The scheme of Identity's signing keys (``identity.adapters.crypto``, ADR 0015): a 256-bit key

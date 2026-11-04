@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Use cases: checkout, customer portal, subscription summary, invoices, and webhooks.
 
 Billing only handles money; what an account may do is decided by Entitlements (ADR 0028). A

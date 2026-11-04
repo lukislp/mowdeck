@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Explains vendor error codes for the push texts (ADR 0067).
 
 Core NATS request/reply on ``gateway.errors.explain`` (queue group ``device-gateway``): the

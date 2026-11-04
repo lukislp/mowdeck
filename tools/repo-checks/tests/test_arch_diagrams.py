@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The generated architecture page matches the code, and the generator reads a small fixture."""
 
 import importlib.util

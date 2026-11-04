@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A rough estimate of how long a mow job takes, for the start sheet's rain warning. Pure and
  * unit tested (`duration.test.ts`). It is a guess and the UI says so ("geschätzt").

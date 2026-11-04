@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Prometheus Operator: scrape /metrics of every MowDeck service (needs the operator's CRDs). */ -}}
 {{- if .Values.metrics.serviceMonitor.enabled }}
 {{- range $component, $key := dict "identity" "identity" "fleet" "fleet" "device-gateway" "deviceGateway" "telemetry" "telemetry" "realtime" "realtime" "notifications" "notifications" "scheduler" "scheduler" "entitlements" "entitlements" "billing" "billing" "planner" "planner" "vision" "vision" "camera-relay" "cameraRelay" "assistant" "assistant" }}

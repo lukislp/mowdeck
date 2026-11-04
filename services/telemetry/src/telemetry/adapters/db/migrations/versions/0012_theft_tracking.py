@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Theft tracking mode (ADR 0053): sessions, share links, photos; name and serial in the
 mower directory.
 

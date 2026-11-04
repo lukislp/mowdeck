@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Live camera sessions (ADR 0032): short-lived credentials for the browser to join the stream.
 
 The video of a Mammotion mower goes through Agora's cloud. MowDeck never touches the media: the

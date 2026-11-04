@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Measure what demo sandboxes cost (ADR 0076): CPU and memory of a running demo stack.
 
 Usage (from the repository root, against a demo stack with sandboxes on, e.g. the e2e demo stack

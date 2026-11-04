@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """NATS: the map snapshot on the ``DEVICE`` stream reaches the Planner (also when it was
 published before the Planner started), and the coverage query goes over core NATS to a
 Telemetry stand-in.

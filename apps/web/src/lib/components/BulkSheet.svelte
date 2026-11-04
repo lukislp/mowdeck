@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Confirm and report a bulk command ("pause all", "all to dock"): the sheet lists the mowers it
   affects, sends one request per target (a site or a group; Fleet checks every mower on its

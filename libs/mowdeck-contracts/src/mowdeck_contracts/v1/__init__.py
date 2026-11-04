@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Version 1 of the MowDeck contracts.
 
 Rules: only backward compatible changes within ``v1`` (new fields are optional, nothing is

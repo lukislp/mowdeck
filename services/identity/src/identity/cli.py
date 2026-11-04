@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Operator commands: ``python -m identity.cli <command>`` (same settings as the service).
 
 * ``create-user USERNAME --account-name NAME``: register an account with this owner, even

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Request and response bodies of the Fleet API (resource views stay in the service's
 OpenAPI; the command bodies are shared contracts in ``mowdeck_contracts.v1.commands``)."""
 

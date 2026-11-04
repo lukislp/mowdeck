@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Event bus on NATS JetStream (nats-py).
 
 On :meth:`JetStreamBus.connect` the streams from :data:`mowdeck_contracts.v1.subjects.STREAMS`

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The provider conformance kit (ADR 0069) on the fake Husqvarna cloud."""
 
 from aioautomower.model.model_mower import ERRORCODES

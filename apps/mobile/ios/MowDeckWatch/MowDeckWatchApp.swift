@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import SwiftUI
 
 /// The MowDeck Apple Watch app (ADR 0060): the mower's state and the commands Start, Pause,

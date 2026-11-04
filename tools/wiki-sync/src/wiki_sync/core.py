@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Core logic: page naming, link rewriting, sidebar and the build itself."""
 
 from __future__ import annotations

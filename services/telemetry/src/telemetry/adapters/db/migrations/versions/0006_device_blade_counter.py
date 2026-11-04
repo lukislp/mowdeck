@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The mower's own blade counter on the health totals (Mammotion ``blade_used_time``).
 
 Revision ID: 0006

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Use cases: resolve an account's plan, answer checks, manage plans and assignments."""
 
 from dataclasses import dataclass, field

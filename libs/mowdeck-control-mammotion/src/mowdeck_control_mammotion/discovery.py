@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Devices of a Mammotion account: the discovery behind linked accounts (ADR 0034).
 
 :func:`discover_devices` borrows the account's shared session from a

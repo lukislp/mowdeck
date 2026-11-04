@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Live Activities and widget reloads (ADR 0059).
 
 ``live_activity_devices`` holds one row per user and app installation: the ActivityKit

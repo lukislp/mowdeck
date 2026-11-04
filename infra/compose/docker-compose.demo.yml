@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Public demo of MowDeck (ADR 0068, docs/ops/demo.md). Use it on top of docker-compose.yml as its
 # own Compose project with its own database, volumes, network and secrets, never next to or
 # instead of an installation with real mowers:

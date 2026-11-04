@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   AI provider ("KI-Anbieter"): the user's own vision model for AI assist. A family picker
   pre-fills the model string and says which key it needs; base URL for local and compatible

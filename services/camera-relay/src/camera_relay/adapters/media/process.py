@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A supervised ffmpeg process: start, stop, pause, progress and restarts.
 
 Every process of the source pipeline (a fake source, a transcoder) runs as a

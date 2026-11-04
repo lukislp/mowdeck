@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guided tour (ADR 0073) as plain data: its steps, which of them apply to this user, mower
  * and installation, how the position moves over steps whose target is missing, whether the tour

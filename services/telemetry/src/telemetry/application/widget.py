@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What the iOS widgets read from Telemetry (ADR 0059): a compact state and a map picture.
 
 ``state`` projects the latest state, the job and the area name of one mower into a few fields a

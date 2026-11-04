@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Schedules in words: "Mo, Mi, Fr 07:00, 90 min", "alle 3 Tage ab 12.10.2026 07:00, 2 h", and
  * the countdown to the next firing. Pure (the locale is a parameter), so both languages are

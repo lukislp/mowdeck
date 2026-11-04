@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   One plan limit as an instrument row: the limit's name, the use against the limit in monospaced
   figures ("3 / 4", or the word for unlimited) and a ten-segment gauge. Segments fill with the

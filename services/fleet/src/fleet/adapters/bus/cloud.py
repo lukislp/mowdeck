@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway for the devices of a vendor cloud account and for the enabled cloud
 providers (core NATS request/reply, ADR 0034 and ADR 0066). Fleet never imports an adapter
 package: the gateway logs in through the provider plugins and answers."""

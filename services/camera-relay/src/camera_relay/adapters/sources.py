@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Source and media plane adapters available before the media plane exists.
 
 ADR 0045 builds the relay in steps. Until the media plane (step 4) and the source drivers (the

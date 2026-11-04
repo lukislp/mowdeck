@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Uploads the signed .ipa to App Store Connect with the API key; the build then shows up in
 # TestFlight after Apple's processing. altool is Apple's documented command-line upload path
 # (Xcode). Its exit code is not reliable on current Xcode releases, so the JSON result decides.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera session requests (ADR 0032) through the in-memory bus."""
 
 from uuid import uuid4

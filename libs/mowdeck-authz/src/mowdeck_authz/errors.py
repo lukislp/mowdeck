@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Errors of mowdeck-authz.
 
 Checks never raise these: a failing check is answered with ``False`` (fail closed). They are

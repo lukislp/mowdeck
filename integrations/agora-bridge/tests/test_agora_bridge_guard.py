@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """The safe import of the Agora wrapper: no download, TLS verification restored."""
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes under bursts (ADR 0079): claims beyond the pool side by side under the cap,
 the sweep soon after a logout and again when the settle time after Fleet is over."""
 

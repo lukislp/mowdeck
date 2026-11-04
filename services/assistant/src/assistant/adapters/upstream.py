@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """MowDeck's public API, called with the caller's own bearer token (ADR 0075).
 
 The assistant reads Identity (``POST /me/permissions``), Fleet (the mower), Telemetry (map,

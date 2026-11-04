@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """Feasibility spike for the agora-bridge (ADR 0045 draft, step 0).
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The web app plays the camera relay (ADR 0045 step 6) against the test stack, which runs
  * camera-relay and MediaMTX with the simulator's `fake` source (a test pattern per camera, H.264

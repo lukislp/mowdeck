@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes for mowers and their commands under ``/api/v1/fleet``."""
 
 from datetime import datetime

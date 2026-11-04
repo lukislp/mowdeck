@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """OpenFGA-backed :class:`~mowdeck_authz.authorizer.Authorizer`.
 
 * **Store and model.** ``connect()`` resolves the store by name (or uses the pinned id) and the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The Stripe adapter: request parameters, and calls against stripe-mock.
 
 stripe-mock validates every request against Stripe's OpenAPI document and answers with fixtures;

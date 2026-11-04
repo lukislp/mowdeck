@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Optional add-ons stay add-ons (ADR 0075): the core never depends on them.
 
 The assistant (chat control) is an optional service. These checks fail when

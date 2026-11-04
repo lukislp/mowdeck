@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of entitlements, served at ``/.well-known/mowdeck-module``.
 
 Entitlements declares the core features every plan should list: ``view`` and

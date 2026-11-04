@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The preview of a saved schedule: the rain verdict for the next firing with the forecast strip,
   then the next firings (skipped ones struck through) in the schedule's time zone with a

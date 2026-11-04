@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory store (tests and local experiments) with the semantics of the PostgreSQL store:
 transactions are all or nothing (a snapshot is restored on error) and run one at a time."""
 

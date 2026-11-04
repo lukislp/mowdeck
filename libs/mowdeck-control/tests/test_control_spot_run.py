@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Spot runs (ADR 0039) against the simulator only: convergence on a spiral at 1 Hz reports with
 2 cm noise, the RTK pause, aborts (geofence, sign error, timeout, link), STOP with blades off
 and the controller's rule 12. No manufacturer package is imported."""

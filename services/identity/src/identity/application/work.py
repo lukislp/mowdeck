@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Unit of work: one database transaction, its OpenFGA sync, its audit rows and its events.
 
 ::

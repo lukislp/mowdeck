@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """The bridge protocol's records and control lines (docs/dev/camera-relay-bridge-protocol.md)."""
 

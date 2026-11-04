@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Typed parts of :class:`~mowdeck_contracts.v1.MowerState` beyond position and activity: the
 running job, the satellite positioning, the mower's own network signal, its self-check and the
 category of its error.

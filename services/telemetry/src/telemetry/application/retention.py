@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Retention: delete expired rows and thin old positions (ADR 0017, ADR 0053).
 
 Only one replica works at a time: the store hands out a scope under ``pg_try_advisory_lock``; a

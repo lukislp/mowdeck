@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Foundation
 
 /// What a widget calls the mower's condition. The owner's four words are `mowing`, `docked`,

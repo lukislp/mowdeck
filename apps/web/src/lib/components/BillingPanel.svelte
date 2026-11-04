@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The billing block under the plan of the account (only when the probe found billing enabled and
   the user holds `billing.manage`): the plans on sale with their price, an Upgrade per plan while

@@ -61,6 +61,19 @@ A new third-party image (a base image, an infrastructure container, an image onl
 
 The required checks enforce all of this: `python` runs `uv run poe lint` (ruff, ruff format, mypy), `web` runs `pnpm -r lint` and `pnpm -r check`, and `ci-config` lints the workflows. A pull request with lint errors cannot merge.
 
+### Licence headers
+
+The repository follows the [REUSE Specification](https://reuse.software/): every file states its licence and copyright. A source file starts with two SPDX tags in its comment syntax (after a shebang or a Dockerfile `# syntax=` line), with the licence of the directory it lives in ([LICENSING.md](LICENSING.md): `AGPL-3.0-only` by default, `Apache-2.0` in `libs/` and `integrations/agora-bridge`, `GPL-3.0-only` in `libs/mowdeck-control-mammotion` and `libs/mowdeck-control-worx`):
+
+<!-- REUSE-IgnoreStart -->
+```python
+# SPDX-FileCopyrightText: 2026 Your Name
+# SPDX-License-Identifier: AGPL-3.0-only
+```
+<!-- REUSE-IgnoreEnd -->
+
+`uv run --no-project --with "reuse[charset-normalizer]==6.2.0" reuse annotate --copyright "Your Name" --license AGPL-3.0-only <file>` adds them. Files without comments (Markdown, JSON, images, lock files) and generated files are covered by [`REUSE.toml`](REUSE.toml) instead; a generator writes no header, so its output stays byte-identical. `ci-config` runs `reuse lint` and fails for a file without either; run the same command with `reuse lint` locally.
+
 ## Code review
 
 Every change, the maintainer's own included, goes through a pull request and the required checks. The reviewer (today the maintainer, see [GOVERNANCE.md](GOVERNANCE.md)) looks at:

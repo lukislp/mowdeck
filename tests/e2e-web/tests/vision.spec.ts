@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Task 27, AI assist ("KI-Hilfe", desktop 1280 x 800) against the stack's rule based fake vision
  * provider (the stack runs with `VISION_ALLOW_FAKE_PROVIDER=true`, tests/e2e-web/stack.env):

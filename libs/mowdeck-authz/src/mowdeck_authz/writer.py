@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Writing tuples: only Identity and Fleet do this.
 
 Kept apart from :class:`~mowdeck_authz.authorizer.Authorizer` on purpose: services that only

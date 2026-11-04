@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Setup credentials of one Matter node: the setup passcode and the discriminator, and the two
  * onboarding codes a user types or scans (Matter Core § 5.1).

@@ -2,11 +2,13 @@
 
 | Part | License |
 | --- | --- |
-| Everything by default: `services/*`, `apps/*`, `tools/*`, `infra/*`, `bridge/*`, `integrations/*`, docs | [AGPL-3.0](LICENSES/AGPL-3.0.txt) (the root `LICENSE`) |
+| Everything by default: `services/*`, `apps/*`, `tools/*`, `infra/*`, `bridge/*`, `integrations/*`, docs | [AGPL-3.0](LICENSES/AGPL-3.0-only.txt) (the root `LICENSE`) |
 | Reusable libraries: `libs/*` | [Apache-2.0](LICENSES/Apache-2.0.txt) |
-| Exception: `libs/mowdeck-control-mammotion` (imports the GPL-3.0 library PyMammotion) | [GPL-3.0](LICENSES/GPL-3.0.txt) |
-| Exception: `libs/mowdeck-control-worx` (imports pyworxcloud, whose sdist ships a GPL-3.0 `LICENSE`) | [GPL-3.0](LICENSES/GPL-3.0.txt) |
+| Exception: `libs/mowdeck-control-mammotion` (imports the GPL-3.0 library PyMammotion) | [GPL-3.0](LICENSES/GPL-3.0-only.txt) |
+| Exception: `libs/mowdeck-control-worx` (imports pyworxcloud, whose sdist ships a GPL-3.0 `LICENSE`) | [GPL-3.0](LICENSES/GPL-3.0-only.txt) |
 | Exception: `integrations/agora-bridge` (the camera relay's optional Agora source; its own `LICENSE`) | [Apache-2.0](LICENSES/Apache-2.0.txt) |
+
+Every file names its licence and copyright in machine-readable form ([REUSE](https://reuse.software/)): source files carry `SPDX-License-Identifier` and `SPDX-FileCopyrightText` tags in their first lines, files without comments are listed in [`REUSE.toml`](REUSE.toml), and the licence texts are in `LICENSES/` under their SPDX identifiers. CI runs `reuse lint` on every pull request.
 
 Each library under `libs/` ships its own `LICENSE` file and declares the license in its `pyproject.toml`. Libraries are Apache-2.0 unless a GPL dependency forces GPL-3.0; that is the case for the PyMammotion adapter package, see [ADR 0011](docs/adr/0011-gpl-package-for-pymammotion-adapter.md), and for the pyworxcloud adapter package ([ADR 0066](docs/adr/0066-cloud-provider-plugins-and-more-vendors.md)). `libs/mowdeck-control` itself never imports either library.
 

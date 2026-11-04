@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Mammotion capability profiles (ADR 0071)."""
 
 from mowdeck_contracts.v1 import ProfileFeature, ProfileReport, check_profiles

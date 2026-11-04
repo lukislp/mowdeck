@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Injectable timers, so the dead-man switch can be tested without sleeping.
 
 Production code uses :class:`AsyncioTimerFactory`; tests use

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Where a role applies: the whole account, a site, a group or one mower (Identity's assignment
   levels; a right on a level covers everything below it). The object list comes from the

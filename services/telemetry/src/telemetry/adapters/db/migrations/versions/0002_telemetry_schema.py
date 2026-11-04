@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Telemetry schema: mower directory, latest state, history, position track, command timeline.
 
 Revision ID: 0002

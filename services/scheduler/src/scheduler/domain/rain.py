@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The rain pause: does the forecast hold a run?
 
 A forecast is a list of hourly points. Like Open-Meteo, a point's values cover the hour that

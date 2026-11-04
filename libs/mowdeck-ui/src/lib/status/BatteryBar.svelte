@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   Ten segment battery gauge under the battery readout. Low charge (below 20 %) turns the lit
   segments to the error tone; charging adds the charging tone.

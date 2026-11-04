@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Connection options of the real Mammotion adapters: validation per kind and secret masking."""
 
 import base64

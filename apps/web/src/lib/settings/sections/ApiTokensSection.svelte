@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   API tokens of the account: the secret of a token just created (on top, focused, until
   dismissed), the active tokens (each token's rights as chips), the revoked ones folded into a

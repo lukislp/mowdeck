@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The mow path: the contract, its snapshot, the preview request and reply, the subjects."""
 
 from datetime import UTC, datetime

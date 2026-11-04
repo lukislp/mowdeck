@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """One mower held by the gateway: its connection, controller, telemetry and commands.
 
 A :class:`MowerSession` supervises the link: it creates the connection through the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Drive calibration (ADR 0042) against the simulator only: the fit recovers the configured
 full-scale speed and yaw rate, the forward budget, the start conditions, the abort paths, rule 13
 while it runs and the drive speed setting. No manufacturer package is imported."""

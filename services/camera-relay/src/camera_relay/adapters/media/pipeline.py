@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The source pipeline: ffmpeg command lines, the fake source and the transcoder.
 
 Paths on the media server (MediaMTX, RTSP inside the cluster only):

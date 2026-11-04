@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Internal HTTP routes of the relay (never routed through Traefik).
 
 * ``POST /internal/mediamtx/auth``: MediaMTX's HTTP auth callback (``authHTTPAddress``). Answers

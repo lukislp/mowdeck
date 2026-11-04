@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): ``DELETE /api/v1/fleet/demo/accounts/{id}`` removes everything
 Fleet holds of one account (rows, tuples, ``mower.removed`` per mower) and nothing else."""
 

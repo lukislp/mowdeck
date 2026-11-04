@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API of the Planner: patterns, previews, plans and the start through Fleet."""
 
 from typing import Any

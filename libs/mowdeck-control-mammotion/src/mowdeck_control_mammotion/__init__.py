@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """MowDeck adapter for Mammotion mowers (LUBA, Yuka) on top of PyMammotion. GPL-3.0-only.
 
 This package is GPL-3.0 because it imports PyMammotion (GPL-3.0), see ADR 0011. It plugs into

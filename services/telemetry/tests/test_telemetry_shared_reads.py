@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """One pooled connection per request for the reads (docs/ops/load-testing.md)."""
 
 import asyncio

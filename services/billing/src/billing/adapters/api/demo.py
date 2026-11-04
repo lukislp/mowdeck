@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What Billing refuses in the public demo (ADR 0068): everything that changes something.
 
 The demo stack does not start Billing (profile ``billing``); should someone add it, no checkout,

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """One-shot job that creates and updates the JetStream streams (ADR 0074).
 
     python -m mowdeck_service_kit.bus.streams

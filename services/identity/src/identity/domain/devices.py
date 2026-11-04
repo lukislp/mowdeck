@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What the security center shows about a device: a label from the user agent and a shortened
 address (ADR 0065).
 

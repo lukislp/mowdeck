@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rules of the Scheduler without I/O: validation, the busy rule, the settings of a run."""
 
 import json

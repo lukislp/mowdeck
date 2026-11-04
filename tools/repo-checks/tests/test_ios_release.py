@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """TestFlight delivery of the iOS app shell (.github/workflows/apple-testflight.yml).
 
 The macOS job runs only on demand, so everything that can be checked without a Mac is checked

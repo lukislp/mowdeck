@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Keeping map content in view when something covers the bottom of the map (a bottom sheet):
  * the pan that brings a box of container pixels inside the uncovered part, minus a padding.

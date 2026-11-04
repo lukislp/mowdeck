@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- An API problem in place: translated title, optional detail and the correlation id to quote
 when reporting it. -->
 <script lang="ts">

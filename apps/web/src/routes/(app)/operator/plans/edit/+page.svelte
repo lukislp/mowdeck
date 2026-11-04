@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Operator console, plan editor: `?key=<key>` edits a plan (`GET /entitlements/plans/{key}`, also
   inactive ones), without it a new plan is created. Limits are whole numbers, empty means

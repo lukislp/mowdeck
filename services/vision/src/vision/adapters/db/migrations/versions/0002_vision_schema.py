@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Vision schema: proposals, their steps and images, cost accounting, user providers.
 
 Revision ID: 0002

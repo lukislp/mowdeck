@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fetches ``/.well-known/mowdeck-module`` from the services in ``MOWDECK_IDENTITY_MODULE_URLS``."""
 
 import asyncio

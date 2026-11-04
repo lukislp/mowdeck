@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The notification rules: pure functions over a :class:`MowerWatch`.
 
 Every function takes the watch (None for a mower seen for the first time), the input and the

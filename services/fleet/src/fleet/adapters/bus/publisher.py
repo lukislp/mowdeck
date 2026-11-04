@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes Fleet's events (``event.mower.*``) and the commands (``command.mower.<id>``)."""
 
 from uuid import UUID

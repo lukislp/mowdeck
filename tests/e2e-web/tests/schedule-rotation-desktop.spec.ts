@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mowing angle rotation (desktop, 1280 x 800; ADR 0061): a schedule that turns the angle by a
  * step on every run shows the angle of each upcoming run in its preview, starting from the base

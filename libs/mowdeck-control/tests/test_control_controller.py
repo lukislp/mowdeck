@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowerController: expiry, de-duplication, emergency stop, serialization, dead-man, limits."""
 
 import asyncio

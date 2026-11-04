@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The site of a mower: name, time zone and coordinates. The rain pause asks the weather at the
   site's coordinates (else the map origin, else the last position), and schedules fire in the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Theft alarm: geofences per mower, acknowledged inbox items and alarm silences.
 
 Additive only: a nullable column on ``inbox`` and two new tables.

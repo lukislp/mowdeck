@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # The NATS passwords of the stack (ADR 0074): one per service user of nats/auth.conf, stored as
 # NATS_PASSWORD_<USER> in an env file (.env of the stack, demo/demo.env of the public demo).
 #

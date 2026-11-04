@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The mower's planned mow path on the detail page: which path the map shows (a preview from the
  * start sheet, the running job's path from Telemetry, or the last job's path while the job

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The aerial photo layer: tile and bounding box geometry, the use case (bounds, zoom range,
 cache, rate limit) and the routes (auth, no open proxy, errors)."""
 

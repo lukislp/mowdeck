@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The allow-list of demo/demo.override.yml (docs/ops/demo.md, "Host specific settings").
 
 demo/reset.sh pipes ``{"base": <config>, "override": <config>}`` into this script, where both

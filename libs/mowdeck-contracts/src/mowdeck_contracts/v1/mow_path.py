@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The mower's own computed mow path: the route it planned for the chosen areas and pattern.
 
 Mowers that plan their route on board (Mammotion LUBA) can hand the planned route back as a

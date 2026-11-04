@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What every Vision instance knows about the mowers, from the bus (``MowerView`` port).
 
 * ``telemetry.mower.*`` (ephemeral, newest message per subject first): the last state.

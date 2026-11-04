@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store: the generic ``Table`` port on SQLAlchemy Core (async, asyncpg).
 
 One ``AsyncConnection`` per transaction (``engine.begin()``). Every insert and update runs in a

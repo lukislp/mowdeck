@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Additional links of a mower (ADR 0038): a Bluetooth bridge next to the cloud connection.
 
 A mower has one connection kind and may carry further links by kind, today ``ble_bridge``. Whether

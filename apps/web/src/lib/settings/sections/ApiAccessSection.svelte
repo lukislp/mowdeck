@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   API access (ADR 0064): the user's own personal access tokens for scripts. On top the way in
   (base URL of this installation, links to the scripting guide and the API reference), then the

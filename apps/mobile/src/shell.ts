@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * `MowDeckShell`: the shell's own native plugin (ios/App/App/MowDeckShellPlugin.swift,
  * android/app/src/main/java/app/mowdeck/mobile/MowDeckShellPlugin.java). It stores the server

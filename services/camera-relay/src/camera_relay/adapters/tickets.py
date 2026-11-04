@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ed25519 tickets: ``v1.<payload>.<signature>`` (base64url without padding).
 
 The payload is compact JSON with the scope of :class:`~camera_relay.domain.tickets.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Cloud provider plugins: loading, enabling and routing (ADR 0066)."""
 
 from collections.abc import Iterable, Mapping

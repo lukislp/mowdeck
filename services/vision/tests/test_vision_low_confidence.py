@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A recommendation below the confidence threshold (ADR 0033 addendum 2026-10-24): kept as a
 low-confidence option next to the dock fallback when it passes the safety checks, refused with
 the reason when it does not, unchanged above the threshold; the planned path check; the

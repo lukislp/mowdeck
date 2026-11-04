@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The planned mow path: PyMammotion's route mapped, fetched in the background, previewed."""
 
 import asyncio

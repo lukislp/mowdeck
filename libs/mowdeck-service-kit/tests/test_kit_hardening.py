@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Hardening headers on every service response: nosniff, no-store on authenticated answers."""
 
 from collections.abc import AsyncIterator

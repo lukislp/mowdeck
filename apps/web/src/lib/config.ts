@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Runtime configuration of the installation, read once from `/config.json`. nginx renders that
  * file at container start from the environment (`MOWDECK_WEB_MAP_TILES`,

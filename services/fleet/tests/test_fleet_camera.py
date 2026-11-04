@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``POST /mowers/{id}/camera/session`` (ADR 0032): checks, relay to the gateway, audit."""
 
 from datetime import UTC, datetime, timedelta

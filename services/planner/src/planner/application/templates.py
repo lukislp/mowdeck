@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pattern templates: saved chains of an account ("2 border laps + diagonal + re-mow").
 
 Templates hold no mower data, only pattern keys and settings, so every principal of the

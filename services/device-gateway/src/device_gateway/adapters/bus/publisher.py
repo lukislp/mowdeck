@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes command results, telemetry and connection events on the event bus."""
 
 from mowdeck_contracts.v1 import (

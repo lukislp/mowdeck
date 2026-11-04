@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Updates the Compose stack to a release: the documented procedure of docs/ops/compose.md in one
 # script, with the deploy maintenance window around the restart (ADR 0055).
 #

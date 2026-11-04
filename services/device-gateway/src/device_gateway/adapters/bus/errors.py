@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Error lexicon lookups (ADR 0067): ``gateway.errors.explain``, ``gateway.errors.lexicons`` and
 ``gateway.errors.entries`` (a searchable page of one lexicon), core NATS request/reply.
 

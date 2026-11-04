@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The LiteLLM provider: request shape per model family, structured output with fallback,
 validation retry, transient retries and cost accounting. No network: a local HTTP server
 replays recorded provider responses (tests/fixtures) through the real LiteLLM code path, and

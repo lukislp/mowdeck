@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The access token expires in the middle of a session (owner report: pages stuck loading after a
  * silent refresh). Session, API fetch wrapper and Realtime socket together, with a fake clock, a

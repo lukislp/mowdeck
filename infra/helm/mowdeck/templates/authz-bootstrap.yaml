@@ -1,4 +1,8 @@
 {{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
+{{- /*
 Authorization bootstrap (Compose service authz-bootstrap): creates the OpenFGA store and writes
 infra/openfga/model.fga only when it differs from the latest model (idempotent). An ordinary Job
 per release revision (Jobs are immutable), not a hook: OpenFGA is part of this release and must be

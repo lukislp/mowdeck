@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A small, exact evaluator of OpenFGA models (schema 1.1) for tests.
 
 It reads the JSON form of the model (the same one the bootstrap writes to OpenFGA), so the fake

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The map of theft tracking: a recorded track on a world map (EPSG:3857), the start (green) and
   the last known position (red and pulsing, hollow grey while the mower is silent). It is not

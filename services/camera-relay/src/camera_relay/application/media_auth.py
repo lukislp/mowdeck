@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Who may read and publish on the media server: the decisions of its HTTP auth callback.
 
 MediaMTX asks the relay for every action (``authMethod: http``). The rules:

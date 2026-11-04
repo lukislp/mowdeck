@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // The API explorer (ADR 0072) exists only where /config.json turns it on
 // (MOWDECK_WEB_API_EXPLORER=true, the public demo): everywhere else the route is a 404.
 import { error } from '@sveltejs/kit';

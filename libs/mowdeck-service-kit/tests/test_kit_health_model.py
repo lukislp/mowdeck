@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The health model (ADR 0077): liveness, started and readiness are three different answers.
 
 A busy service or a dependency that fails after the start must never take a running container

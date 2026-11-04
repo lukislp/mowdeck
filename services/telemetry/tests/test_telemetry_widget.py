@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The iOS widget endpoints (ADR 0059): compact state and the map picture."""
 
 import struct

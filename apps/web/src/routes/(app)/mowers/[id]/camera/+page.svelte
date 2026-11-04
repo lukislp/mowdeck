@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The live camera of a mower on its own page (ADR 0032): the camera panel as large as the screen
   allows, the mower's state line and the emergency stop (`StopBar`), which stays in view on every

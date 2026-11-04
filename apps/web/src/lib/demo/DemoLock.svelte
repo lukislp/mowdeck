@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   An action the public demo refuses (ADR 0068), as the app shows it there. The services enforce
   the demo (their `DEMO_POLICY`); this only stops offering what they would answer with 403

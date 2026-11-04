@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Watermark table of the position downsampling (ADR 0053).
 
 The slice queries use the existing indexes ``pk_mower_positions`` and

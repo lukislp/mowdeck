@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Virtual zones on `MowerMap` (ADR 0070): zones the owner draws for a mower whose vendor shares
  * no map. They are stored in WGS84 (`[lat, lon]` corners), drawn as outlined polygons with a

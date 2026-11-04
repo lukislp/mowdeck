@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Job options of a start (desktop, 1280 x 800; ADR 0030 amendment 2026-10-24): the simulated
  * mower declares obstacle detection, laps around no-go zones, path order and start progress,

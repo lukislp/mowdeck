@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The run bar of a spot run, above the command bar next to the emergency stop: while the gateway
   drives the run, its state as word and lamp, the progress bar with the percentage, the segment

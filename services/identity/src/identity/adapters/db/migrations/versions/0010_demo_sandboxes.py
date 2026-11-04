@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes: one account per visitor of the public demo (ADR 0076).
 
 ``demo_sandboxes``: the pool and the visitors' sandboxes with their purge progress. Only a demo

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Manual driving over BLE: a :class:`~mowdeck_control.DriveSession` on ``send_movement``.
 
 Each :meth:`BleDriveSession.update` sends one movement frame at the controller's cadence (the

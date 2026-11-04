@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Store and model resolution, and the idempotent model bootstrap.
 
 Rule shared with the ``authz-bootstrap`` Compose job (``infra/openfga/bootstrap``): the store is

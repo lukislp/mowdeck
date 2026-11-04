@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The drive view with the camera (ADR 0044) against the stack's simulated mower, whose camera
  * sessions are `fake` (the test pattern): on the desktop (1280 x 800), a phone upright (390 x 844)

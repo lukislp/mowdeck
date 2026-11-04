@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Write the GPL source offer of a release (SOURCE-OFFER.md) from the images' SPDX SBOMs.
 
 The release workflow (job ``publish``) runs this over the ``sbom-<image>.spdx.json`` files it

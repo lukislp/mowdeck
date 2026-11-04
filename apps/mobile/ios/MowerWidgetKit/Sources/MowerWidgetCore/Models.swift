@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import Foundation
 
 // The JSON the widgets read from the MowDeck API (ADR 0059): Telemetry's compact state,

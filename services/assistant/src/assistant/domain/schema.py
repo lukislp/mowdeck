@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The answer schema the model gets, generated from the catalog, and the prompt texts.
 
 Defence in depth against prompt injection (the user's text, area and mower names are untrusted):

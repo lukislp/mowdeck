@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Apple Push Notification service (APNs) for the iOS app, token-based, without Firebase.
 
 Requests go to ``POST https://<host>/3/device/<token>`` over HTTP/2 (APNs accepts nothing

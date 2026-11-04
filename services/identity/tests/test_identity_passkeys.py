@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Passkeys (ADR 0050): registration, passwordless login, management, the native app hand-off.
 
 The ceremonies run end to end through the API and the real py_webauthn with a software

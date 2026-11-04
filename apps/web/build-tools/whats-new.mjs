@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Builds `static/whats-new.json`, the notes the web app shows after an update ("Was ist neu",
  * docs/dev/web-app.md). The release workflow runs it before the web image is built, from a

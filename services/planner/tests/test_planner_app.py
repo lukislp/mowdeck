@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """App wiring: settings, the database requirement, the track source and the resolver."""
 
 from datetime import timedelta

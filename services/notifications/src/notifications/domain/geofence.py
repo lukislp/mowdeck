@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The geofence of a mower: its mapped areas, transfer paths and dock, plus a margin.
 
 The fence is built from the map snapshot the Device-Gateway publishes (local metres plus a

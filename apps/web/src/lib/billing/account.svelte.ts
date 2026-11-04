@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The billing side of the signed-in account (owner, or a member granted `billing.manage`): the
  * subscription as the provider last reported it and the invoices, plus the two redirects

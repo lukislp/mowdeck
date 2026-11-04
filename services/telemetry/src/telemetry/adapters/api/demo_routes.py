@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Public demo (ADR 0068): past mowing days for the freshly seeded demo mowers.
 
 Only the demo seed job and Identity's sandbox pool call this (404 outside demo mode, 403

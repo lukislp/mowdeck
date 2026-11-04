@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Pattern registry (entry point group ``mowdeck.patterns``) and the chain combinator.
 
 Another package adds a pattern without touching this one::

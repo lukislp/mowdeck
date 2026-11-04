@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Device snapshots (map, capabilities), their subjects and the DEVICE stream."""
 
 from datetime import UTC, datetime

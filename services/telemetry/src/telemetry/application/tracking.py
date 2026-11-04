@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The theft tracking mode (ADR 0058): sessions, the background tick, share links, the report.
 
 A session starts on a theft alarm (``notifications.raised`` of kind ``mower_lifted``,

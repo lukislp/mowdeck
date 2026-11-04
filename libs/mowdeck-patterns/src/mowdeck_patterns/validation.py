@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The validation chain: the same checks for every plan, whatever pattern produced it.
 
 1. Every segment stays inside the area minus the safety margin (holes and zones included).

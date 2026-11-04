@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What a user manages through the API: preferences, targets, inbox and test notifications.
 
 Everything is keyed by the user and the account of the verified token. A mower can only be

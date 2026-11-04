@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # shellcheck shell=bash
 # cosign_retry: Sigstore keyless signing for the release workflow that survives Sigstore hiccups.
 #

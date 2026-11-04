@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Compose block of vision as pasted into infra/compose/docker-compose.yml (build context: the
 # repository root).
 services:

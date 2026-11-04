@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The error lexicon registry (ADR 0067): entry points, normalisation, fallback, simulator."""
 
 import logging

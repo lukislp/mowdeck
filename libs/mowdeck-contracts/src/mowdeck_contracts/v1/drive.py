@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Manual driving (joystick) over the Realtime WebSocket, recorded by Fleet (ADR 0026).
 
 A joystick needs about ten frames per second and a dead-man switch of about one second, so the

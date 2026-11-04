@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The delivery worker with fake channels: success, retry with backoff, give up, gone, a hung
 channel (deadline, isolation, per-channel limit), lease reclaim, expiry and stall detection."""
 

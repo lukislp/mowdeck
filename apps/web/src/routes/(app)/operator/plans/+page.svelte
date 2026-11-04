@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Operator console, plans: the offered plans (`GET /entitlements/plans`, active ones) with their
   limits, trial days and features; edit one or create a new one in the editor. With billing

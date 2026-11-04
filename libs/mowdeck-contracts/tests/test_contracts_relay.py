@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Camera relay contracts (ADR 0045)."""
 
 from datetime import UTC, datetime

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Public demo (ADR 0068): the seed job's past mowing days and the response label."""
 
 from typing import Any

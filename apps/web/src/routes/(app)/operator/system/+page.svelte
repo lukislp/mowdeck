@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Operator console, system: the installation facts the app can read (billing switch, the plan
   marked default, offered plans, accounts, the feature catalogue, the modules that announce web

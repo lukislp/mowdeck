@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of device-gateway under ``/api/v1/device-gateway``."""
 
 from datetime import datetime

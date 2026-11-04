@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fleet as the front door of the camera relay (ADR 0045): transport selection and fallback,
 error mapping, renew and detach with account separation, and the audit of the relay's events."""
 

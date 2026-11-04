@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Billing schema: accounts, customers, subscriptions, invoices, webhook events.
 
 Revision ID: 0002

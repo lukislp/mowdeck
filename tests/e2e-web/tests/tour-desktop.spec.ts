@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guided tour (ADR 0073) on the desktop: it starts by itself once for a new account and
  * leads it to adding the first mower; Esc leaves it for good (stored per user in Identity); it

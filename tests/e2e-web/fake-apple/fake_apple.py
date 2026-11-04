@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A fake Apple for the Playwright suite (ADR 0052): the Sign in with Apple endpoints MowDeck uses.
 
 Test stacks only (infra/compose/docker-compose.e2e.yml runs it with the identity image, which

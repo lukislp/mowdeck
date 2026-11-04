@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The heat layers of `MowerMap` (coverage, RTK fix share, WLAN and mobile signal): pure
  * functions that turn a Telemetry heatmap answer (`GET /telemetry/mowers/{id}/heatmap`) into

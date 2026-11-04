@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The hash of a spot plan sent with ``start_mow`` (Planner, ADR 0030).
 
 Additive: a nullable column only, so a running older Fleet keeps working during the rollout.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Who watches which account (demo sandboxes, ADR 0076): ``presence.accounts`` from Realtime.
 
 Core NATS, every gateway instance, no queue group: each instance rests or wakes its own mowers.

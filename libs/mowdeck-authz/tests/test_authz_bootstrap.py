@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """bootstrap_model(): store by name, model written only when it changed; and the CLI."""
 
 import json

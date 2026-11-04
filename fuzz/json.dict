@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # libFuzzer dictionary of every target (docs/dev/fuzzing.md): JSON syntax and the edge values
 # of the formats the targets parse. Most of the parsing happens in C or Rust (json, pydantic-core)
 # that Atheris cannot see, so the fuzzer gets these tokens instead of coverage feedback.

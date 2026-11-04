@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   AI assist ("KI-Hilfe") for one mower: which provider answers, the analysis, the proposed
   maneuver (situation, confidence, readable steps, risks, rationale, expiry; for `resume` the

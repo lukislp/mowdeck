@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual drive sessions (ADR 0026): open and close the record, list the audit.
 
 Realtime asks once per session (``fleet.drive.start``) and closes it at the end

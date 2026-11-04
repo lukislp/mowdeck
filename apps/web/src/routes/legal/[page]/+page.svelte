@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A legal page of the installation (imprint, terms, privacy): the operator's Markdown from
   `/legal/<page>.md` (static/legal, replaceable with a volume), rendered with the tiny safe subset

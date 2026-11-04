@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Drive calibration and the manual-driving speed setting (ADR 0042).
 
 A spot run (ADR 0039) steers a mower with normalised stick values (``linear``, ``angular``,

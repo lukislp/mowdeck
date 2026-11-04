@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A payment provider without network for tests and development (``MOWDECK_BILLING_PROVIDER=fake``).
 
 It speaks Stripe's webhook format (same signature check and event layout), so the whole webhook

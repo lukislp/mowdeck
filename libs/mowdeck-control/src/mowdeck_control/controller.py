@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The adapter-agnostic controller of one mower: it enforces the command and safety rules.
 
 :class:`MowerController` accepts :class:`~mowdeck_contracts.v1.CommandEnvelope` objects and

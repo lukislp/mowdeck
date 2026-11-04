@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``CameraSnapshotter`` port over HTTP: the camera relay's frame tap (ADR 0045).
 
 ``RelaySnapshotter``: ``POST <MOWDECK_RELAY_URL>/internal/v1/frames/snapshot`` with the mower's

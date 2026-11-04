@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """All use cases of the Scheduler, wired from their ports."""
 
 from dataclasses import dataclass

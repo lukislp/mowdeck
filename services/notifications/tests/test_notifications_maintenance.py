@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The deploy maintenance window (ADR 0055): window arithmetic, the suppression of the offline /
 online pair, the release when the mower stays offline, the CLI and the stores."""
 

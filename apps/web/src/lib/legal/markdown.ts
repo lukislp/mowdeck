@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A tiny Markdown subset for the legal pages (`static/legal/*.md`, written by the operator):
  * headings (`#` to `####`), paragraphs, unordered and ordered lists, `**bold**` and

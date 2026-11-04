@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 import { render } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
 import StatusBadge from '../lib/status/StatusBadge.svelte';

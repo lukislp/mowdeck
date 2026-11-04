@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ticker: firings end to end through Fleet, skips, auto-disable and the follow-up."""
 
 from datetime import UTC, datetime, timedelta

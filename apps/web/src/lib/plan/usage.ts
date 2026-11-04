@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The limit rows of the plan section: each limit of the plan with the current use where the app
  * knows it (the lists it loads), and whether it is reached. `null` limit means unlimited.

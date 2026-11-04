@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Matter server (ADR 0063): every mower as its own Matter node for Apple Home, Google Home and
 Home Assistant (Compose service matter-server, profile "matter"). Off by default
 (services.matterServer.enabled=false).

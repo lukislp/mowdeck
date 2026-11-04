@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Permission keys and the relations of the authorization model they map to.
 
 Identity stores roles as sets of permission keys and writes them as ``grant_*`` tuples on the

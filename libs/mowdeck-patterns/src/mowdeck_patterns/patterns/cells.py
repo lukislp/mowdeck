@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Decomposed cells: the area is cut into simpler pieces, each mowed in its own best direction.
 
 The decomposition is a trapezoidal (slab) split: vertical cuts through every concave corner of

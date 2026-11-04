@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * "Was ist neu": the notes of `/whats-new.json` (built at release time by
  * build-tools/whats-new.mjs, shipped in the web image), which of them a device has not seen yet,

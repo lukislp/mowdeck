@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Sign in with Apple (ADR 0052), desktop Chromium against the test stack's fake Apple
  * (tests/e2e-web/fake-apple, only in docker-compose.e2e.yml): the browser goes to its

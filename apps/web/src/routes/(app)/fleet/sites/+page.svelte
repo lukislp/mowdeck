@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Sites of the account: the default site first (marked), each with time zone, address,
   coordinates, its mowers and groups. Create, edit and delete sites (Fleet answers 409 for the

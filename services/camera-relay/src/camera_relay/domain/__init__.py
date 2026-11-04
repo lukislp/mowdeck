@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain layer of camera-relay: sessions, leases, limits and tickets (ADR 0045).
 
 Pure Python only: no I/O, no FastAPI, no NATS, no media. The aggregate

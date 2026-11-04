@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Words of the maintenance actions (de and en through Paraglide), exhaustive per action. */
 import { m } from '#lib/paraglide/messages.js';
 

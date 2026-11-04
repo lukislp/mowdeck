@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Safety guard: the suite registers users, accounts and simulated mowers, so it only runs against
  * a throwaway test stack. Such a stack carries the marker of infra/compose/docker-compose.e2e.yml

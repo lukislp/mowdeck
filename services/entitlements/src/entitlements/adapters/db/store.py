@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store on SQLAlchemy Core (async, asyncpg). Upserts use ``ON CONFLICT``."""
 
 from collections.abc import AsyncIterator

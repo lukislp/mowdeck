@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fan-out: from a derived event to inbox items and queued deliveries per recipient.
 
 Recipients are the users of the mower's account whose preferences follow the mower (``all

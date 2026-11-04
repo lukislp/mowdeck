@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The Device-Gateway use cases: the volatile mower registry and command admission."""
 
 import asyncio

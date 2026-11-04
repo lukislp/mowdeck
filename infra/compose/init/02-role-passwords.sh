@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Sets the password of every per-service role from SERVICE_DB_PASSWORD.
 set -eu
 for role in identity fleet telemetry scheduler notifications entitlements billing planner vision openfga; do

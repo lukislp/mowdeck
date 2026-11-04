@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Compose block for notifications: paste the entries below "services:" into
 # infra/compose/docker-compose.yml (and add the volume notifications-data).
 # Build context is the repository root. (Already pasted; keep both in sync.)

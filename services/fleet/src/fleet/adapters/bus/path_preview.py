@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway to plan a route without starting (core NATS request/reply)."""
 
 from mowdeck_contracts.v1 import PathPreviewGatewayRequest, PathPreviewReply

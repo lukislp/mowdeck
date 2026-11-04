@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """TupleWriter: ownership, idempotency, diffs, cache invalidation, audit hook; OpenFGA backend."""
 
 from collections.abc import Sequence

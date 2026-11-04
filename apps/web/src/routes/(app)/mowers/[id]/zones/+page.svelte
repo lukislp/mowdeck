@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Virtual zones of one mower (Telemetry, ADR 0070): for a mower whose vendor shares no map but
   that reports positions, the owner draws zones over the map (and the aerial photo, when the

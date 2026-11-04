@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The caller's language for texts that come from adapters (ADR 0066): the ``locale`` query
 parameter, else the first language of ``Accept-Language``, else English (the same rule as the
 error lexicon routes of Telemetry)."""

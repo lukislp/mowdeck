@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Maintenance commands (ADR 0048): one-shot device actions next to mowing and driving.
 
 Each action is its own command kind, so Fleet can require its own right per kind:

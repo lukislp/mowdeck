@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The fuzz targets in fuzz/ (docs/dev/fuzzing.md) are complete and replay cleanly.
 
 ClusterFuzzLite builds every ``fuzz/fuzz_*.py`` (``.clusterfuzzlite/build.sh``); OpenSSF

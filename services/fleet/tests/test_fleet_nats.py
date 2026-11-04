@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """JetStream: Fleet publishes a command, a durable consumer receives it, its result updates the
 record; ``fleet.mowers.list`` over core NATS.
 

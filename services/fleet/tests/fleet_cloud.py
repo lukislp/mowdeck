@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A neutral cloud provider for Fleet's tests (ADR 0066): Fleet knows no vendor, so its tests
 link accounts of ``acme`` (e-mail and password) and ``zeta`` (application key and secret plus a
 region), as a fake Device-Gateway lists them on ``gateway.cloud.providers``."""

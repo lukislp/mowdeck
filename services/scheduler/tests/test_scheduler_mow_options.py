@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Start settings per schedule (ADR 0024 amendment 2026-10-24): checked against the target
 mowers' capabilities when saved (per member for a group), merged over the mow defaults and
 fitted to each mower at fire time, blade height and speed sent before the start."""

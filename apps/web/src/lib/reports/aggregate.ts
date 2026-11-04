@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Report helpers: periods, per mower totals, account totals and faults by code, from
  * Telemetry's `GET /reports/summary` (day totals per mower in UTC days, one call). Telemetry

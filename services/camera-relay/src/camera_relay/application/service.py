@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Use cases of the relay: attach, renew, detach, media reports, source reports, mower states
 and the periodic tick.
 

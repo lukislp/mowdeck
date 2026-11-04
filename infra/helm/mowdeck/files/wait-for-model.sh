@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Init container (authz-bootstrap image): wait until the latest authorization model of the store
 # $FGA_STORE_NAME is the model shipped in this image (/model/model.fga), compared like the
 # bootstrap job does (both rendered to DSL by the same CLI transformer). Services pin the latest

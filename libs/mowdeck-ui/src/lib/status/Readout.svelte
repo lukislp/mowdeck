@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   A labelled value of the instrument panel: uppercase label, monospaced value with tabular
   figures, the unit in a smaller weight. A changed value flashes once in the state tint.

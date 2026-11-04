@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Schedules with rain pause against the stack's Scheduler (desktop, 1280 x 800), with the
  * static weather provider and its development endpoint (tests/e2e-web/stack.env):

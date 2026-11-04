@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The live incident of 2026-10-18 end to end at unit level: the real viewer with the real WHEP
  * player against a fake relay (Fleet's session and lease endpoints, MediaMTX's WHEP endpoint)

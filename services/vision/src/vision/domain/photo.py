@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Why the mower delivered no camera photo, judged from its state and the gateway's answer.
 
 Pure, no I/O. Live case 2026-10-24: a LUBA stopped with error 1201 at the far end of the garden.

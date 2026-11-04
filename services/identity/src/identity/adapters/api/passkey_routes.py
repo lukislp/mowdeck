@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Passkeys (ADR 0050) under ``/api/v1/identity``.
 
 Login (public, rate limited per client IP like the password login; Traefik's ``identity-auth``

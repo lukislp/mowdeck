@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``VisionProvider`` on LiteLLM: one client for every vision-capable model family.
 
 The model string (``anthropic/claude-sonnet-5-5``, ``openai/gpt-5-mini``,

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // @vitest-environment node
 /**
  * The rendered CSP of nginx/40-mowdeck-runtime-config.sh: the hash of the Agora SDK's one inline

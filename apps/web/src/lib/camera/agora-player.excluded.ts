@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Stand-in for `agora-player.ts` in a build without the Agora Web SDK (the default; the
  * published `web` image is always built this way, see `vite/release-licences.ts`). The SDK is

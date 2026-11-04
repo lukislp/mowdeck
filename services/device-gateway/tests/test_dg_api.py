@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API: operational endpoints, the module descriptor and the mower listing."""
 
 from dg_support import make_app, registration, telemetry, wait_until

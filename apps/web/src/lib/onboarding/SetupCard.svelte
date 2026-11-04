@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The setup tour on the mower list (ADR 0062), in the page flow (never an overlay, so the list
   and the add button stay usable):

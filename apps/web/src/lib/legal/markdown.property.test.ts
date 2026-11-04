@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Property-based tests (fast-check) of the legal Markdown subset: the operator's file is
  * rendered on public pages, so whatever it contains must parse without throwing and every link

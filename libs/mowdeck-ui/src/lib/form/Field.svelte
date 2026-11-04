@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- A labelled text input with hint and error (field errors from problem+json map here). -->
 <script lang="ts">
   interface Props {

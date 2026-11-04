@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``notification`` and ``vision_proposal`` over the socket, with their authorization.
 
 * A person gets the items of their own inbox (``notifications.sent``), without a subscription,

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Open, close and read the deploy maintenance window (ADR 0055).
 
 The deploy opens the window before it restarts services and closes it after the health checks;

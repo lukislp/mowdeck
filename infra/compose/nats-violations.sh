@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Fails when the NATS server of a running stack refused a client (ADR 0074): a permission
 # violation (a service used a subject outside its allow list in nats/auth.conf) or an
 # authentication failure. CI runs it after the end-to-end suites; locally, after any test run:

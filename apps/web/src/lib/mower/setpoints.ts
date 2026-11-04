@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Blade height and speed in the start sheet: the values the sheet opens with (the mower's
  * reported setpoints, limited to the model's range) and which commands a start sends before

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Backpressure without a network: the outbox and a session on a fake socket that reads slowly.
 
 * Coalescing: three states published while the client is busy arrive as the first one (already

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Virtual zones (ADR 0070): the owner's own zones for mowers whose vendor shares no map.
 
 Telemetry owns them because it is the one service that reads positions: the zones are only

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The forecast hours of a rain decision as a strip of bars: height is the precipitation
   probability, hours that reach a threshold of the rain pause are in the paused tone (with a

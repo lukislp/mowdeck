@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """iOS devices for the ``apns`` channel (Apple Push Notification service).
 
 A new table ``apns_devices`` (one row per device token, unique). Stored preferences get

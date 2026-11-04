@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Translate Stripe objects (plain dicts of a webhook payload or an API answer) into the provider
 independent models of ``billing.domain.models``.
 

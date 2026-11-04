@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The interactive API explorer (ADR 0072): Scalar in a same-origin frame (/_explorer/, pinned
   self-hosted bundle with its own CSP), fed with the services' OpenAPI documents and the access

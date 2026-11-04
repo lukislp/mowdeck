@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The mow path: snapshots on device.mower.<id>.path and preview requests (core NATS)."""
 
 import asyncio

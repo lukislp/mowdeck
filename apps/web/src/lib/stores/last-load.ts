@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The last successful answer of a page loader, kept in memory for this tab. A page shows it at
  * once when it is opened again (and while its fresh load runs or fails), instead of a blank

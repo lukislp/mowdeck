@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Device snapshots: map and capabilities from device.mower.<id>.*, served per mower."""
 
 from uuid import UUID, uuid4

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes Identity's events on the bus (``event.identity.*``)."""
 
 from typing import Any

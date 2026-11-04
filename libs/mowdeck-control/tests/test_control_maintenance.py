@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Maintenance commands (ADR 0048): the safety rules, the controller's checks and the simulator."""
 
 import asyncio

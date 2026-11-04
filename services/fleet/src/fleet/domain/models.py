@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entities of Fleet. Field names equal the column names in ``adapters.db.tables``.
 
 Properties ending in ``_key`` are not stored; the memory store uses them for the unique rules

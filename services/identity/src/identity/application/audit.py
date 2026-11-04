@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Reading the audit log of an account (newest first, keyset pagination by id).
 
 **Public demo** (ADR 0068): every visitor signs in as the one demo user, which holds

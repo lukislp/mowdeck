@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # One-shot job that creates the OpenFGA store "mowdeck" and writes the
 # authorization model when it changed. The official CLI image has no shell,
 # so its static binary is copied next to busybox and jq (all pinned). The base

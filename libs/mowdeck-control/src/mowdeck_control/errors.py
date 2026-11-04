@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Exceptions of the control library.
 
 Adapters raise :class:`CommandRejected` when the mower refuses a command before doing anything

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The guided tour (ADR 0073) in the public demo (ADR 0068), against a demo stack (CI job
  * e2e-demo, projects demo and demo-phone); every test skips on another stack. It starts by itself

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Relay tickets: what a WHEP bearer token allows (the scope; signing is an adapter).
 
 A ticket is bound to one account, one mower, one source session (its random ``relay_id``), one

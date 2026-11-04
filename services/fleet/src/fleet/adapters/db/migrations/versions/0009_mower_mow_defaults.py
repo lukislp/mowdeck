@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing defaults per mower (pattern, angle, border laps, spacing of a native start).
 
 Additive: one nullable JSONB column on ``mowers``, so a running older Fleet keeps working

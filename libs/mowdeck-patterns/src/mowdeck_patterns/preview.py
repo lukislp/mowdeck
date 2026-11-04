@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A GeoJSON-like preview of a plan for the app: one line feature per segment plus totals.
 
 Coordinates are local metres ``[x, y]`` (``crs: "local"``). With ``to_wgs84`` (a function

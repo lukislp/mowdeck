@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Helpers for the fleet tests (a plain module: the repository has no conftest.py).
 
 ``harness()`` builds the real app with the memory store, the in-memory OpenFGA fake (it

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Connection options of a Worx mower (``ConnectionConfig.options``).
 
 The gateway merges the linked account's credential fields (``brand``, ``email``, ``password``)

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The API explorer (ADR 0072) in the public demo, against a demo stack (CI job e2e-demo; locally
  * `MOWDECK_E2E_DEMO=1 pnpm e2e:stack up`). Runs in the projects `demo` and `demo-phone`; on any

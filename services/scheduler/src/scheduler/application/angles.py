@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The angle rotation of one mower (ADR 0061): its last angle per area and the step the start
 sheet offers for manual starts.
 

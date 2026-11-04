@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure helpers of the theft tracking views: merging polled track points, the bounds to fit, the
  * newest point's time (the `after` of the next poll) and the offset between the server's clock and

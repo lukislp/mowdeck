@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Cloud account discovery contracts (ADR 0034)."""
 
 from uuid import uuid4

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """RTK base station (ADR 0047) in the Device-Gateway against the simulator: the registration's
 base station reaches the connection, the state carries it, firmware checks with the target
 ``base_station`` and the base station update command."""

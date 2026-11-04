@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The real thing on loopback: a node per mower, commissioned by a matter.js controller with the
  * pairing code the admin API shows, then driven like Apple Home would (run mode, pause, go home),

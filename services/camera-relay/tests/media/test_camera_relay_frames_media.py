@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Vision's frame tap end to end (ADR 0045): the relay image, MediaMTX, ffmpeg and Pillow.
 
 The test publishes the mower's state on ``telemetry.mower.<id>`` (the relay never asks a mower)

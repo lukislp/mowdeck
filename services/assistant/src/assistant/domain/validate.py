@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Strict server-side validation of a model's answer against the catalog (ADR 0075).
 
 The answer is untrusted: it comes from a model that read untrusted text. Whatever it contains,

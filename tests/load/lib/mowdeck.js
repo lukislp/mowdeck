@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Shared helpers of the k6 scenarios (tests/load/scenarios). Pointed at the throwaway stack of
 // tests/load/load.mjs (BASE_URL is the stack's gateway inside its own Docker network) or, by
 // tests/load/vps/ladder.sh, at the demo host's gateway from inside its TLS proxy's network

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """What a provider package hands the conformance kit: :class:`ProviderUnderTest`.
 
 The kit derives everything else from the installed distribution (its entry points, its

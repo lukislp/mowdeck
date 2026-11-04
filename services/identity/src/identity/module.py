@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of identity, served at ``/.well-known/mowdeck-module``.
 
 Identity reads its own descriptor too: the keys declared here join the permission catalogue.

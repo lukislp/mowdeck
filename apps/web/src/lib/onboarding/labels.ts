@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Texts and links of the setup tour's steps. Every link leads into an existing flow. */
 import { m } from '#lib/paraglide/messages.js';
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The drive link of spot runs and the drive calibration when it is the Bluetooth bridge: the
  * mower's signal at the bridge as a start condition (green, red or neutral while unknown) and

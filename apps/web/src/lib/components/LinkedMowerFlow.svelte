@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Adding mowers of a linked account (a connection kind with `linked_account`): pick a linked
   vendor account or link one (any provider the Device-Gateway has enabled, ADR 0066), choose the mowers from its device list, give each a display

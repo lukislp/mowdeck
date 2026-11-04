@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Passkeys (ADR 0050), desktop Chromium with its virtual authenticator (CDP WebAuthn domain: a
  * platform authenticator with resident keys and user verification, presence simulated):

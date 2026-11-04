@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``resume`` end to end on the in-memory bus with a simulated mower: a multi-area job, the
 mower stuck at the entry of the transfer path to the next area, the job in the context, the
 proposal, and after approval drive, verify, ``resume_mow`` in that order; refusals when no job

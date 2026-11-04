@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // (d) The demo's per-address protection, measured on its own (docs/ops/load-testing.md): what one
 // client address gets before the gateway and the services say no. The other scenarios give every
 // virtual visitor its own address and never reach these limits; this one shows they are in place

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rules of AI assist (pure): which answers may be proposed, when execution aborts, whether
 the mower recovered.
 

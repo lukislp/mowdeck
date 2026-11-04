@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Words of the base station page (de and en through Paraglide), exhaustive per enum. */
 import type { ApiProblem } from '#lib/api/problem.js';
 import { problemMessage } from '#lib/i18n.js';

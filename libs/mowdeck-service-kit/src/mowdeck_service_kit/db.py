@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Async SQLAlchemy helpers for PostgreSQL (install the ``db`` extra).
 
 Migrations (Alembic) are not part of the kit; the service template runs them as a separate step

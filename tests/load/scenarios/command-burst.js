@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // (c) A burst of commands (start, pause, resume, dock) against the demo's simulated mowers, at a
 // rising arrival rate. Each command is followed to its final status the way the web app falls
 // back when the socket is quiet (GET /fleet/commands/{id}), which measures the whole path

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The "Firmware" panel of the mower settings (ADR 0038): the installed version, the version the
   manufacturer offers with its release notes (folded), the state line, a progress bar while an

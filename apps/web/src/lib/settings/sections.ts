@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The one settings page (`/settings`): the modules with `placement: 'settings'` become its
  * sections, in module order, each under its anchor (`section`). Their old routes

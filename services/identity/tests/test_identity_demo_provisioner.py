@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The HTTP provisioner of the demo sandboxes (ADR 0076) against a fake of the other services."""
 
 import asyncio

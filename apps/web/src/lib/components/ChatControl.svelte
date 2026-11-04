@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Chat control (ADR 0075): a command line on the mower page. A typed request becomes a work order
   from the optional assistant add-on; nothing runs until the user confirms it, and then every

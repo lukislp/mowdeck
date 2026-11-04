@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The mower's own settings on the settings page (desktop, 1280 x 800), generated from the
  * simulated mower's declaration (one setting of each type): grouped and translated rows with the

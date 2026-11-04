@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 // Stylelint rule `mowdeck/use-tokens`: raw colours, font stacks and radii belong in tokens.css.
 // Everywhere else styles reference the design tokens (`var(--md-...)`), so no default theme can
 // leak in and both themes stay consistent.

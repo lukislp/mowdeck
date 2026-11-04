@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Plans, limits and feature gates: what the Entitlements service answers (ADR 0028).
 
 Entitlements answers one question: "may account X use feature Y, or create one more Z?". The

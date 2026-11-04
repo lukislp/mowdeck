@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Dual link and firmware (ADR 0038) on a fake port: bridge up and down, the drive session on
 a bridge loss, scan error mapping, the firmware port calls and the update tracker."""
 

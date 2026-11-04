@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Which command buttons are enabled for an activity (design 4.2). Pure, so it is unit tested
  * without a page. The server and the mower still decide; this only avoids offering the obvious

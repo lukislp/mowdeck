@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The setup tour wired to the services: the choices at Identity, the facts from Fleet,
  * Telemetry, Notifications, Scheduler and Identity, the context from the session, the module

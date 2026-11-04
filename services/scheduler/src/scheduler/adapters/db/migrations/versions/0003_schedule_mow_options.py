@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Start settings per schedule (ADR 0024 amendment 2026-10-24) and the capabilities per mower.
 
 * ``schedules.blade_height_mm`` and ``schedules.speed_mps``: setpoints sent before each start,

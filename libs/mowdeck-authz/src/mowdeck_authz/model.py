@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The authorization model as data.
 
 ``infra/openfga/model.fga`` is the source of truth. The package ships its JSON form

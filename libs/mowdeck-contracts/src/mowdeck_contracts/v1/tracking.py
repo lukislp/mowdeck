@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Theft tracking mode (ADR 0058): the lease the Device-Gateway takes and the tracking events.
 
 Telemetry owns the tracking sessions. While one is active it asks the Device-Gateway that holds

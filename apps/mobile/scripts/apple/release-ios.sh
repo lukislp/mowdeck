@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Builds the iOS app shell for TestFlight and signs it for the App Store: bundled pages and
 # `cap sync ios` (common.sh), an unsigned `xcodebuild build`, then codesign with the Apple
 # Distribution identity, the App Store profile and apps/mobile/scripts/apple/entitlements/

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes for RTK base stations under ``/api/v1/fleet/base-stations`` (ADR 0047).
 
 Reading (list, get, firmware check) needs ``can_view`` on the caller's account, every change

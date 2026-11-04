@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * `GET /login-methods`: which sign-in methods the installation offers (flags only, never a
  * provider setting). The sign-in page asks for passkeys, GitHub and Apple at once; calls that

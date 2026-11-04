@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Property-based tests (fast-check) of the WHEP session URL: the relay answers an offer with a
  * `Location` the player later DELETEs, so a root-relative one must stay on the page's origin and

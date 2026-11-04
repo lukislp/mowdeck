@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The one question: may this subject do this on that object?
 
 Every implementation answers it with a plain ``bool`` and **fails closed**: when the answer

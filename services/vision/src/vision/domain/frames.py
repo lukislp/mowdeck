@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera frames: is one too dark for the vision model, do two form a stereo pair?
 
 Pure computation on the image bytes (Pillow, through ``mowdeck-control[photo]``) and on the

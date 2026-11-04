@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """All routers of Fleet; mounted under ``/api/v1`` by the kit (paths ``/api/v1/fleet/...``)."""
 
 from fastapi import APIRouter

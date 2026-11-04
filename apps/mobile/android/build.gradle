@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {

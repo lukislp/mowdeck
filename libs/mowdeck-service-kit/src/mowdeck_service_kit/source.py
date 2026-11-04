@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Where users get the source code of the running version (AGPL-3.0 section 13).
 
 Every HTTP response of a service carries the header ``X-Source-Code`` with the address of the

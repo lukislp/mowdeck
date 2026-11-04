@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The public page behind a share link (`/track#<token>`): no account, no navigation. It reads the
   token from the URL fragment, removes it from the address bar at once, and asks the public

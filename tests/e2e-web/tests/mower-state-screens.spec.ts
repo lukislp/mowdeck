@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the typed mower state (run: pnpm --filter e2e-web screens): the job card
  * and the reception and health panel of a mowing mower, light and dark, at phone (390 x 844) and

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """RTK base stations (ADR 0047): registered from a linked account's device list (or the
 simulated one), linked to mowers, published in their registrations, firmware checked and
 updated through a linked mower. Permissions on the account, tenant isolation, audit and the

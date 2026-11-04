@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <script lang="ts">
   import { Button, Field, Panel, ProblemNotice, Select, TopBar } from '@mowdeck/ui';
   import { tick } from 'svelte';

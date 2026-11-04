@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Wiring: settings, provider and price loading, the bus adapters, the plan catalogue, the CLI."""
 
 import argparse

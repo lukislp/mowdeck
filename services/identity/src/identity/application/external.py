@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Accounts at external login providers (GitHub) linked to users (ADR 0051).
 
 * Only explicit links: a signed-in user links their provider account in the settings (the

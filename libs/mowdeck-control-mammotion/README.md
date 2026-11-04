@@ -2,7 +2,7 @@
 
 The real mower adapter for Mammotion mowers (LUBA, Yuka) on top of [PyMammotion](https://github.com/mikey0000/PyMammotion). It implements the `MowerConnection` interface of [`mowdeck-control`](../mowdeck-control/README.md), so the Device-Gateway drives a real LUBA exactly like the simulator, with the same `MowerController` safety rules.
 
-**Licence: GPL-3.0-only** (see [`LICENSE`](LICENSE), a copy of `LICENSES/GPL-3.0.txt`). This package imports PyMammotion, which is licensed under GPL-3.0, so it is distributed under the GPL as well. It is kept apart from the Apache-2.0 library `mowdeck-control`, which never imports PyMammotion, so the interface and the simulator stay reusable without copyleft obligations ([ADR 0011](../../docs/adr/0011-gpl-package-for-pymammotion-adapter.md)). Anyone who uses this adapter outside MowDeck inherits the GPL-3.0 obligations of PyMammotion. The Device-Gateway (AGPL-3.0) depends on it, which is compatible.
+**Licence: GPL-3.0-only** (see [`LICENSE`](LICENSE), a copy of `LICENSES/GPL-3.0-only.txt`). This package imports PyMammotion, which is licensed under GPL-3.0, so it is distributed under the GPL as well. It is kept apart from the Apache-2.0 library `mowdeck-control`, which never imports PyMammotion, so the interface and the simulator stay reusable without copyleft obligations ([ADR 0011](../../docs/adr/0011-gpl-package-for-pymammotion-adapter.md)). Anyone who uses this adapter outside MowDeck inherits the GPL-3.0 obligations of PyMammotion. The Device-Gateway (AGPL-3.0) depends on it, which is compatible.
 
 Transports, secrets and pin policy: [ADR 0019](../../docs/adr/0019-mammotion-adapter-transports.md).
 

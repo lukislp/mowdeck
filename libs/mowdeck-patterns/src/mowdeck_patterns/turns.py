@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Turn shapes at lane ends (ADR 0043): arcs, bulb turns and three-point turns.
 
 The stripe patterns join two neighbouring runs with a short straight ``turn`` segment. A mower

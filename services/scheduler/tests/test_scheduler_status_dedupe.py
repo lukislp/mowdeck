@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The mower status write rule (docs/ops/load-testing.md, "Ingestion cost"): an activity change
 is written at once, an unchanged activity at most every STATUS_REFRESH or after a move of
 STATUS_MOVE_M, never an older or repeated report."""

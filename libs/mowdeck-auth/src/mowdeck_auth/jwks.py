@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Public keys for verification: a cached JWKS fetched over HTTP, or a static set.
 
 :class:`JwksCache` mirrors PyJWT's ``PyJWKClient`` (cached set with a lifespan, one forced

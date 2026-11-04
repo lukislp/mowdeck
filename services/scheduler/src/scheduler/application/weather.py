@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Where a mower is and what the weather there does to a run.
 
 Location, in this order: the coordinates of the mower's site (Fleet, answered with the target),

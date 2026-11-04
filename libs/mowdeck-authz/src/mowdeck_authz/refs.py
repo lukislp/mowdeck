@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Subjects and objects in OpenFGA notation.
 
 An OpenFGA object is ``<type>:<id>`` (``mower:3f2c...``). A subject (the "user" of a tuple) is

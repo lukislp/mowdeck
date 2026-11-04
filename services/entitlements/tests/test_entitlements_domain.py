@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain rules: status transitions, plan file parsing, catalogue merge."""
 
 from datetime import timedelta

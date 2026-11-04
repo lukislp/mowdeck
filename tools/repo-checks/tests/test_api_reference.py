@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The API reference pages match the OpenAPI documents, and the renderer reads a small fixture."""
 
 import importlib.util

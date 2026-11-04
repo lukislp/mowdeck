@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the API tokens section (run: pnpm --filter e2e-web screens): the list
  * with a view-only and a full Home Assistant token and three revoked ones folded away, the

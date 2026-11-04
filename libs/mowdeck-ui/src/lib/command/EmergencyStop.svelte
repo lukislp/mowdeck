@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The emergency stop: a red actuator on a yellow ring (machine stop convention), the only element
   using the "Signal stop" colours. One tap sends; no confirmation, never disabled, never animated.

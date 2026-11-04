@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the caller's account, the operator gate, error mapping.
 
 * ``/me`` answers for the account of the verified token (``acc``), never for a path value.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Build a provider's connection on its fake vendor client, wrap it in the controller, send.
 
 The connection is built the way the Device-Gateway builds it: from the cloud provider plugin

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phase 3 gate item 5, the health history (desktop, 1280 x 800): after the simulated mower mowed
  * for a while, the health page shows blade and mowing hours above zero, today's bar in the

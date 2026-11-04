@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Pure joystick math for `Joystick`: a pointer offset from the pad centre (or held arrow keys)
  * becomes `{linear, angular}` in -1..1. Up is forward (+linear), left turns left (+angular), as in

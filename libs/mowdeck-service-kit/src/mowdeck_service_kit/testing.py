@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Test utilities for services built on the kit (install the ``testing`` extra for httpx).
 
 Typical test::

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The start sheet's flow, without any markup: the picked areas, the pattern and setpoint drafts
  * the sheet opens with, "Pfad berechnen" (one preview at a time, keyed by areas and pattern),

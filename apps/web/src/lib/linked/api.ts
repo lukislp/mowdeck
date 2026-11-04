@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fleet's linked account endpoints. Linking and re-reading log in to the vendor cloud and use
  * the client with the longer deadline; the rest is ordinary.

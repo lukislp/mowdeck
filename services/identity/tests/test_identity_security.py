@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Security center (ADR 0065): sessions and devices, revocation, security events, new-login
 alerts, the password status and the last-way-in guard of linked providers."""
 

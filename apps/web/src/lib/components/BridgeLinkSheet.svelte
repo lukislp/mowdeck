@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Adding a Bluetooth bridge to a mower (ADR 0038, design 3), a non-modal sheet in three steps:
   the bridge (host, key, the port under "erweitert"), the mower the bridge saw (the expected

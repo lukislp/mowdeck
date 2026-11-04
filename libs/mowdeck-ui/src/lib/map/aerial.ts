@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The aerial photo layer of the mower map: a Leaflet tile layer whose tiles are loaded through a
  * callback instead of the browser's own image request, so the page can add the bearer token

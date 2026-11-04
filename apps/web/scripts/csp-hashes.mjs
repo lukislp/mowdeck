@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Computes the CSP script hashes of the built app and writes the nginx snippet
 // (build/csp.conf, copied to /etc/nginx/snippets/csp.conf by the Dockerfile).
 //

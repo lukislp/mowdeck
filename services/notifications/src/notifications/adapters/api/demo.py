@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What Notifications refuses in the public demo (ADR 0068), and the sandbox purge (ADR 0076).
 
 The demo keeps every notification in the in-app inbox and sends nothing out: no Web Push

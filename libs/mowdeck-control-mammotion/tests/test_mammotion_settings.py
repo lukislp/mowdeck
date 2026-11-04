@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The mower's own settings and its rain sensor on the Mammotion connections (ADR 0046)."""
 
 import asyncio

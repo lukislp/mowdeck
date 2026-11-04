@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization questions the use cases ask themselves.
 
 The HTTP layer guards the object named in the path (``mowdeck_authz.fastapi``). Checks that

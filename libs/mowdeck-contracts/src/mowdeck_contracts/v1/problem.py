@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """RFC 9457 problem details, the error format of every MowDeck HTTP API."""
 
 from pydantic import Field

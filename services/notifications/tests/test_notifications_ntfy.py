@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """ntfy: a real server (``binwiederhier/ntfy``) receives the JSON publish.
 
 Runs when ``MOWDECK_TEST_NTFY_URL`` is set (CI starts the server like NATS). Locally::

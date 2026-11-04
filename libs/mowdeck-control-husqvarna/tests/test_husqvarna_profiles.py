@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The Husqvarna capability profile (ADR 0071)."""
 
 from mowdeck_contracts.v1 import ProfileFeature, ProfileReport

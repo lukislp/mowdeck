@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Init container of the authz-bootstrap job: wait until OpenFGA answers an authenticated request.
 # Environment: FGA_API_URL, FGA_API_TOKEN, WAIT_TIMEOUT_SECONDS.
 set -u

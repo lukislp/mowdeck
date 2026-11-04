@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API with minted tokens: registration, lists, commands per kind, cross-account negatives,
 bulk commands, sites and groups."""
 

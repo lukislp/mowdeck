@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Day totals for reports: jobs started and online time per mower and UTC day.
 
 Revision ID: 0005

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Vendor error codes in plain words (ADR 0067). The texts come from the vendor's error lexicon,
  * which ships with its adapter package and is served by Telemetry; the app holds no code table

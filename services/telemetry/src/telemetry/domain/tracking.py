@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Theft tracking sessions, share links and photos (ADR 0058): plain data and pure rules."""
 
 import hashlib

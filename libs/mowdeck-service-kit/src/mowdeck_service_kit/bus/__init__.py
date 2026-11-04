@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Event bus: protocol, NATS JetStream implementation, in-memory implementation, helpers."""
 
 from mowdeck_service_kit.bus.base import (

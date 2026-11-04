@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Entitlements contracts: snapshot decisions, request validation, events."""
 
 from uuid import uuid4

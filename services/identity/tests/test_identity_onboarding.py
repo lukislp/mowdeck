@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Setup tour progress (ADR 0062): ``GET`` and ``PUT /me/onboarding``."""
 
 from datetime import timedelta

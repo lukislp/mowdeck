@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Static checks of the MowDeck chart, no cluster needed (CI job "helm", and locally):
 #
 #   1. helm dependency build (NATS and OpenFGA charts, versions pinned in Chart.lock)

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The origin of a drive session (Vision drives on behalf of a user, ADR 0033).
 
 Additive: one nullable column, so a running older Fleet keeps working during the rollout.

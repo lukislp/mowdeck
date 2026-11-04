@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The web app's side of the API explorer (ADR 0072). The page `/api-explorer` embeds the frame
  * `/_explorer/index.html` (pinned Scalar bundle with its own CSP, served by nginx only with

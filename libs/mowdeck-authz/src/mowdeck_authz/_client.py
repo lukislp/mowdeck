@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Thin typed boundary around the untyped ``openfga-sdk`` async client.
 
 Everything else in the package talks to :class:`FgaClient`, so tests can pass a fake and mypy

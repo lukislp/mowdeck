@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- A labelled native select (native pickers work best with gloves and on phones). -->
 <script lang="ts">
   interface Option {

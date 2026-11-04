@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """OpenFgaAuthorizer against a scripted SDK client: resolution, fail closed, cache, batch."""
 
 import asyncio

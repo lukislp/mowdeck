@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What Entitlements refuses in the public demo (ADR 0068): every change of plans and account
 plans (operator actions; the demo account keeps its plan). And the sandbox purge (ADR 0076).
 

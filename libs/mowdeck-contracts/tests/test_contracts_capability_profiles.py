@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Capability profiles: features derived from capabilities, consistent declarations (ADR 0071)."""
 
 import pytest

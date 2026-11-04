@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """NATS authentication and least-privilege permissions (ADR 0074).
 
 * The generated server configuration (infra/compose/nats/auth.conf and the chart's copy) is the

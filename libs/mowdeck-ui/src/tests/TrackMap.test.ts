@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 // @vitest-environment jsdom
 import { render, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Site coordinates (rain pause of the Scheduler) and the origin of issued commands.
 
 Additive: nullable columns only, so a running older Fleet keeps working during the rollout.

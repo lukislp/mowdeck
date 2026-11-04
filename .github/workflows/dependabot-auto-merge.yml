@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: Dependabot auto-merge
 
 # Thin caller of the shared implementation in lukislp/ci-workflows (auto-merge of Dependabot

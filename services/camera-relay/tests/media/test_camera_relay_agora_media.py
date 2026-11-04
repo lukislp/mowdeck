@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The agora source driver end to end, without Agora: a synthetic LUBA-like stream through the
 bridge protocol, the relay's muxer and transcoder, MediaMTX and a WHEP client (ADR 0045 step 7).
 

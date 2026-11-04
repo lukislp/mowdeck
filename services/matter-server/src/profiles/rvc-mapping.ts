@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Robotic Vacuum Cleaner mapping as plain data, without matter.js, so it is tested on its own
  * (`test/rvc-mapping.test.ts` also checks the numbers against matter.js' enums).

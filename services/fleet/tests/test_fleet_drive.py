@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual drive sessions (ADR 0026): ``fleet.drive.start``/``stop`` and the audit API."""
 
 from datetime import timedelta

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The kit itself: it passes a conforming adapter and catches each broken contract.
 
 A check that stops catching its violation would let a broken provider through, so every check

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The fleet map: every mower the user may view on one map, live (positions from Telemetry's
   account states plus the Realtime subscription of the shown mowers), filtered by site and

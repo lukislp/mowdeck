@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The cloud connection and the shared base on a fake PyMammotion port."""
 
 import asyncio

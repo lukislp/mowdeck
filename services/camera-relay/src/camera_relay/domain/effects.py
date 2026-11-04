@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Effects: what the domain asks the outside world to do, as data.
 
 The application layer carries them out in order: the source port for the vendor session, the

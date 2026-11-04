@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The HTTP adapters against a mocked public API (``httpx.MockTransport``): the caller's token
 is forwarded to every service, the answers are mapped, and Vision's structured answers are
 requested with the generated schema. No network, no real AI."""

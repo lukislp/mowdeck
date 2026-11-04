@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowDeck authorization: one question, "may this subject do this on that object?".
 
 Services ask through an :class:`Authorizer` (``OpenFgaAuthorizer`` in production,

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """APNs requests for Live Activities and widget reloads (ADR 0059): topic, push type, priority,
 size limit and the answer mapping of the shared client."""
 

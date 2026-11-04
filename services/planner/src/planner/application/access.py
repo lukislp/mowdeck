@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Authorization questions of the Planner (through ``mowdeck_authz.Authorizer``).
 
 A preview or a coverage query needs ``can_view`` on the mower, a plan that is meant to be

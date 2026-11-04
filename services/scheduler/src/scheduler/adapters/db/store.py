@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store on SQLAlchemy Core (async, asyncpg).
 
 * The ticker claims one due schedule per transaction with ``FOR UPDATE SKIP LOCKED``: the row

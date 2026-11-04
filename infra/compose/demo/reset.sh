@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # (Re)creates the public demo stack (ADR 0068, docs/ops/demo.md): deletes the previous demo with
 # all its volumes, starts a fresh one and lets the seed job prepare it. Nothing a visitor did
 # survives a reset. Run it by hand or from the timer of docs/ops/demo.md every DEMO_RESET_HOURS.

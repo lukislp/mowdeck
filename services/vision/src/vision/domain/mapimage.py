@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A small top-down map rendering for the vision model (Pillow, no browser, no I/O).
 
 The image is in the **mower frame, heading up**: the mower sits in the centre and points to the

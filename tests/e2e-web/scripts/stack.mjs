@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Throwaway Compose stack for the e2e suites (tests/e2e-web and tests/e2e), next to any other
  * MowDeck stack on the same host and without touching it.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The cloud providers of the gateway (ADR 0066): plugins from ``mowdeck.cloud_providers``.
 
 Every vendor whose mowers are reached through a cloud registers a ``ProviderSpec`` in its own

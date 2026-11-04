@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Open-Meteo forecast API (https://open-meteo.com/en/docs), the default weather provider.
 
 One request per location returns hourly ``precipitation`` (mm, sum of the preceding hour),

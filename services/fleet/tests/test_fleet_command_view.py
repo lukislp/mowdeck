@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``CommandView.end_job`` tells a dock that ended the job from one that kept it;
 ``CommandView.pattern`` shows the pattern a start was sent with."""
 

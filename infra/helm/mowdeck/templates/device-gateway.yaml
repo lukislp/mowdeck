@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Device-Gateway: holds the mower connections, executes commands, publishes telemetry
 (Compose service device-gateway). A StatefulSet: one shard per replica, the shard index is the
 pod index (label apps.kubernetes.io/pod-index), the shard count the replica count (ADR 0013).

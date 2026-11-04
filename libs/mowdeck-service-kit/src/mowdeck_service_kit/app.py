@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Application factory: one call builds a fully equipped MowDeck service."""
 
 import asyncio

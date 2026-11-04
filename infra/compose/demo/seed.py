@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Seed job of the public demo (ADR 0068): the demo account, its simulated mowers and a week
 of history. Standard library only; runs once per (re)start of a demo stack, before the
 Device-Gateway starts (``docker-compose.demo.yml``, service ``demo-seed``).

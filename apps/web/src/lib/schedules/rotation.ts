@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mowing angle rotation (ADR 0061), mirroring `scheduler.domain.rotation`: a new direction on
  * every run, so the lawn gets no permanent tracks. A schedule rotates by a step (each run turns

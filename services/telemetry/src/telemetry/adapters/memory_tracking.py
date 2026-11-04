@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """In-memory tracking store (tests) with the semantics of the PostgreSQL store."""
 
 from collections.abc import AsyncIterator, Mapping

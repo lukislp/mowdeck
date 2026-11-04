@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Polling with backoff for the tracking views. The base interval applies while requests succeed;
  * failures double the wait (up to a minute) and a `Retry-After` from the server (HTTP 429) is

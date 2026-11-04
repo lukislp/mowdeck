@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Plan refusals of the services (ADR 0028): 409 `plan-limit` carries the limit key with the limit
  * and the current count in `errors` (`code` `limit` and `current`), 403 `feature-not-in-plan`

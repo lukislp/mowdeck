@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The base map under a theft tracking track (ADR 0058): the layers Telemetry offers (street map
  * and aerial photo, only around the tracked positions), their tile routes, the loader of a share

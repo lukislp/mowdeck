@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Browser session support: cookie-only refresh transport, the refresh reuse grace and the
 web app's ``ui-areas``."""
 

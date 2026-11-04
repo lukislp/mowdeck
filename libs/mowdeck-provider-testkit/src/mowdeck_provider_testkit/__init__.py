@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Provider conformance kit (ADR 0069): the vendor-neutral checks every adapter package runs.
 
 A provider package proves that it honours the MowDeck contracts (ADR 0012, 0046, 0066, 0067)

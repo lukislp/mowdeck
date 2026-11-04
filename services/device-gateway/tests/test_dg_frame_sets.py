@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Frame sets for Vision (ADR 0045): a photo request with ``max_frames`` 2 gets one frame of each
 front camera of the same moment through the camera relay, left first, with side and capture
 time; every other source keeps its single frame; the HTTP side of ``RelaySnapshotter.frame_set``

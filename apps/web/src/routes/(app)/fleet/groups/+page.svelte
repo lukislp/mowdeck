@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Mower groups: per group its site (or cross-site), its members, and the actions: edit name and
   site, add or remove members (each change is `PUT /mowers/{id}/groups` with the mower's whole

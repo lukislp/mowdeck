@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Property-based tests (fast-check) of the heat layer helpers: the period window built from the
  * command list Fleet returns, the request path and the guards of stored preferences.

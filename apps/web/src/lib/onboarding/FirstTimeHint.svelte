@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A short "first time here" note on a main screen (ADR 0062), in the page flow. Shown to users
   who started the setup tour (not to accounts set up before it existed) until they dismiss it;

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowPattern: the common pattern settings of a native start (and the Fleet mow defaults)."""
 
 import pytest

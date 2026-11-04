@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Markdown summary of a Playwright JSON report (merged-report/results.json) for the job summary:
  * totals, and the specs that failed first and passed on a retry ("flaky"), which do not fail the

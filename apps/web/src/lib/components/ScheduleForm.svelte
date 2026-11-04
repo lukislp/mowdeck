@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The schedule editor: target (a mower or a group), recurrence (weekday chips and a time, or
   every N days from an anchor date), the window, the areas of the target mower picked on its

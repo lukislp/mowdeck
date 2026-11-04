@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """States in batches (ADR 0078): the rules see each state of a batch exactly as they would one
 at a time, a state naming another account is skipped alone, and the bus handler settles each
 message; the parsed geofence is reused while the stored one is unchanged."""

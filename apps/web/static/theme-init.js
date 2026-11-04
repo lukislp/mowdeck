@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Sets the theme before the first paint (external file, so the CSP needs no hash for it).
 // Keep in step with applyTheme() in src/lib/stores/ui.svelte.ts.
 (function () {

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Spot mowing driven by MowDeck (ADR 0039): :class:`SpotMowRun` steers a mower along a Planner
 route with joystick frames.
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The mower's switchable light (the camera's headlamp), one implementation for every place that
  * offers the switch: the instrument tile on the mower page (`LightToggle`) and the glass chip over

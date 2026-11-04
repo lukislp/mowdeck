@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Matter server (`/api/v1/matter`, ADR 0063): the mowers that are Matter nodes and their pairing
  * codes. A TypeScript service without an exported OpenAPI document, so the few shapes are typed

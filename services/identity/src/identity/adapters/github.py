@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """GitHub as an OAuth 2 login provider (ADR 0051), the ``OAuthClient`` port on httpx.
 
 * Authorization: ``https://github.com/login/oauth/authorize`` with ``client_id``,

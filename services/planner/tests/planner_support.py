@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Helpers for the planner tests (a plain module: the repository has no conftest.py).
 
 ``harness()`` builds the real Planner app *and* the real Fleet app on one in-memory bus and one

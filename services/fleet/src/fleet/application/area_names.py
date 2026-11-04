@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Custom names of map areas per mower: read them, set or drop one.
 
 The mower keeps its own names (MowDeck never writes to the mower); every MowDeck surface shows

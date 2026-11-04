@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """``GET /mowers/{id}/camera/snapshot``: a still image through the Device-Gateway's photo
 request, the minimum interval per mower, the checks, the error mapping and the audit."""
 

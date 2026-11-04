@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Profile "rvc": the mower as a Matter Robotic Vacuum Cleaner (device type 0x74) with RVC Run
  * Mode (start/stop), RVC Operational State (pause, resume, go home, state) and Power Source

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pure rules: relation per command kind, expiry, status rank, shards, connection options."""
 
 from datetime import timedelta

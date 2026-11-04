@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 # Build context: integrations/agora-bridge. Only the bridge's sources and the build step.
 *
 !docker/install_sdk.py

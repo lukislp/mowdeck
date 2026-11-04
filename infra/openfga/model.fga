@@ -1,6 +1,9 @@
 model
   schema 1.1
 
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MowDeck authorization model (Phase 1).
 # Hierarchy: account > site > group > mower.
 # grant_* relations are written by Identity (expanded from roles).

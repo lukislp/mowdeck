@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan enforcement in Notifications (ADR 0028): Web Push subscriptions need the feature
 ``notifications.push`` (``notifications`` grants it, keys are hierarchical)."""
 

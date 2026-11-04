@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mow path previews: Fleet relays "plan this start" to the Device-Gateway of the mower.
 
 The HTTP layer checks ``can_control`` on the mower (404 semantics): planning makes the mower

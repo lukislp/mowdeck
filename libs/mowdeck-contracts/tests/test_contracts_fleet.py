@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Fleet registration contracts shared with the Device-Gateway."""
 
 from uuid import UUID, uuid4

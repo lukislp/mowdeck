@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Provider settings: per-user providers with encrypted keys, the installation default with
 plan gating, the resolution order, the provider test, and the fake provider."""
 

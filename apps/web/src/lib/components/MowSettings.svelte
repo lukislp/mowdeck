@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The "Mähen" section of the start sheet: a summary line, the mowing options of the start
   (`MowOptions`, shared with the schedule editor: the native patterns the mower reports in

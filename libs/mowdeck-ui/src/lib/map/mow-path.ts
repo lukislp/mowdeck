@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The mower's planned mow path on the map: the route it computed for the chosen areas and
  * pattern (`MowPath` of the contracts), split at its progress into the part already mowed and

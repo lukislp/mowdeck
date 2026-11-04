@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes ``billing.subscription.changed`` (``event.billing.subscription.changed``)."""
 
 from mowdeck_contracts.v1 import BILLING_SUBSCRIPTION_CHANGED, EventEnvelope, SubscriptionChanged

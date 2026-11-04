@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): ``DELETE /api/v1/scheduler/demo/accounts/{id}`` removes every
 schedule, run and mower fact of one account and nothing of another."""
 

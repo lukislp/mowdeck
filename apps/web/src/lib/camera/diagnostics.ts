@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Stability diagnostics of the live camera (ADR 0032): a snapshot of the receive statistics the
  * Agora client reports (`getRemoteVideoStats()[uid]`, `getRTCStats()`), the connection state and

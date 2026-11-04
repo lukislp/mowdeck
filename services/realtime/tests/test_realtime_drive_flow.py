@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual driving end to end on one in-memory bus: Realtime (served by uvicorn), Fleet (records
 the session) and the Device-Gateway with a simulated mower (executes the frames).
 

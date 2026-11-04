@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Entities of the Planner: what it knows about mowers (from the bus) and pattern templates."""
 
 from dataclasses import dataclass

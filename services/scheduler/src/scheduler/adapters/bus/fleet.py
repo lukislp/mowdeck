@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``FleetGateway`` port over core NATS request/reply (``fleet.targets.resolve``,
 ``fleet.commands.issue``)."""
 

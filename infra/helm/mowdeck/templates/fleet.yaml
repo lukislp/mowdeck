@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Fleet: sites, groups, mowers, linked Mammotion accounts (passwords encrypted with
 secrets.FLEET_CREDENTIAL_ENCRYPTION_KEY), the Device-Gateway registry and every command
 (Compose services fleet and fleet-migrate). */ -}}

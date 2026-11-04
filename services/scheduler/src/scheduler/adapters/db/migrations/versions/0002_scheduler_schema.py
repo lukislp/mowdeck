@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Scheduler schema: schedules, their runs, and the per-mower facts (latest activity, map).
 
 Revision ID: 0002

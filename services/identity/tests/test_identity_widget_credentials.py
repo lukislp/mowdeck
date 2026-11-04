@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """iOS widget credentials (ADR 0059): scoped API tokens that any user creates for themselves."""
 
 from datetime import timedelta

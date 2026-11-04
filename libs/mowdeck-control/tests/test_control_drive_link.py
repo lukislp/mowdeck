@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The drive link of spot runs and drive calibrations, against the simulator only: a link that
 reports the mower's signal below ``LINK_MIN_RSSI_DBM`` refuses the start, and a drive link that
 does not come up or drops during a run ends it ``link_lost`` (never ``frame_rejected``). Real

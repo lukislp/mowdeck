@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Freeze detection (ADR 0044 amendment 2026-10-17): a standing picture must never look live.
  *

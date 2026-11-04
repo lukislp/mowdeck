@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Drive calibration (ADR 0042) in the mower settings, desktop (1280 x 800), against the stack's
  * simulated mower: the joystick drives it out of the dock onto the lawn, the settings page shows

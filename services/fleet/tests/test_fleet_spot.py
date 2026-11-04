@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Planner routes in commands: ``start_mow`` with a spot plan and ``spot_mow`` (ADR 0039).
 Plan feature ``spot_mowing``, size limit, one mower only, recorded hash; the gates of
 ``firmware_update``."""

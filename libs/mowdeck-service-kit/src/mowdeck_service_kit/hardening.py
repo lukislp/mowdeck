@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Hardening headers on every service response.
 
 * ``X-Content-Type-Options: nosniff`` on every HTTP response: a browser never guesses another

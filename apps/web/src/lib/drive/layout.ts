@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The drive page's view (ADR 0044): the live camera fills the stage with the map as a corner
  * thumbnail (`camera`), or the map fills it as before (`map`). Decided from the capabilities

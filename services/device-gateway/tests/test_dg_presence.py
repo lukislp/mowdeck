@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): the simulated mowers of an account nobody watches rest.
 
 The presence bookkeeping with a fake clock, and the gateway with an in-memory bus: a demo gateway

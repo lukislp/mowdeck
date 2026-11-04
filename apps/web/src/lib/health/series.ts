@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure helpers of the health page (Telemetry's `/health`, `/health/daily`, `/battery`): the last
  * 30 UTC days with gaps filled, bar geometry, the battery trace as an SVG path that breaks over

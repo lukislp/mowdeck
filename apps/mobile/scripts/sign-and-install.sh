@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Install the app built by build-ios.sh on the iPhone, directly from the Mac (no TestFlight, no
 # App Store): check the signature and the push entitlement, re-sign with the newest profile when
 # asked (MOWDECK_RESIGN=1, for example after provision.sh renewed an expired profile without a

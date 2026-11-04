@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Override for throwaway test stacks (the Playwright suite tests/e2e-web and the acceptance test
 # tests/e2e). Use it on top of docker-compose.yml, never on its own:
 #

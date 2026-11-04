@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The entry point object of the Husqvarna provider (``mowdeck.cloud_providers``: ``husqvarna``).
 
 Importable without aioautomower: the gateway loads every installed spec, also of disabled

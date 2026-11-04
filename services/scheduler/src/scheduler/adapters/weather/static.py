@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """A weather provider with a fixed answer, for tests and development.
 
 ``dry`` reports no rain at all, ``rain`` 2 mm per hour at 90 % for every hour from a day ago to

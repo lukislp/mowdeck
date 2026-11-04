@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The Mammotion cloud provider plugin (ADR 0034, ADR 0066) on the fake cloud."""
 
 import re

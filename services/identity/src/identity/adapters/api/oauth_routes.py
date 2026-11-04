@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Login providers (ADR 0051) under ``/api/v1/identity``: "Sign in with GitHub".
 
 Sign-in (public):

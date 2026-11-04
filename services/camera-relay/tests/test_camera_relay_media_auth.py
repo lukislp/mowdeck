@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """MediaMTX's auth callback: who may read, publish and use the API (ADR 0045)."""
 
 from datetime import timedelta

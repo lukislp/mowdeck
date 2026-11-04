@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The API explorer's frame (ADR 0072), page part: waits for the access token from the web app,
  * loads the services' OpenAPI documents the build ships next to it and mounts Scalar (the pinned,

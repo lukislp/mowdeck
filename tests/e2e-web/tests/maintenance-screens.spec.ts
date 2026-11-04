@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the maintenance section (run: pnpm --filter e2e-web screens): the list of
  * the simulated mower's actions while it mows (the dock-bound ones disabled with their reason,

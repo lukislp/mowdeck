@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 """The :class:`~agora_bridge.sdk.Sdk` over Agora's Linux server SDK (``agora-python-server-sdk``).
 

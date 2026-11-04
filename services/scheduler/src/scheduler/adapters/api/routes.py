@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Routes of the Scheduler under ``/api/v1/scheduler``."""
 
 from datetime import datetime

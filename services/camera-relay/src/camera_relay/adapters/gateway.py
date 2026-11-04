@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``VendorSessions`` port: the Device-Gateway's camera session and release, and the source
 drivers.
 

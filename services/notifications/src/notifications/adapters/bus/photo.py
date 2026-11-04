@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Takes the camera photo of an error or theft event from the Device-Gateway (ADR 0035, 0045).
 
 Core NATS request/reply on ``gateway.mower.<id>.photo``, the subject Vision and Fleet use: the

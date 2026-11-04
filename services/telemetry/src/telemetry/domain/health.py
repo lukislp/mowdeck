@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Health history: blade and mowing hours, distance, battery cycles, charge sessions, errors.
 
 Everything is derived incrementally from consecutive states of one mower (no batch recompute).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The snap logic of `BottomSheet`, free of the DOM so it is unit tested: three snap points
  * (`peek`, `half`, `full`), their heights for the space the sheet may use, the snap a drag ends

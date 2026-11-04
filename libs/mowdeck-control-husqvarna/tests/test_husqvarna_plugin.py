@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The provider spec, its descriptor and how the gateway loads it (ADR 0066)."""
 
 import subprocess

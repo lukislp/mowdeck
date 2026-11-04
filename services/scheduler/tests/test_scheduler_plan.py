@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan enforcement in the Scheduler (ADR 0028): the feature ``schedules`` and the limit
 ``max_schedules`` on create."""
 

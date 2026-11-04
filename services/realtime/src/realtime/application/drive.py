@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Manual driving over the socket (ADR 0026): the state of one drive session and its frames.
 
 Realtime adds no safety rule of its own. The Device-Gateway's controller is the only safety

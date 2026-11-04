@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Fakes for the bridge source tests: a bridge server on loopback and ffmpeg processes."""
 
 import asyncio

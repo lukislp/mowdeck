@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plans in Identity (ADR 0028): the token's ``plan`` claim from Entitlements, ``max_users`` on
 sub-user creation, and the operator level (``platform:main``): account list and CLI grant."""
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Creates mower connections through the ``mowdeck-control`` registry.
 
 Adapters come from the registry (``simulated`` is built in; adapter packages add their kinds

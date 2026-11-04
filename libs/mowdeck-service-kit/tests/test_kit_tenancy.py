@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Tenancy dependencies and the cross-tenant rejection test pattern."""
 
 from typing import Annotated

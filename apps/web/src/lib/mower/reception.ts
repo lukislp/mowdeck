@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The reception and health panel of the mower page: satellite positioning (`MowerState.gnss`),
  * the mower's own radio signal (`signal`), its start self-check (`self_check`), the rain sensor

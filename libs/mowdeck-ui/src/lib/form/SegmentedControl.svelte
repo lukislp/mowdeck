@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- A small set of exclusive options (theme, language) as one row of 48 px segments. -->
 <script lang="ts">
   interface Option {

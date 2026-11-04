@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   A vendor error code in plain words (ADR 0067): severity and category, the vendor and its code,
   title, what happened, the likely cause and the steps as a numbered ladder. The words come from

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Command line tools of Billing.
 
 ``python -m billing.cli send-fixture`` posts a signed, Stripe shaped

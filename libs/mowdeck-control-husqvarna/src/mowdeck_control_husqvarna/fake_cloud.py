@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """A fake Husqvarna cloud for development and the browser tests (``ProviderContext.fake``).
 
 The fake answers the same requests as Husqvarna, through the adapter's transport port: the

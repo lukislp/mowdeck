@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Mammotion cloud connection (``ConnectionKind.CLOUD``): PyMammotion's MQTT transport.
 
 Logs in with the account from the options (use a second account with the mower shared to it,

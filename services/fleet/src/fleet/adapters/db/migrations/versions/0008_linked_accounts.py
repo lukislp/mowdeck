@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Linked vendor cloud accounts and the mowers that connect through them (ADR 0034).
 
 Additive: a new table and two nullable columns (``linked_account_id`` with its foreign key,

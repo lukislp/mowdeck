@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * What the Matter side knows of a mower, independent of the Matter device type: a normalized
  * state snapshot and the intents a controller can express. The device profiles (`profiles/`)

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The polyline codec of spot plans (libs/mowdeck-contracts, ``StartMow.spot_plan``).
 
 A spot plan arrives in a start command and the Device-Gateway drives the mower along its

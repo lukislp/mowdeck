@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The activity of a mower: a word, a glyph and the state colour (never colour alone).
   Offline mowers (the activity, or no live link) get a dashed outline.

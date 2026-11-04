@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Rain decision (thresholds, cooldown, unknown) and the weather providers.
 
 The Open-Meteo client is tested against a recorded answer (``tests/data/open_meteo_berlin.json``,

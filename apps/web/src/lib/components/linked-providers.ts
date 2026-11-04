@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The external login providers a user can link in the settings (ADR 0051 GitHub, ADR 0052 Apple).
  * `LoginLinksPanel` renders whatever is listed here: a further provider (an OIDC login, say) is

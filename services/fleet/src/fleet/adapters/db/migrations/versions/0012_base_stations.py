@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """RTK base stations and the mowers that use them (ADR 0047).
 
 Additive: a new table ``base_stations`` (an installation-wide unique index on ``iot_id``: one

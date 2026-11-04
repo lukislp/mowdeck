@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Subscriptions of Entitlements.
 
 * ``entitlements.check`` (core NATS request, queue ``entitlements``, internal): may an account

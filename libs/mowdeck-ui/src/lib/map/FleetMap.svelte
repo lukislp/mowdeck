@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   The fleet map: every visible mower on one map, on Leaflet 1.9 like `MowerMap`. Each mower is a
   marker in its state colour (chevron with heading, dot without; hollow when stale or offline)

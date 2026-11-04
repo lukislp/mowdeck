@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Still images without a camera: the simulator's "photo" of its surroundings.
 
 :func:`render_scene` draws a top-down view of the map around the mower (areas, no-go zones,

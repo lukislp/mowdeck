@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The setpoint limits of a mower model as the capabilities snapshot reports them. Nothing is
  * invented: when the snapshot carries no range, the helpers return `null` and the detail page

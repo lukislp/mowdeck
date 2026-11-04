@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The source pipeline: ffmpeg command lines, the supervised process and the fake source."""
 
 import asyncio

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Linked Mammotion accounts, cloud mowers from their device lists, one physical mower per
 installation, and the move of old cloud mowers (ADR 0034).
 

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   On the mower pages while the account's plan is in grace or expired: only viewing and the
   emergency stop remain (Fleet refuses every other command, nothing new may be created). Links to

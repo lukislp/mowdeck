@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The user's notification inbox: the newest items and the unread count for the navigation
  * badge. Notifications has no Realtime message for new items, so the store polls every 60 s

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Latest state per mower, from REST and the socket. The newest `observed_at` wins, then the
  * newest link heartbeat (REST and the socket can race), so a store entry never goes back in time.

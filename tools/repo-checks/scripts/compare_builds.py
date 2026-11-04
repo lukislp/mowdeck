@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Compares two build outputs file by file (the reproducible build check).
 
 Usage (CI, ``.github/workflows/reproducibility.yml``; docs/dev/reproducible-builds.md)::

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Sub-users, roles, assignments (with the tuples they write), API tokens, audit, deletion."""
 
 from uuid import uuid4

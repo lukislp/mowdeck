@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The snapshot directory fed from ``device.mower.>``."""
 
 from datetime import timedelta

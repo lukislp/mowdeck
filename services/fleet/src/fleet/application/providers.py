@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The cloud providers Fleet can link accounts of (ADR 0066).
 
 Fleet knows no vendor: the Device-Gateway loads the provider plugins of the installed adapter

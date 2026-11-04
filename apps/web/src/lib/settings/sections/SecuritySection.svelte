@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Security (ADR 0065): one overview of how the signed-in user's account is protected. On top a
   strip of five gauges (password, passkeys, login providers, personal access tokens, signed-in

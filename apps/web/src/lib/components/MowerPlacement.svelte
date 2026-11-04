@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Where a mower belongs: its site (moving needs `can_manage_mowers` on the mower and on the new
   site) and its groups (each change sends the whole set with `PUT /mowers/{id}/groups`). Shown

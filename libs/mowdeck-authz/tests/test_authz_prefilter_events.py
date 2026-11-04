@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Token pre-filter (perms as an upper bound) and cache invalidation by grants.changed events."""
 
 from uuid import uuid4

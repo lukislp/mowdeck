@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """All use cases of Identity, wired once (``main``) and shared by the API and the CLI."""
 
 from collections.abc import Sequence

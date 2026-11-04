@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * The projection adapter of `MowerMap`: one interface for both rendering modes, so the layer
  * code never knows which one is active.

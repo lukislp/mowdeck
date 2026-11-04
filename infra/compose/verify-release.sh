@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Verifies the MowDeck images of a release before the Compose stack runs them, and pins them.
 #
 #   ./verify-release.sh [--no-pin | --print | --out FILE] <version>

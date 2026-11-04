@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Product items to MowDeck: the snapshot reader, the state table, errors, capabilities."""
 
 from uuid import uuid4

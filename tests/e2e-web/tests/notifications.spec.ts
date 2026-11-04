@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Notifications in the PWA against the stack's Notifications service (desktop, 1280 x 800):
  * preferences and an ntfy target are saved and survive a reload, the test button answers 202

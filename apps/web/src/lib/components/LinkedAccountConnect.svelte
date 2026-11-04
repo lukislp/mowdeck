@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Link a vendor cloud account (ADR 0066). The form is rendered from the provider descriptors of
   Fleet's `GET /linked-accounts/providers`: a vendor rail when there are several, the chosen

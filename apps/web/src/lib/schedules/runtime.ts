@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Loading helpers of the schedules pages: the account's mowers and groups (names and targets)
  * and the rights per target. The UI asks `POST /me/permissions` only to decide what to render;

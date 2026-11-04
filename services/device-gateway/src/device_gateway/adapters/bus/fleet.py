@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks Fleet for the registrations of this shard and for the secrets it withholds from them
 (core NATS request/reply)."""
 

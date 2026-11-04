@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The player of `agora` sessions (ADR 0032): the browser joins the Mammotion camera channel
  * directly with the Agora Web SDK (`agora-rtc-sdk-ng`) and shows the remote tracks in our own

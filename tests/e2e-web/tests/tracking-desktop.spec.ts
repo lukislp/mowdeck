@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Theft tracking mode (ADR 0058, desktop): with the simulator, tracking started by hand (the
  * same path an alarm takes) records positions while the mower drives, the owner creates a share

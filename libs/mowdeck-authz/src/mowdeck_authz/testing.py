@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Test doubles: an in-memory authorizer that evaluates the real model, and allow/deny stubs.
 
 ``InMemoryAuthorizer`` is also a :class:`~mowdeck_authz.writer.TupleBackend`, so code that

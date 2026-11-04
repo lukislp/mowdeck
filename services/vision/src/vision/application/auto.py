@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Automatic AI analysis on mower errors (ADR 0035): the opt-in and the trigger.
 
 **Opt-in.** Every user decides for themselves (``user_preferences.auto_analysis``, default off,

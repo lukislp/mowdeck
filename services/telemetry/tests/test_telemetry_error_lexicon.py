@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Error codes in plain words (ADR 0067): telemetry asks the Device-Gateway over the bus, caches
 the answers and falls back to generic advice when nobody answers.
 

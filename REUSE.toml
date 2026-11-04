@@ -1,0 +1,104 @@
+# Licence and copyright of the files that cannot carry an SPDX header themselves (REUSE
+# Specification 3.3, https://reuse.software). Every source file names its licence and copyright
+# in its first lines; `reuse lint` (CI job ci-config) fails for a new file without either.
+# The licences follow LICENSING.md: AGPL-3.0-only by default, Apache-2.0 for libs/ and
+# integrations/agora-bridge, GPL-3.0-only for the two adapter packages that import GPL libraries.
+# When several annotations match a file, the last one wins.
+version = 1
+
+# Data, documentation, images and lock files: no comment syntax (or none their tools keep).
+[[annotations]]
+path = [
+  "**.md",
+  "**.json",
+  "**.lock",
+  "**.png",
+  "**.webp",
+  "**.svg",
+  "**.txt",
+  "**.jar",
+  "**.webmanifest",
+  "**.xcstrings",
+  "**.plist",
+  "**.entitlements",
+  "**.storyboard",
+  "**.xcconfig",
+  "**.pbxproj",
+  "**.xml",
+  "**/py.typed",
+  "**/.gitkeep",
+  "**/.copier-answers.yml",
+  "**/README.md.jinja",
+  "templates/service/template/{{_copier_conf.answers_file}}.jinja",
+  ".python-version",
+  ".node-version",
+  "pnpm-lock.yaml",
+  "tests/e2e-web/fake-github/client_secret",
+]
+SPDX-FileCopyrightText = "2026 Lukas Körber"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+[[annotations]]
+path = [
+  "libs/**.md",
+  "libs/**.json",
+  "libs/**.png",
+  "libs/**.svg",
+  "libs/**.txt",
+  "libs/**/py.typed",
+  "integrations/agora-bridge/**.md",
+  "integrations/agora-bridge/**.json",
+  "integrations/agora-bridge/**.txt",
+]
+SPDX-FileCopyrightText = "2026 Lukas Körber"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "libs/mowdeck-control-mammotion/**.md",
+  "libs/mowdeck-control-mammotion/**.json",
+  "libs/mowdeck-control-mammotion/**.txt",
+  "libs/mowdeck-control-mammotion/**/py.typed",
+  "libs/mowdeck-control-worx/**.md",
+  "libs/mowdeck-control-worx/**.json",
+  "libs/mowdeck-control-worx/**.txt",
+  "libs/mowdeck-control-worx/**/py.typed",
+]
+SPDX-FileCopyrightText = "2026 Lukas Körber"
+SPDX-License-Identifier = "GPL-3.0-only"
+
+# Generated files that CI regenerates and compares byte for byte with their generator's output:
+# the web app's API types (tools/ts-codegen), the NATS users (tools/repo-checks/scripts/
+# nats_auth.py), the Capacitor files `cap sync` rewrites, the hashed requirements of
+# `uv pip compile` and Helm's NOTES.txt (plain text).
+[[annotations]]
+path = [
+  "apps/web/src/lib/generated/**",
+  "infra/compose/nats/auth.conf",
+  "infra/helm/mowdeck/files/nats-auth.conf",
+  "apps/mobile/android/app/capacitor.build.gradle",
+  "apps/mobile/android/capacitor.settings.gradle",
+  ".clusterfuzzlite/requirements.txt",
+]
+SPDX-FileCopyrightText = "2026 Lukas Körber"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# The provider template writes the licence of the package it renders ({{ licence }}) into the
+# headers of its files; the template itself is AGPL-3.0-only like the rest of templates/.
+[[annotations]]
+path = "templates/provider/**"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Lukas Körber"
+SPDX-License-Identifier = "AGPL-3.0-only"
+
+# The Gradle wrapper, unchanged from Gradle (its scripts carry Gradle's own notice).
+[[annotations]]
+path = [
+  "apps/mobile/android/gradlew",
+  "apps/mobile/android/gradlew.bat",
+  "apps/mobile/android/gradle/wrapper/gradle-wrapper.jar",
+  "apps/mobile/android/gradle/wrapper/gradle-wrapper.properties",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2015-2021 the original authors (Gradle)"
+SPDX-License-Identifier = "Apache-2.0"

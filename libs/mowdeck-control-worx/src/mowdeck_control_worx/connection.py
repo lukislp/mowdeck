@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """The ``cloud`` connection of one Worx mower (a thin translator, ADR 0012).
 
 The connection borrows its account's shared session from the

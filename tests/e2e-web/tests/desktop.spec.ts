@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Desktop layout (1280 x 800): nav rail, the mower detail with the map and the instrument
  * column, the stop always in view, live state on the map; no CSP violation on the way.

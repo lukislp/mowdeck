@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Texts of the drive page: why a session ended and why a start was refused. Exhaustive switches,
  * so a new reason or error code in the Realtime contract fails the type check.

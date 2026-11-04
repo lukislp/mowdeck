@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Helpers for the assistant tests (a plain module: the repository has no conftest.py).
 
 ``FakePlatform`` plays the public API (relations, mower, map, capabilities, state) and

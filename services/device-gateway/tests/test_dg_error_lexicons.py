@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Error lexicon lookups over the bus (ADR 0067): the gateway answers from the lexicons the
 installed adapter packages register (simulator, Mammotion, Husqvarna and Worx in this image)."""
 

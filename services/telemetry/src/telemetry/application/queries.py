@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Reads: latest state, history, position track and command timeline.
 
 Every query filters by the account of the verified principal (the third isolation layer behind

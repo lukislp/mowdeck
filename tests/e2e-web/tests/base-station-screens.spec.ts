@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Review screenshots of the RTK base station page (run: pnpm --filter e2e-web screens): the
  * simulated base station with an assigned mower, its live state and an offered firmware, the

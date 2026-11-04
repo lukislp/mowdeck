@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * A mower without map areas (ADR 0066 amendment), on the untested Worx provider enabled in
  * stack.env with the fake clouds (`GATEWAY_FAKE_CLOUDS`): any `*@fake.mowdeck.test` address logs

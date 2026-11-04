@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway for a live camera session (core NATS request/reply, ADR 0032) and
 the camera relay for leases (``relay.camera.*``, ADR 0045)."""
 

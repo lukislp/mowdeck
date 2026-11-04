@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The WebSocket protocol of Realtime: parsing client messages, round trips of server messages."""
 
 from datetime import UTC, datetime

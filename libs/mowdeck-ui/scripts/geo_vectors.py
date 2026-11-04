@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Print golden vectors of ``mowdeck_control.geo`` as JSON for the TypeScript port.
 
 The web app converts the map's local metres to WGS84 in the browser

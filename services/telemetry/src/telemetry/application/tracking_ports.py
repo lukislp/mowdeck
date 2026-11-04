@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Ports of the theft tracking mode (ADR 0058)."""
 
 from collections.abc import Mapping

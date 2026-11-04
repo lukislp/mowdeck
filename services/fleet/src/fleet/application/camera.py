@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Live camera sessions: Fleet is the front door for the direct path (ADR 0032) and the camera
 relay (ADR 0045), and audits both.
 

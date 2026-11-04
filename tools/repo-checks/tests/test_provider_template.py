@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The provider template renders a package that passes the conformance kit out of the box.
 
 ``templates/provider`` (ADR 0069) is rendered into a temporary directory and the generated
@@ -40,6 +43,17 @@ FILES = (
     f"tests/test_{VENDOR}_conformance.py",
     f"tests/test_{VENDOR}_connection.py",
 )
+# The SPDX tag, split so that REUSE does not read this file's own licence from the string.
+LICENCE_TAG = "SPDX-" + "License-Identifier: "
+
+
+def _assert_spdx_headers(package: Path, licence: str) -> None:
+    """Every rendered Python file and pyproject.toml carries the package's licence (REUSE)."""
+    files = [package / "pyproject.toml", *sorted(package.rglob("*.py"))]
+    assert len(files) > 5
+    for file in files:
+        head = file.read_text("utf-8").splitlines()[:3]
+        assert f"# {LICENCE_TAG}{licence}" in head, f"{file.name}: {head}"
 
 
 def _render(repo_root: Path, destination: Path, **answers: Any) -> Path:
@@ -114,14 +128,16 @@ def test_template_renders_a_complete_apache_package(repo_root: Path, rendered: P
     assert licence == (repo_root / "LICENSES" / "Apache-2.0.txt").read_text("utf-8")
     descriptor = (rendered / "src" / PACKAGE / "descriptor.py").read_text("utf-8")
     assert 'name="Acme Robotics"' in descriptor
+    _assert_spdx_headers(rendered, "Apache-2.0")
 
 
 def test_template_makes_a_gpl_sdk_a_gpl_package(repo_root: Path, tmp_path: Path) -> None:
     package = _render(repo_root, tmp_path / "gpl", vendor="gnumow", sdk_licence="gpl")
     assert _project(package)["project"]["license"] == "GPL-3.0-only"
     licence = (package / "LICENSE").read_text("utf-8")
-    assert licence == (repo_root / "LICENSES" / "GPL-3.0.txt").read_text("utf-8")
+    assert licence == (repo_root / "LICENSES" / "GPL-3.0-only.txt").read_text("utf-8")
     assert "must be GPL-3.0 itself" in (package / "README.md").read_text("utf-8")
+    _assert_spdx_headers(package, "GPL-3.0-only")
 
 
 def test_template_asks_for_the_sdk_licence(repo_root: Path, tmp_path: Path) -> None:

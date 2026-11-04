@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The relay's side of the camera source bridge protocol, version 1.
 
 docs/dev/camera-relay-bridge-protocol.md: the relay writes JSON control lines and reads

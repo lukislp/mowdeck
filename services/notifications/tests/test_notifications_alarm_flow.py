@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Theft alarm and blade reminder end to end: bus messages in, inbox, deliveries and the ack API."""
 
 from datetime import timedelta

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Planner schema: mower facts (map and capability snapshots) and pattern templates.
 
 Revision ID: 0002

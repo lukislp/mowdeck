@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Camera photo of error and theft events: taken in the background, signed push URL, inbox image."""
 
 import asyncio

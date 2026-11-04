@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """AI assist (Vision service, ADR 0033): photo requests and the proposal event.
 
 * :class:`PhotoRequest` / :class:`PhotoReply` on

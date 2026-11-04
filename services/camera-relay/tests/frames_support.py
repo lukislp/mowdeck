@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Helpers of the frame tap tests: a vendor that goes live, a fake grabber and a JPEG."""
 
 import asyncio

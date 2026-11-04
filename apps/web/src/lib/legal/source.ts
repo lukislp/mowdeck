@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Where users get the source code of the running version (AGPL-3.0 section 13, LICENSING.md).
  *

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Health of one mower (Telemetry, ADR 0027): blade hours since the change against the change
   interval (the mower's own counter when it reports one, as the vendor app shows it; MowDeck's own

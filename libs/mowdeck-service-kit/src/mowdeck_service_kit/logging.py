@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Structured logging with structlog.
 
 All logs, including those of the standard library (uvicorn, nats), go to stdout through one

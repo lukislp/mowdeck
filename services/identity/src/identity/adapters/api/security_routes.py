@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The security center of the signed-in user (ADR 0065) under ``/api/v1/identity/me``.
 
 Everything here is the caller's own: their login sessions in every account, their security

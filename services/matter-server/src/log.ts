@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * JSON lines on stdout, like the Python services. Fields are passed explicitly: there is no way
  * to log a whole object by accident, and secrets (tokens, passcodes, pairing codes) never are.

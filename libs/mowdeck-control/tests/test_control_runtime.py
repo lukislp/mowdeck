@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """State broadcaster, timers, manual test clock, safety rules and the package boundary."""
 
 import asyncio

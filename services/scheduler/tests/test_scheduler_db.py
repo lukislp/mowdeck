@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL: migrations up and down, schema drift, the store contract and ``SKIP LOCKED``.
 
 The PostgreSQL tests run when ``MOWDECK_TEST_DATABASE_URL`` points at a server where the user

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """FastAPI dependencies: the use cases, the mower and proposal gates, error mapping.
 
 * Mower routes check ``can_drive`` (actions) or ``can_view`` (reads) on ``mower:<id>``; a mower

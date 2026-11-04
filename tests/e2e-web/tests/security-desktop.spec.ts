@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Security center (ADR 0065), desktop: a sign-in from a device the user never used before
  * arrives as a "new sign-in" notification; its link opens the security section with that

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The Husqvarna provider plugin on the fake cloud, end to end, and secret hygiene."""
 
 import logging

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing pattern planning (libs/mowdeck-patterns), the Planner's computation.
 
 A user draws the spot polygon (and holes) and picks a pattern chain with settings in the app;

@@ -1,3 +1,7 @@
+{{- /*
+SPDX-FileCopyrightText: 2026 Lukas Körber
+SPDX-License-Identifier: AGPL-3.0-only
+*/ -}}
 {{- /* Entitlements: plans, limits and feature gates (ADR 0028); answers entitlements.check for the
 other services (Compose services entitlements and entitlements-migrate). The plan file is the
 ConfigMap <fullname>-entitlements-plans, built from files/plans.yaml (an identical copy of

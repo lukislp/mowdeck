@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Compose block for camera-relay and its media server: the entries below "services:" are part of
 # infra/compose/docker-compose.yml (profile "relay", off by default). Build context is the
 # repository root. The relay itself is internal; Traefik routes only MediaMTX's WHEP endpoints

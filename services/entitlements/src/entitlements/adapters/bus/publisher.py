@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Publishes ``entitlements.plan.changed`` (``event.entitlements.plan.changed``)."""
 
 from mowdeck_contracts.v1 import ENTITLEMENTS_PLAN_CHANGED, EventEnvelope, PlanChanged

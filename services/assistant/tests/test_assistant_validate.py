@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The validator: only the catalog's kinds and areas survive, times are checked, anything
 unexpected rejects the whole proposal. The answers here are what a confused or manipulated
 model could return."""

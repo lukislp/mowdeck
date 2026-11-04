@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain models of vision: plain data and the model's answer schema, no I/O.
 
 A *proposal* is one round of AI assist for one mower: the scene went to a vision model, the

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Job options of a native start in the simulator: declared, recorded, start progress, stuck."""
 
 from typing import Any

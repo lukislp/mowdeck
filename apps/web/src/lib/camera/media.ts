@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Our own `<video>` element as the sink of remote tracks (ADR 0032). The Agora SDK's
  * `track.play(element)` builds its own player and applies inline styles, which the CSP refuses

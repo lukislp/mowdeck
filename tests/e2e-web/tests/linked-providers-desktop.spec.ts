@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Linking a vendor account in Settings (ADR 0066, desktop): the form is rendered from the
  * providers the Device-Gateway has enabled (`GET /api/v1/fleet/linked-accounts/providers`), so

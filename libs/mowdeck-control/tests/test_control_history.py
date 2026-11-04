@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The demo gardens and the offline history of a simulated mower (ADR 0068)."""
 
 from datetime import UTC, datetime, timedelta

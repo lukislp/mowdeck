@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Login from a new device (ADR 0065): Identity's event in, one inbox item for that user out."""
 
 from typing import Any

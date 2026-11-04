@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Mower firmware (ADR 0038): the check through Fleet (`POST /mowers/{id}/firmware/check`, which
  * answers the fresh `FirmwareInfo`; a connection that cannot ask is a 409

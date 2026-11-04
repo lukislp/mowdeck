@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   One glyph per concept, drawn on a 24 px grid with square line ends (technical, not playful).
   Decorative by default (aria-hidden); pass `label` when the icon carries meaning alone.

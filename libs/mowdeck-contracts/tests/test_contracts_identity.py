@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Identity events, the ``implied_by`` permission field and the ``sid`` of a principal."""
 
 from datetime import UTC, datetime

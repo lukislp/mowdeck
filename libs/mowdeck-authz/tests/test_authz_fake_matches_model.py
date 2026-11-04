@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Contract: the in-memory fake answers every assertion of infra/openfga/model.fga.yaml.
 
 The same YAML is run by ``fga model test`` in CI (``openfga-model`` job) and through

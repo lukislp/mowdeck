@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """MowDeck service kit: the skeleton every MowDeck service is built on.
 
 Start with :func:`create_app`; see the package README for a complete example.

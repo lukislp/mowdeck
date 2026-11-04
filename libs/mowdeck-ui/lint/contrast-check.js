@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: Apache-2.0
+
 // Contrast check of the design tokens (WCAG 2.2 relative luminance). Reads tokens.css, resolves
 // the light theme (first :root block) and the dark theme (:root[data-theme='dark']) and fails
 // when a pair is below its target: text 4.5:1 (7:1 for primary ink in light, the outdoor

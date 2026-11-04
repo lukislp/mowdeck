@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Stereo frames for AI assist: the camera tiles, pairing both frames of the same moment. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

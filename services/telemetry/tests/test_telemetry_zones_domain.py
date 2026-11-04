@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Virtual zones, the pure part (ADR 0070): ring validation, the point test, the hysteresis of
 the current zone and the time per zone and day."""
 

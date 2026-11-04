@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Spot mowing: a computed route that travels inline in ``StartMow.spot_plan``.
 
 The Planner (``mowdeck-patterns``) turns an area and a pattern chain into a neutral mowing plan

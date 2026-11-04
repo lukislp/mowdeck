@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """PostgreSQL store on SQLAlchemy Core (async, asyncpg).
 
 Writes run in one transaction per message: the latest row is read ``FOR UPDATE``, history,

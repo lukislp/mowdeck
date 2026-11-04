@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The form of the AI provider settings ("KI-Anbieter"): which family a model string belongs to,
  * what choosing a family pre-fills, client-side checks and the `PUT /me/provider` body. The API

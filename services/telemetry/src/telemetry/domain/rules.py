@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Pure rules: what a state message changes, and the arithmetic of downsampling bins.
 
 Write rules per state message (design section 2.1, with the corrections of ADR 0017):

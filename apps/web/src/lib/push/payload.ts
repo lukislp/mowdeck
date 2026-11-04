@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The Web Push payload (`WebPushPayload` of `mowdeck_contracts.v1.notifications`) as the service
  * worker receives it, and the notification it shows. Shared by the worker and the tests; it has

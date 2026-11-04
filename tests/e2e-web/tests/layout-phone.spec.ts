@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Phone layout guard (360 and 390 px wide, touch): no page scrolls sideways, wide tables scroll
  * inside their own box, the health page with a mower's own lifetime counters (long readout

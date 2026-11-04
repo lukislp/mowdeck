@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Input and output of every pattern: :class:`Area`, :class:`MowerSpec`, :class:`MowPlan`.
 
 All geometry is ``(x, y)`` in metres in the mower's local map frame (``mowdeck_contracts.v1``

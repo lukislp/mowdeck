@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Billing in the web app: whether this installation sells subscriptions at all (the probe of
  * `GET /api/v1/billing/status`) and the formatting of prices, intervals and statuses.

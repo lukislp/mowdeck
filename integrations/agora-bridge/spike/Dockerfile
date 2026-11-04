@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: Apache-2.0
 # Throwaway image for the step 0 spike only; never published. The Agora native libraries are
 # downloaded by the SDK wrapper while this image is built on the operator's own machine.

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Mowing angle rotation (ADR 0061): step rotation from the mower's last angle per area, the
 angle of each run in the run history and the event, the angle of each firing in the preview,
 and the mower angle API for manual starts."""

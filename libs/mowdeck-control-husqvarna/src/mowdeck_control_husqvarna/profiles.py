@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The capability profile of the Husqvarna provider (ADR 0071).
 
 One family: every mower of the Automower Connect API answers with the same capabilities

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The mow path: the simulator's route and progress, and the controller's preview rules."""
 
 import asyncio

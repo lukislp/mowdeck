@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Husqvarna data (aioautomower's ``MowerAttributes``) to MowDeck contracts.
 
 Activities: the Automower Connect API reports a ``state`` (``in_operation``, ``paused``,

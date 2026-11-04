@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Mower registrations shared by Fleet and the Device-Gateway.
 
 Fleet owns the mowers; the Device-Gateway keeps a volatile copy of the registrations it needs

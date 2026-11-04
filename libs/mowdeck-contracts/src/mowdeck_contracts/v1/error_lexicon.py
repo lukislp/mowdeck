@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Error lexicons: vendor error codes in plain words (ADR 0067).
 
 A mower reports a vendor code (``MowerState.error_code``, e.g. Mammotion's ``1201``). An *error

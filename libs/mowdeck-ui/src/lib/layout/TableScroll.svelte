@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 <!--
   Sideways scroll box for a wide table (or any wide row of content): the table keeps its natural
   width and scrolls inside the box, the page never scrolls sideways. A soft shade at an edge

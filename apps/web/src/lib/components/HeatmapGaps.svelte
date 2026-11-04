@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   Missed spots of the coverage layer, under the map: largest first with their area in m². A
   row highlights its spot on the map; the selected row offers the follow-ups:

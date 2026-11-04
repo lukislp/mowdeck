@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Ring patterns: spiral, contour-parallel, edge only and border first plus fill."""
 
 import dataclasses

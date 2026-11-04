@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Release signing survives Sigstore hiccups and stays verified (scripts/cosign_retry.sh).
 
 * every ``cosign sign``/``sign-blob``/``attest`` of the workflows goes through the script;

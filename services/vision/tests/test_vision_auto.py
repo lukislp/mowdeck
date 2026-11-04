@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Automatic AI analysis on mower errors (ADR 0035): opt-in, trigger, limits, entitlements.
 
 The trigger runs against the real app on the in-memory bus: a simulated mower that gets stuck

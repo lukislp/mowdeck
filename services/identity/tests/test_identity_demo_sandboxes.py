@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandboxes (ADR 0076): every visitor of the public demo gets an own account.
 
 Pool, claim, limits, idle and expiry sweep, the purge in every service (resumed after a failure)

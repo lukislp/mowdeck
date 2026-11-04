@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Registry of error lexicons, one per vendor (ADR 0067).
 
 Every adapter package ships the lexicon of its vendor's error codes

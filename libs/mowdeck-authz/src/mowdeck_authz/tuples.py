@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Relationship tuples: ``<object>#<relation>@<subject>``, optionally with a condition."""
 
 from collections.abc import Mapping

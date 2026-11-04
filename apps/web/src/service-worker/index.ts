@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Offline shell: the built app, the static files and the SPA fallback are precached per
  * version. Navigations try the network first and fall back to the cached shell; app assets are

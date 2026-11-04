@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Passkeys of users (ADR 0050): adding, listing, renaming and removing WebAuthn credentials.
 
 Logging in with a passkey is the authenticator plug-in ``PasskeyAuthenticator`` behind

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Domain models of notifications: plain data, no I/O.
 
 ``MowerWatch`` is what the rules remember about one mower between two messages; it is stored

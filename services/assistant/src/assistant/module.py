@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Module descriptor of the assistant, served at ``/.well-known/mowdeck-module``.
 
 The assistant defines no permission of its own: a proposal needs ``can_view`` on the mower,

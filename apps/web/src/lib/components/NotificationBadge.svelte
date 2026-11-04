@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
 <!--
   The kind of a notification as a word, a glyph and the state tone of what happened (stuck is
   the error tone, battery low the warning tone, offline dashed); never colour alone.

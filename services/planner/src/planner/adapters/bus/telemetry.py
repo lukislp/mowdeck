@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The ``TrackSource`` port over core NATS request/reply (``tracks.positions.query``)."""
 
 from mowdeck_contracts.v1 import PositionTrackReply, PositionTrackRequest

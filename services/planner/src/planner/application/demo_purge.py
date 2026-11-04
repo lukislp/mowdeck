@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Demo sandbox purge (ADR 0076): remove everything the Planner holds of one demo account.
 
 Identity's cleanup job calls this when a visitor's sandbox expires: the account's templates and

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """HTTP API: access rules, cross-account isolation, history bins, bounds."""
 
 from datetime import timedelta

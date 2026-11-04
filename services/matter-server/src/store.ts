@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The setup credentials and UDP port of every mower node, in `<data>/nodes.json` (mode 0600) on
  * the server's volume: a mower keeps its pairing code and port across restarts and image

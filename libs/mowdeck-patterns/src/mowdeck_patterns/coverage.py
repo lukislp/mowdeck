@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Coverage from a driven track and the gaps left in an area (for re-mowing).
 
 :func:`coverage` widens the track to the cutting width. Jumps longer than ``max_jump_m``

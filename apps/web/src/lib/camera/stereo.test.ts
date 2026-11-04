@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Both front cameras: pairing, the layouts, per-track numbers, duplicate pictures, the viewer. */
 import { describe, expect, it, vi } from 'vitest';
 

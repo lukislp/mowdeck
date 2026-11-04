@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Vendor error codes in plain words (ADR 0067).
 
 Telemetry holds no code table: the lexicons ship with the adapter packages, which only the

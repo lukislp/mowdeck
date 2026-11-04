@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Account administration under ``/api/v1/identity/accounts/{account_id}``.
 
 The account in the path must be the account of the token (else 404), and every endpoint asks

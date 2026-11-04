@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Fleet as the front door of the camera relay (ADR 0045 step 5), against the test stack (which
  * always runs camera-relay and MediaMTX with the simulator's `fake` source):

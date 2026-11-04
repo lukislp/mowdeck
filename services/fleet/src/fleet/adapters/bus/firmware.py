@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Asks the Device-Gateway for the firmware state of a mower (core NATS request/reply, ADR 0038).
 The gateway that holds the mower asks the vendor through the mower's connection and answers."""
 

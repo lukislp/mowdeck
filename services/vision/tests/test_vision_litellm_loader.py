@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The LiteLLM loader heals a half-initialised module and serialises imports."""
 
 import importlib

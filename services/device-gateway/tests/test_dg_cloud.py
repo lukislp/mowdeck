@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Cloud providers, account discovery and the connections of linked mowers (ADR 0034, 0065).
 
 The gateway knows no vendor: a test provider plugin (:class:`AcmeCloud`) stands in for every

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Mower, principal, module descriptor and problem models."""
 
 from datetime import UTC, datetime

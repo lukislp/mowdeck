@@ -1,4 +1,7 @@
 # syntax=docker/dockerfile:1.7
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # MowDeck matter-server (ADR 0063): every mower as its own Matter node. Node 24 runs the
 # TypeScript sources directly (type stripping), so there is no compile step.
 # Build context: the repository root (pnpm workspace). Runs read-only as uid 1000 (node) with

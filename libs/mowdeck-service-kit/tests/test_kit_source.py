@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """The source code address of the running build (AGPL-3.0 section 13): the X-Source-Code header."""
 
 import pytest

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Tracking lease requests (ADR 0058): ``gateway.mower.*.tracking``, core NATS.
 
 Telemetry renews a lease every few seconds while a theft tracking session is active

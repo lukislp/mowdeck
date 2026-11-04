@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Push texts explain the error code with the vendor's lexicon (ADR 0067).
 
 A responder on the in-memory bus stands in for the Device-Gateway (``gateway.errors.explain``)

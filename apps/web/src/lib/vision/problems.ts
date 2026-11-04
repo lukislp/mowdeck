@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /** Texts for the problems of the Vision service (title and an optional detail). */
 import type { ApiProblem } from '#lib/api/problem.js';
 import { problemMessage } from '#lib/i18n.js';

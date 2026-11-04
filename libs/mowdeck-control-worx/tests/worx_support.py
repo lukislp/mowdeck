@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Shared test data: product items shaped like the cloud's (``tests/fixtures``)."""
 
 import copy

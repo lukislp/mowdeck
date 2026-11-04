@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Service configuration from environment variables and secret files.
 
 Every setting is read from ``MOWDECK_<NAME>`` (case insensitive). Any setting can instead be read

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The error code lexicon of a mower's vendor, browsable (ADR 0067). Telemetry picks the lexicon
  * by the mower's connection and serves a filtered page of it; the app holds no code table and no

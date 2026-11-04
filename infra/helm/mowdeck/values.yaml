@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Values of the MowDeck chart. Operations manual: docs/ops/helm.md.
 #
 # The settings mirror the Compose configuration infra/compose/.env.example: `config` and `secrets`

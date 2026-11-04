@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The workflows stay within GITHUB_TOKEN's API quota (1,000 REST calls per hour per repository).
 
 * no docker/build-push-action step uploads a build record artifact (``*.dockerbuild``): every

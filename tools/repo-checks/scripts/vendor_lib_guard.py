@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Vendor library updates wait for a hardware test (docs/ops/vendor-lib-updates.md).
 
 The adapters talk to real mowers through one vendor library each (``pymammotion``,

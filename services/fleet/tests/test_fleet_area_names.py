@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Custom area names: the API, its authorization, the event and the names in ``MowerOut``."""
 
 from uuid import uuid4

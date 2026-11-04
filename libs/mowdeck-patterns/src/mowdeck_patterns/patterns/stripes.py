@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Stripe patterns: stripes, diagonal, checkerboard, auto-aligned and alternating direction."""
 
 import random

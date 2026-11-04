@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Copier template for a MowDeck service.
 #
 #   uv run copier copy --trust templates/service services/<service-name>

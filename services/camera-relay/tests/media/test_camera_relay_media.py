@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The media plane end to end: real MediaMTX, the relay image, aiortc as the WHEP client.
 
 A test answers the gateway's camera requests (provider ``fake``), attaches over NATS like

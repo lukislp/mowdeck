@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * Pure rules of the start sheet (the flow itself is `start-sheet.svelte.ts`): what a start or a
  * preview sends, when a start saves the mow defaults, why a preview failed, how long the picked

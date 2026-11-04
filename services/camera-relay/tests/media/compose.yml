@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 # Test stack of the camera relay's media plane (test_camera_relay_media.py): NATS, MediaMTX with
 # the shipped configuration and the relay image with its test hooks. Started and removed by the
 # test module's fixture as its own Compose project; every port is bound to 127.0.0.1:

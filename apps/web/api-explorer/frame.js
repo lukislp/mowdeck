@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Lukas Körber
+// SPDX-License-Identifier: AGPL-3.0-only
+
 /**
  * The API explorer's frame (ADR 0072), pure part: the message protocol with the web app, the
  * preparation of the services' OpenAPI documents and the Scalar configuration. No DOM access here,

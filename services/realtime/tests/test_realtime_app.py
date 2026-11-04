@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Wiring of realtime: health, readiness, descriptor, settings, main(), adapters."""
 
 from typing import Any

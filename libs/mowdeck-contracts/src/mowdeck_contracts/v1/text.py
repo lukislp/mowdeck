@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Display text people type in: names of sites, groups, areas, zones, schedules and the like.
 
 Such a name is shown to everybody who shares the account (and to every visitor of the public

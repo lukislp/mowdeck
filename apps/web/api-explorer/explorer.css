@@ -1,4 +1,9 @@
 /*
+ * SPDX-FileCopyrightText: 2026 Lukas Körber
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
  * MowDeck's look on top of Scalar's default theme (ADR 0072): the app's background, ink and the
  * amber of the HUD as the accent, IBM Plex when the browser has it, the system fonts otherwise
  * (the frame loads no font file and no font from a third party).

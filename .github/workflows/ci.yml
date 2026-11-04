@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 name: ci
 
 # Minute budget: private repository, limited Actions minutes. Pull requests run the pipeline
@@ -87,7 +90,8 @@ jobs:
           printf '%s\n' "$scope" | tee -a "$GITHUB_OUTPUT"
 
   # The CI configuration itself, on every pull request: actionlint (with shellcheck on every
-  # run: block), shellcheck of the CI scripts and, when the python job is skipped, lint and
+  # run: block), shellcheck of the CI scripts, `reuse lint` (an SPDX licence and copyright for
+  # every file) and, when the python job is skipped, lint and
   # tests of tools/repo-checks, which check the workflows, Dependabot and the release
   # configuration (the python job runs those tests itself otherwise).
   ci-config:
@@ -117,11 +121,14 @@ jobs:
           "$RUNNER_TEMP/actionlint"
       - name: shellcheck (CI scripts)
         run: shellcheck tools/repo-checks/scripts/*.sh
-      - if: env.REPO_CHECKS == 'true'
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.12.24"
           enable-cache: true
+      # Every file names its licence and copyright: an SPDX header in the file, or REUSE.toml for
+      # files without comments (CONTRIBUTING.md, "Licence headers").
+      - name: REUSE lint
+        run: uv run --no-project --with "reuse[charset-normalizer]==6.2.0" reuse lint
       - if: env.REPO_CHECKS == 'true'
         run: uv sync
       - if: env.REPO_CHECKS == 'true'

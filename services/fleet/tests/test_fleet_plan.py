@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Plan enforcement in Fleet (ADR 0028): limits on mowers, sites and groups, the ``control``
 feature on commands (never the emergency stop), bulk commands, and the bus client wiring."""
 

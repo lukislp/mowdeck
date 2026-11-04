@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Frame sets for Vision: both front cameras of the same moment under one lease, the closest
 frames, a silent or late camera that is left out instead of failing the set and the size cap
 (the HTTP route is tested with the other frame tap routes)."""

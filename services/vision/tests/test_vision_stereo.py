@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Stereo frames: the left and right front camera of the same moment as one pair for the model."""
 
 import base64

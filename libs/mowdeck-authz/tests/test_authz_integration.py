@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests against a real OpenFGA server.
 
 Skipped unless ``MOWDECK_TEST_OPENFGA_URL`` is set (CI sets it). Locally::
