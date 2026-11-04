@@ -1,6 +1,6 @@
 # MowDeck
 
-[![CI](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lukislp/mowdeck/badge)](https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck) [![CodeQL](https://github.com/lukislp/mowdeck/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/lukislp/mowdeck/security/code-scanning)
+[![CI](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/lukislp/mowdeck/actions/workflows/ci.yml) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16325/badge)](https://www.bestpractices.dev/projects/16325) [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/lukislp/mowdeck/badge)](https://scorecard.dev/viewer/?uri=github.com/lukislp/mowdeck) [![CodeQL](https://github.com/lukislp/mowdeck/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/lukislp/mowdeck/security/code-scanning)
 [![Release](https://img.shields.io/github/v/release/lukislp/mowdeck)](https://github.com/lukislp/mowdeck/releases)
 [![License: AGPL-3.0](https://img.shields.io/github/license/lukislp/mowdeck)](LICENSING.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB)](https://www.python.org/)
