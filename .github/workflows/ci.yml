@@ -248,6 +248,12 @@ jobs:
           MOWDECK_TEST_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5433/postgres
           MOWDECK_TEST_OPENFGA_URL: http://127.0.0.1:18080
           MOWDECK_TEST_OPENFGA_TOKEN: ci-key
+      # Statement and branch coverage of the product code (tests omitted, [tool.coverage.run]).
+      - name: Coverage summary
+        run: |
+          uv run coverage json -q -o "$RUNNER_TEMP/coverage.json"
+          python3 tools/repo-checks/scripts/coverage_summary.py --python "$RUNNER_TEMP/coverage.json" \
+            >> "$GITHUB_STEP_SUMMARY"
 
   # The authorization model: CLI model tests, freshness of the packaged JSON, and the
   # idempotent bootstrap job of the Compose stack (second run must not write a model).
@@ -330,6 +336,10 @@ jobs:
       - run: pnpm -r check
       # The Playwright suite (tests/e2e-web) needs the stack: it runs in the e2e-web job.
       - run: pnpm -r --filter '!e2e-web' test
+      - name: Coverage summary
+        run: |
+          python3 tools/repo-checks/scripts/coverage_summary.py --vitest apps/web \
+            apps/web/coverage/coverage-summary.json >> "$GITHUB_STEP_SUMMARY"
       - run: pnpm --filter ts-codegen check
       - run: pnpm --filter web build
 

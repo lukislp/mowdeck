@@ -193,6 +193,10 @@ markers = [
 
 [tool.coverage.run]
 branch = true
+# Measure the product code only: test modules, fixtures and the acceptance suite would inflate the
+# total (they run almost completely by definition). The CI job summary shows the numbers
+# (tools/repo-checks/scripts/coverage_summary.py).
+omit = ["*/tests/*", "tests/*", "*/test_*.py", "*/conftest.py"]
 
 [tool.poe.tasks]
 lint-ruff = "ruff check ."

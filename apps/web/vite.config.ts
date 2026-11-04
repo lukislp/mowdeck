@@ -132,7 +132,8 @@ export default defineConfig({
         'src/lib/tour/stores.ts',
         'src/lib/demo/sandbox.ts',
       ],
-      reporter: ['text-summary'],
+      // json-summary feeds the CI job summary (tools/repo-checks/scripts/coverage_summary.py).
+      reporter: ['text-summary', 'json-summary'],
       thresholds: { lines: 80 },
     },
   },
