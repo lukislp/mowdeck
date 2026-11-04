@@ -47,7 +47,12 @@ function valueFor(conf: string, proto: string): string {
 
 describe.skipIf(!hasSh)('MOWDECK_WEB_HSTS', () => {
   it('is on by default for HTTPS, one year with subdomains and without preload', () => {
-    for (const env of [{}, { MOWDECK_WEB_HSTS: 'true' }, { MOWDECK_WEB_HSTS: 'ON' }]) {
+    const envs: Record<string, string>[] = [
+      {},
+      { MOWDECK_WEB_HSTS: 'true' },
+      { MOWDECK_WEB_HSTS: 'ON' },
+    ];
+    for (const env of envs) {
       const { conf } = render(env);
       expect(conf).toContain('map $http_x_forwarded_proto $mowdeck_hsts {');
       expect(valueFor(conf, 'https')).toBe(VALUE);
