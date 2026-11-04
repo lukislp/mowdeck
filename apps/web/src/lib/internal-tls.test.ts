@@ -58,11 +58,12 @@ describe.skipIf(!hasSh)('internal TLS of the web app', () => {
   });
 
   it('keeps plain HTTP and says why for a missing key or an unsafe path', () => {
-    for (const env of [
+    const envs: Record<string, string>[] = [
       { MOWDECK_WEB_TLS_CERT_FILE: CERT },
       { MOWDECK_WEB_TLS_CERT_FILE: CERT, MOWDECK_WEB_TLS_KEY_FILE: 'relative/tls.key' },
       { MOWDECK_WEB_TLS_CERT_FILE: `${CERT}; include /etc/passwd`, MOWDECK_WEB_TLS_KEY_FILE: KEY },
-    ]) {
+    ];
+    for (const env of envs) {
       const { conf, stderr } = render(env);
       expect(conf.trim()).toBe('listen 8080;');
       expect(stderr).toContain('MOWDECK_WEB_TLS_CERT_FILE');
