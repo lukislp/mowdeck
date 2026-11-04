@@ -40,4 +40,6 @@ helm repo add --force-update nats https://nats-io.github.io/k8s/helm/charts/
 helm repo add --force-update openfga https://openfga.github.io/helm-charts
 helm dependency build infra/helm/mowdeck
 helm package infra/helm/mowdeck --version "$version" --app-version "$version" -d "$out/chart"
+# Helm 4 writes the subcharts in map order: sort the entries (as the release workflow does).
+python3 tools/repo-checks/scripts/normalize_chart.py "$out/chart/mowdeck-$version.tgz"
 echo "::endgroup::"
