@@ -24,6 +24,9 @@ container wait-for-schema).
 {{- $asHook := include "mowdeck.migrations.asHook" $ctx }}
 {{- $base := include "mowdeck.serviceName" (dict "ctx" $ctx "component" .component) }}
 {{- $secret := include "mowdeck.secretName" $ctx }}
+{{- /* Internal TLS with the in-cluster PostgreSQL (Job mode); an external one (hook mode, before
+any certificate exists) keeps the parameters of its URL. */}}
+{{- $tlsDb := and $ctx.Values.internalTls.enabled (not $ctx.Values.postgresql.external.enabled) }}
 {{- if and $asHook (not $ctx.Values.secrets.existingSecret) }}
 {{- $secret = printf "%s-migrate" (include "mowdeck.fullname" $ctx) }}
 {{- end }}
@@ -75,6 +78,7 @@ spec:
               value: /run/secrets/mowdeck/database-url
             - name: WAIT_TIMEOUT_SECONDS
               value: {{ $ctx.Values.migrations.waitTimeoutSeconds | quote }}
+            {{- include "mowdeck.tls.pgEnv" $ctx | nindent 12 }}
           securityContext:
             {{- toYaml $ctx.Values.securityContext | nindent 12 }}
           resources:
@@ -83,6 +87,9 @@ spec:
             - {name: tmp, mountPath: /tmp}
             - {name: scripts, mountPath: /opt/mowdeck/scripts, readOnly: true}
             - {name: secrets, mountPath: /run/secrets/mowdeck, readOnly: true}
+            {{- if $tlsDb }}
+            - {name: internal-tls, mountPath: {{ include "mowdeck.tls.dir" $ctx }}, readOnly: true}
+            {{- end }}
       {{- end }}
       containers:
         - name: migrate
@@ -92,6 +99,11 @@ spec:
           env:
             - name: MOWDECK_DATABASE_URL_FILE
               value: /run/secrets/mowdeck/database-url
+            {{- if $tlsDb }}
+            # Internal TLS: the connection is verified against the internal CA.
+            - name: MOWDECK_TLS_CA_FILE
+              value: {{ printf "%s/ca.crt" (include "mowdeck.tls.dir" $ctx) | quote }}
+            {{- end }}
           securityContext:
             {{- toYaml $ctx.Values.securityContext | nindent 12 }}
           resources:
@@ -99,6 +111,9 @@ spec:
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
             - {name: secrets, mountPath: /run/secrets/mowdeck, readOnly: true}
+            {{- if $tlsDb }}
+            - {name: internal-tls, mountPath: {{ include "mowdeck.tls.dir" $ctx }}, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
@@ -108,6 +123,9 @@ spec:
         - name: scripts
           configMap:
             name: {{ include "mowdeck.fullname" $ctx }}-scripts
+        {{- end }}
+        {{- if $tlsDb }}
+        {{- include "mowdeck.tls.trustVolume" $ctx | nindent 8 }}
         {{- end }}
         - name: secrets
           secret:

@@ -1403,7 +1403,7 @@ dependencies = [
     { name = "mowdeck-auth" },
     { name = "mowdeck-authz", extra = ["fastapi"] },
     { name = "mowdeck-contracts" },
-    { name = "mowdeck-service-kit", extra = ["db"] },
+    { name = "mowdeck-service-kit", extra = ["certs", "db"] },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "webauthn" },
 ]
@@ -1417,7 +1417,7 @@ requires-dist = [
     { name = "mowdeck-auth", editable = "libs/mowdeck-auth" },
     { name = "mowdeck-authz", extras = ["fastapi"], editable = "libs/mowdeck-authz" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
-    { name = "mowdeck-service-kit", extras = ["db"], editable = "libs/mowdeck-service-kit" },
+    { name = "mowdeck-service-kit", extras = ["certs", "db"], editable = "libs/mowdeck-service-kit" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "webauthn", specifier = ">=3.0.1" },
 ]
@@ -1969,6 +1969,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+certs = [
+    { name = "cryptography" },
+]
 db = [
     { name = "asyncpg" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -1986,6 +1989,7 @@ testing = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", marker = "extra == 'db'", specifier = ">=0.32.0" },
+    { name = "cryptography", marker = "extra == 'certs'", specifier = ">=50.0.2" },
     { name = "fastapi", specifier = ">=0.143.0" },
     { name = "httpx", marker = "extra == 'testing'", specifier = ">=0.28.1" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
@@ -2001,7 +2005,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=26.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
-provides-extras = ["otel", "db", "testing"]
+provides-extras = ["otel", "db", "certs", "testing"]
 
 [[package]]
 name = "mowdeck-wiki-sync"
@@ -2042,7 +2046,7 @@ dev = [
     { name = "mowdeck-control-worx" },
     { name = "mowdeck-patterns" },
     { name = "mowdeck-provider-testkit" },
-    { name = "mowdeck-service-kit", extra = ["db", "otel", "testing"] },
+    { name = "mowdeck-service-kit", extra = ["certs", "db", "otel", "testing"] },
     { name = "mowdeck-wiki-sync" },
     { name = "mypy" },
     { name = "notifications" },
@@ -2088,7 +2092,7 @@ dev = [
     { name = "mowdeck-control-worx", editable = "libs/mowdeck-control-worx" },
     { name = "mowdeck-patterns", editable = "libs/mowdeck-patterns" },
     { name = "mowdeck-provider-testkit", editable = "libs/mowdeck-provider-testkit" },
-    { name = "mowdeck-service-kit", extras = ["db", "otel", "testing"], editable = "libs/mowdeck-service-kit" },
+    { name = "mowdeck-service-kit", extras = ["certs", "db", "otel", "testing"], editable = "libs/mowdeck-service-kit" },
     { name = "mowdeck-wiki-sync", editable = "tools/wiki-sync" },
     { name = "mypy", specifier = ">=1.13.0" },
     { name = "notifications", editable = "services/notifications" },

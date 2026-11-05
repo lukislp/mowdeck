@@ -19,7 +19,65 @@ name: mowdeck
 x-source-code: &source-code
   MOWDECK_SOURCE_URL: ${SOURCE_URL:-https://github.com/lukislp/mowdeck}
 
+# Internal TLS (docs/ops/internal-tls.md): every hop inside the stack is encrypted with a
+# certificate of the installation's private CA, which the one-shot job tls-init creates on the
+# first start and renews in the volume "tls". Every client verifies the other side against that
+# CA: MOWDECK_TLS_CA_FILE for NATS and PostgreSQL, SSL_CERT_FILE (the CA plus the public roots,
+# so calls to the internet keep working) for every HTTP client.
+x-tls-client: &tls-client
+  SSL_CERT_FILE: /etc/mowdeck/tls/ca-bundle.pem
+  MOWDECK_TLS_CA_FILE: /etc/mowdeck/tls/ca.crt
+
 services:
+  # One-shot job, before every other container: the private CA (volume tls-ca, mounted only
+  # here) and one certificate per server of the stack (volume tls, mounted read-only by every
+  # container), each key owned by the user of the container that reads it. Idempotent; a
+  # certificate is issued again when it is missing, its names change or it expires within a year
+  # (python -m mowdeck_service_kit.certs). Runs in the identity image, as root for the chown.
+  tls-init:
+    image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
+    build:
+      context: ../..
+      dockerfile: services/identity/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f}
+        UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a}
+    user: "0:0"
+    command:
+      - python
+      - -m
+      - mowdeck_service_kit.certs
+      - --ca-dir=/var/lib/mowdeck/ca
+      - --out-dir=/etc/mowdeck/tls
+      # NAME:UID:GID[:EXTRA_NAMES]: the uid reads the key (Python services 10001, PostgreSQL 70,
+      # OpenFGA 65532, nginx 101, MediaMTX 65534, the Matter server 1000, NATS root).
+      - --cert=nats:0:0
+      - --cert=postgres:70:70
+      - --cert=openfga:65532:65532:0.0.0.0
+      - --cert=identity:10001:10001
+      - --cert=fleet:10001:10001
+      - --cert=device-gateway:10001:10001
+      - --cert=telemetry:10001:10001
+      - --cert=realtime:10001:10001
+      - --cert=notifications:10001:10001
+      - --cert=scheduler:10001:10001
+      - --cert=entitlements:10001:10001
+      - --cert=planner:10001:10001
+      - --cert=vision:10001:10001
+      - --cert=assistant:10001:10001
+      - --cert=billing:10001:10001
+      - --cert=camera-relay:10001:10001
+      - --cert=web:101:101
+      - --cert=mediamtx:65534:65534
+      - --cert=matter-server:1000:1000:host.docker.internal
+    read_only: true
+    tmpfs: [/tmp]
+    network_mode: none
+    volumes:
+      - tls-ca:/var/lib/mowdeck/ca
+      - tls:/etc/mowdeck/tls
+    restart: "no"
+
   traefik:
     image: ${TRAEFIK_IMAGE:-public.ecr.aws/docker/library/traefik:v3.7.14}
     restart: unless-stopped
@@ -40,6 +98,9 @@ services:
       # IP. Empty (default): Traefik trusts no one and sets the headers from the TCP peer itself.
       - --entrypoints.web.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
       - --entrypoints.websecure.forwardedHeaders.trustedIPs=${GATEWAY_TRUSTED_PROXIES:-}
+      # Internal TLS: one servers transport per backend (traefik/internal-tls.yml) checks its
+      # certificate against the stack's CA and its service name.
+      - --providers.file.filename=/etc/traefik/mowdeck/internal-tls.yml
       - --api.dashboard=false
       - --ping=true
       - --log.level=INFO
@@ -50,6 +111,8 @@ services:
       # Read-only socket for service discovery. In production, front the socket
       # with a restricted proxy or use the file/Kubernetes providers instead.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik/mowdeck:ro
+      - tls:/etc/mowdeck/tls:ro
     # Containers on the host network (matter-server, profile matter) are routed to the host's
     # address on Docker's bridge, which Traefik looks up as host.docker.internal.
     extra_hosts:
@@ -109,10 +172,13 @@ services:
   # (ADR 0074): nats/auth.conf, generated from the subject map in
   # tools/repo-checks/scripts/nats_auth.py. The passwords are NATS_PASSWORD_<USER> in .env
   # (./nats-passwords.sh .env generates them); each service gets only its own.
+  # nats/server.conf includes auth.conf and requires TLS on the client port (internal TLS); the
+  # monitoring endpoint listens on the container's loopback only (the health check, `docker
+  # compose exec nats wget -qO- http://127.0.0.1:8222/varz`).
   nats:
     image: ${NATS_IMAGE:-public.ecr.aws/docker/library/nats:2.15.0-alpine}
     restart: unless-stopped
-    command: ["-c", "/etc/nats/mowdeck/auth.conf", "-js", "-m", "8222", "-sd", "/data"]
+    command: ["-c", "/etc/nats/mowdeck/server.conf", "-js", "-sd", "/data"]
     environment:
       NATS_PASSWORD_BILLING: ${NATS_PASSWORD_BILLING:?set NATS_PASSWORD_BILLING in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       NATS_PASSWORD_CAMERA_RELAY: ${NATS_PASSWORD_CAMERA_RELAY:?set NATS_PASSWORD_CAMERA_RELAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
@@ -129,16 +195,19 @@ services:
       NATS_PASSWORD_VISION: ${NATS_PASSWORD_VISION:?set NATS_PASSWORD_VISION in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
     ports:
       - "127.0.0.1:${NATS_CLIENT_PORT:-4222}:4222"
-      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - nats-data:/data
       - ./nats:/etc/nats/mowdeck:ro
+      - tls:/etc/mowdeck/tls:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8222/healthz"]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 3s
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     networks: [mowdeck]
 
   # One-shot job: creates the JetStream streams and updates them to the contract settings
@@ -155,8 +224,11 @@ services:
     command: ["python", "-m", "mowdeck_service_kit.bus.streams"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      MOWDECK_NATS_URL: nats://nats:4222
+      <<: *tls-client
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: streams
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_STREAMS:?set NATS_PASSWORD_STREAMS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
     depends_on:
@@ -172,7 +244,22 @@ services:
     # up to MOWDECK_DATABASE_POOL_SIZE + MOWDECK_DATABASE_MAX_OVERFLOW (5 + 5, Telemetry 10 + 5)
     # plus a short-lived readiness connection, OpenFGA up to 30: about 135 with every profile,
     # below 200 with room for the one-shot jobs and psql.
-    command: ["postgres", "-c", "max_connections=200"]
+    # Internal TLS: connections over the network must use TLS (postgres/pg_hba.conf: hostssl,
+    # the socket and the container's loopback stay as the image sets them up).
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/etc/mowdeck/tls/postgres/tls.crt
+      - -c
+      - ssl_key_file=/etc/mowdeck/tls/postgres/tls.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+      - -c
+      - hba_file=/etc/mowdeck/postgres/pg_hba.conf
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/compose/.env}
@@ -182,6 +269,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d:ro
+      - ./postgres:/etc/mowdeck/postgres:ro
+      - tls:/etc/mowdeck/tls:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     healthcheck:
       # Over TCP, not the socket: on a fresh volume the image's entrypoint runs the init scripts
       # on a temporary server that listens on the Unix socket only, so a socket check reports
@@ -198,7 +290,9 @@ services:
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
-      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=verify-full&sslrootcert=/etc/mowdeck/tls/ca.crt
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -211,12 +305,23 @@ services:
     restart: unless-stopped
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
-      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_URI: postgres://openfga:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/openfga?sslmode=verify-full&sslrootcert=/etc/mowdeck/tls/ca.crt
       # OpenFGA's own defaults, explicit because they count in the connection budget above.
       OPENFGA_DATASTORE_MAX_OPEN_CONNS: "30"
       OPENFGA_DATASTORE_MAX_IDLE_CONNS: "10"
       OPENFGA_HTTP_ADDR: 0.0.0.0:8080
       OPENFGA_GRPC_ADDR: 0.0.0.0:8081
+      # Internal TLS on both APIs. OpenFGA's HTTP API forwards to its own gRPC API at
+      # OPENFGA_GRPC_ADDR and checks the certificate for that address: the certificate also
+      # names 0.0.0.0 (tls-init).
+      OPENFGA_HTTP_TLS_ENABLED: "true"
+      OPENFGA_HTTP_TLS_CERT: /etc/mowdeck/tls/openfga/tls.crt
+      OPENFGA_HTTP_TLS_KEY: /etc/mowdeck/tls/openfga/tls.key
+      OPENFGA_GRPC_TLS_ENABLED: "true"
+      OPENFGA_GRPC_TLS_CERT: /etc/mowdeck/tls/openfga/tls.crt
+      OPENFGA_GRPC_TLS_KEY: /etc/mowdeck/tls/openfga/tls.key
+      # Prometheus metrics on the container's loopback only (nothing in the stack scrapes them).
+      OPENFGA_METRICS_ADDR: 127.0.0.1:2112
       OPENFGA_PLAYGROUND_ENABLED: "false"
       OPENFGA_AUTHN_METHOD: preshared
       OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}
@@ -229,8 +334,10 @@ services:
     ports:
       - "127.0.0.1:${OPENFGA_HTTP_PORT:-8080}:8080"
       - "127.0.0.1:${OPENFGA_GRPC_PORT:-8081}:8081"
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     healthcheck:
-      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081", "-tls", "-tls-ca-cert=/etc/mowdeck/tls/ca.crt"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -252,9 +359,14 @@ services:
         JQ_IMAGE: ${JQ_IMAGE:-ghcr.io/jqlang/jq:1.8.1@sha256:4f34c6d23f4b1372ac789752cc955dc67c2ae177eb1b5860b75cdc5091ce6f91}
         BUSYBOX_IMAGE: ${BUSYBOX_IMAGE:-public.ecr.aws/docker/library/busybox:1.37.0@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e}
     environment:
-      FGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      # The fga CLI (Go) trusts SSL_CERT_FILE; with MOWDECK_TLS_CA_FILE an http://openfga URL
+      # of an older .env is used as https (bootstrap.sh).
+      <<: *tls-client
+      FGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       FGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       FGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     depends_on:
       openfga:
         condition: service_healthy
@@ -275,7 +387,10 @@ services:
     command: ["python", "-m", "identity.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://identity:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/identity
     depends_on:
       postgres:
@@ -286,7 +401,7 @@ services:
   # Accounts, users, roles, sessions, API tokens; issues the access tokens
   # (EdDSA JWT) and publishes the public keys at /.well-known/jwks.json.
   # Services verify tokens locally with mowdeck-auth against
-  # http://identity:8000/.well-known/jwks.json (inside the compose network).
+  # https://identity:8000/.well-known/jwks.json (inside the compose network).
   identity:
     image: ${MOWDECK_IMAGE_REGISTRY:-mowdeck}/identity:${MOWDECK_VERSION:-dev}
     build:
@@ -299,23 +414,25 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/identity/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/identity/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: identity
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_IDENTITY:?set NATS_PASSWORD_IDENTITY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://identity:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/identity
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY: ${IDENTITY_KEY_ENCRYPTION_KEY:?set IDENTITY_KEY_ENCRYPTION_KEY in infra/compose/.env}
       MOWDECK_IDENTITY_REGISTRATION: ${IDENTITY_REGISTRATION:-open}
       MOWDECK_IDENTITY_ARGON2_PROFILE: ${IDENTITY_ARGON2_PROFILE:-rfc9106_low}
       # Optional modules add their URL in IDENTITY_EXTRA_MODULE_URLS (comma separated), e.g. the
-      # Matter server on the host network: http://host.docker.internal:8790 (ADR 0063).
-      MOWDECK_IDENTITY_MODULE_URLS: http://device-gateway:8000,http://fleet:8000,http://telemetry:8000,http://realtime:8000,http://notifications:8000,http://scheduler:8000,http://entitlements:8000,http://planner:8000,http://vision:8000,${IDENTITY_EXTRA_MODULE_URLS:-}
+      # Matter server on the host network: https://host.docker.internal:8790 (ADR 0063).
+      MOWDECK_IDENTITY_MODULE_URLS: https://device-gateway:8000,https://fleet:8000,https://telemetry:8000,https://realtime:8000,https://notifications:8000,https://scheduler:8000,https://entitlements:8000,https://planner:8000,https://vision:8000,${IDENTITY_EXTRA_MODULE_URLS:-}
       # Plans (ADR 0028): the token's plan claim comes from Entitlements; this switch only
       # decides the fallback while Entitlements does not answer.
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
@@ -345,6 +462,7 @@ services:
       MOWDECK_IDENTITY_APPLE_PRIVATE_KEY_FILE: ${IDENTITY_APPLE_PRIVATE_KEY_FILE:-}
       MOWDECK_IDENTITY_APPLE_PKCE: ${IDENTITY_APPLE_PKCE:-true}
     volumes:
+      - tls:/etc/mowdeck/tls:ro
       - ./secrets/github:/run/secrets/github:ro
       - ./secrets/apple:/run/secrets/apple:ro
     # The Matter server's descriptor (profile matter) is served on the host network.
@@ -395,6 +513,8 @@ services:
       - traefik.http.routers.identity-jwks.entrypoints=web
       - traefik.http.routers.identity-jwks.service=identity
       - traefik.http.services.identity.loadbalancer.server.port=8000
+      - traefik.http.services.identity.loadbalancer.server.scheme=https
+      - traefik.http.services.identity.loadbalancer.serverstransport=identity@file
     # The healthcheck of every Python service asks /startupz (ADR 0077): it passes once all
     # readiness checks (database, OpenFGA, NATS, ...) passed once, so `up --wait` and
     # depends_on still wait for a ready service, and from then on it only asks whether the
@@ -405,7 +525,7 @@ services:
     # start_period, so `up --wait` stays fast) and every 30 s after that: each check starts a
     # Python interpreter (docs/ops/load-testing.md).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -437,7 +557,10 @@ services:
     command: ["python", "-m", "fleet.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
     depends_on:
       postgres:
@@ -459,20 +582,24 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/fleet/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/fleet/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: fleet
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_FLEET:?set NATS_PASSWORD_FLEET in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://fleet:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/fleet
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_ALLOWED_CONNECTION_KINDS: ${FLEET_ALLOWED_CONNECTION_KINDS:-simulated}
       # How long Fleet waits for the route a mower plans for a path preview (504 after). The
@@ -487,8 +614,10 @@ services:
       - traefik.http.routers.fleet.rule=PathPrefix(`/api/v1/fleet`)
       - traefik.http.routers.fleet.entrypoints=web
       - traefik.http.services.fleet.loadbalancer.server.port=8000
+      - traefik.http.services.fleet.loadbalancer.server.scheme=https
+      - traefik.http.services.fleet.loadbalancer.serverstransport=fleet@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -521,12 +650,16 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/device-gateway/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/device-gateway/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: device-gateway
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_DEVICE_GATEWAY:?set NATS_PASSWORD_DEVICE_GATEWAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_SHARD_INDEX: "0"
@@ -557,14 +690,16 @@ services:
       MOWDECK_CAPTURE_TIMEOUT_SECONDS: ${CAPTURE_TIMEOUT_SECONDS:-20}
       MOWDECK_PHOTO_TIMEOUT_SECONDS: ${GATEWAY_PHOTO_TIMEOUT_SECONDS:-30}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
     labels:
       - traefik.enable=true
       - traefik.http.routers.device-gateway.rule=PathPrefix(`/api/v1/device-gateway`)
       - traefik.http.routers.device-gateway.entrypoints=web
       - traefik.http.services.device-gateway.loadbalancer.server.port=8000
+      - traefik.http.services.device-gateway.loadbalancer.server.scheme=https
+      - traefik.http.services.device-gateway.loadbalancer.serverstransport=device-gateway@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -589,7 +724,10 @@ services:
     command: ["python", "-m", "telemetry.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
     depends_on:
       postgres:
@@ -612,23 +750,25 @@ services:
     read_only: true
     tmpfs: [/tmp]
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/telemetry/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/telemetry/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: telemetry
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
       # The busiest pool of the stack: most of a mower page (docs/ops/compose.md, budget).
       MOWDECK_DATABASE_POOL_SIZE: "10"
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # The public tracking page's rate limit key (GATEWAY_CLIENT_IP_DEPTH, see .env.example).
       MOWDECK_CLIENT_IP_DEPTH: ${GATEWAY_CLIENT_IP_DEPTH:-}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS: ${TELEMETRY_HEARTBEAT_HISTORY_SECONDS:-300}
       MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS: ${TELEMETRY_RETENTION_HISTORY_DAYS:-30}
       MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS: ${TELEMETRY_RETENTION_POSITIONS_DAYS:-730}
@@ -651,14 +791,17 @@ services:
       MOWDECK_TELEMETRY_BASEMAP_COVERAGE: ${BASEMAP_COVERAGE:-}
       MOWDECK_TELEMETRY_AERIAL_COVERAGE: ${AERIAL_COVERAGE:-}
     volumes:
+      - tls:/etc/mowdeck/tls:ro
       - aerial-cache:/var/cache/mowdeck/aerial
     labels:
       - traefik.enable=true
       - traefik.http.routers.telemetry.rule=PathPrefix(`/api/v1/telemetry`)
       - traefik.http.routers.telemetry.entrypoints=web
       - traefik.http.services.telemetry.loadbalancer.server.port=8000
+      - traefik.http.services.telemetry.loadbalancer.server.scheme=https
+      - traefik.http.services.telemetry.loadbalancer.serverstransport=telemetry@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -695,19 +838,23 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/realtime/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/realtime/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: realtime
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_REALTIME:?set NATS_PASSWORD_REALTIME in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_REALTIME_PING_SECONDS: ${REALTIME_PING_SECONDS:-20}
       MOWDECK_REALTIME_MAX_CONNECTIONS_PER_ACCOUNT: ${REALTIME_MAX_CONNECTIONS_PER_ACCOUNT:-50}
@@ -720,8 +867,10 @@ services:
       - traefik.http.routers.realtime.rule=PathPrefix(`/api/v1/realtime`)
       - traefik.http.routers.realtime.entrypoints=web
       - traefik.http.services.realtime.loadbalancer.server.port=8000
+      - traefik.http.services.realtime.loadbalancer.server.scheme=https
+      - traefik.http.services.realtime.loadbalancer.serverstransport=realtime@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -751,7 +900,10 @@ services:
     command: ["python", "-m", "notifications.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
     depends_on:
       postgres:
@@ -781,22 +933,25 @@ services:
     read_only: true
     tmpfs: [/tmp]
     volumes:
+      - tls:/etc/mowdeck/tls:ro
       - notifications-data:/var/lib/notifications
       - ./secrets/apns:/run/secrets/apns:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/notifications/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/notifications/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: notifications
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_NOTIFICATIONS:?set NATS_PASSWORD_NOTIFICATIONS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://notifications:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/notifications
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_NOTIFICATIONS_CHANNELS: ${NOTIFICATIONS_CHANNELS:-webpush,ntfy,apns,log}
       MOWDECK_NOTIFICATIONS_VAPID_PRIVATE_KEY: ${NOTIFICATIONS_VAPID_PRIVATE_KEY:-}
@@ -822,8 +977,10 @@ services:
       - traefik.http.routers.notifications.rule=PathPrefix(`/api/v1/notifications`)
       - traefik.http.routers.notifications.entrypoints=web
       - traefik.http.services.notifications.loadbalancer.server.port=8000
+      - traefik.http.services.notifications.loadbalancer.server.scheme=https
+      - traefik.http.services.notifications.loadbalancer.serverstransport=notifications@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -855,7 +1012,10 @@ services:
     command: ["python", "-m", "scheduler.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
     depends_on:
       postgres:
@@ -879,20 +1039,24 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/scheduler/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/scheduler/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: scheduler
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_SCHEDULER:?set NATS_PASSWORD_SCHEDULER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://scheduler:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/scheduler
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_SCHEDULER_WEATHER_PROVIDER: ${SCHEDULER_WEATHER_PROVIDER:-open_meteo}
       MOWDECK_SCHEDULER_STATIC_WEATHER: ${SCHEDULER_STATIC_WEATHER:-dry}
@@ -903,8 +1067,10 @@ services:
       - traefik.http.routers.scheduler.rule=PathPrefix(`/api/v1/scheduler`)
       - traefik.http.routers.scheduler.entrypoints=web
       - traefik.http.services.scheduler.loadbalancer.server.port=8000
+      - traefik.http.services.scheduler.loadbalancer.server.scheme=https
+      - traefik.http.services.scheduler.loadbalancer.serverstransport=scheduler@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -936,7 +1102,10 @@ services:
     command: ["python", "-m", "entitlements.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
     depends_on:
       postgres:
@@ -959,31 +1128,36 @@ services:
     read_only: true
     tmpfs: [/tmp]
     volumes:
+      - tls:/etc/mowdeck/tls:ro
       - ../entitlements/plans.yaml:/etc/mowdeck/entitlements/plans.yaml:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/entitlements/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/entitlements/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: entitlements
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_ENTITLEMENTS:?set NATS_PASSWORD_ENTITLEMENTS in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://entitlements:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/entitlements
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_ENTITLEMENTS_DEFAULT_PLAN: ${ENTITLEMENTS_DEFAULT_PLAN:-home}
-      MOWDECK_ENTITLEMENTS_MODULE_URLS: http://fleet:8000,http://realtime:8000,http://scheduler:8000,http://notifications:8000,http://identity:8000,http://telemetry:8000,http://device-gateway:8000,http://planner:8000,http://vision:8000
+      MOWDECK_ENTITLEMENTS_MODULE_URLS: https://fleet:8000,https://realtime:8000,https://scheduler:8000,https://notifications:8000,https://identity:8000,https://telemetry:8000,https://device-gateway:8000,https://planner:8000,https://vision:8000
     labels:
       - traefik.enable=true
       - traefik.http.routers.entitlements.rule=PathPrefix(`/api/v1/entitlements`)
       - traefik.http.routers.entitlements.entrypoints=web
       - traefik.http.services.entitlements.loadbalancer.server.port=8000
+      - traefik.http.services.entitlements.loadbalancer.server.scheme=https
+      - traefik.http.services.entitlements.loadbalancer.serverstransport=entitlements@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1015,7 +1189,10 @@ services:
     command: ["python", "-m", "vision.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
     depends_on:
       postgres:
@@ -1038,20 +1215,24 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/vision/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/vision/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: vision
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_VISION:?set NATS_PASSWORD_VISION in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_VISION_DEFAULT_ENABLED: ${VISION_DEFAULT_ENABLED:-false}
       MOWDECK_VISION_DEFAULT_MODEL: ${VISION_DEFAULT_MODEL:-anthropic/claude-sonnet-5-5}
@@ -1079,8 +1260,10 @@ services:
       - traefik.http.routers.vision.rule=PathPrefix(`/api/v1/vision`)
       - traefik.http.routers.vision.entrypoints=web
       - traefik.http.services.vision.loadbalancer.server.port=8000
+      - traefik.http.services.vision.loadbalancer.server.scheme=https
+      - traefik.http.services.vision.loadbalancer.serverstransport=vision@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1119,14 +1302,18 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/assistant/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/assistant/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
       MOWDECK_NATS_ENABLED: "false"
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ASSISTANT_INTERPRETER: ${ASSISTANT_INTERPRETER:-provider}
       MOWDECK_ASSISTANT_REQUESTS_PER_MINUTE: ${ASSISTANT_REQUESTS_PER_MINUTE:-20}
       MOWDECK_ASSISTANT_AI_TIMEOUT_SECONDS: ${ASSISTANT_AI_TIMEOUT_SECONDS:-60}
@@ -1135,8 +1322,10 @@ services:
       - traefik.http.routers.assistant.rule=PathPrefix(`/api/v1/assistant`)
       - traefik.http.routers.assistant.entrypoints=web
       - traefik.http.services.assistant.loadbalancer.server.port=8000
+      - traefik.http.services.assistant.loadbalancer.server.scheme=https
+      - traefik.http.services.assistant.loadbalancer.serverstransport=assistant@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1171,15 +1360,19 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/camera-relay/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/camera-relay/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: camera-relay
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_CAMERA_RELAY:?set NATS_PASSWORD_CAMERA_RELAY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
-      MOWDECK_RELAY_MEDIAMTX_API_URL: http://mediamtx:9997
+      MOWDECK_RELAY_MEDIAMTX_API_URL: https://mediamtx:9997
       MOWDECK_RELAY_MEDIAMTX_RTSP_URL: rtsp://mediamtx:8554
       # The optional agora-bridge (profile agora) on this container's loopback; while nothing
       # listens there, agora mowers are unsupported_provider (direct path).
@@ -1188,7 +1381,7 @@ services:
       # of the Device-Gateway (GATEWAY_RELAY_URL). Empty: the frame tap is off.
       MOWDECK_RELAY_FRAMES_TOKEN: ${RELAY_FRAMES_TOKEN:-}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1211,6 +1404,9 @@ services:
   # reach that port. The API (:9997) is reachable inside this network only and every request is
   # authorized by camera-relay; metrics, playback and pprof are off. Config:
   # infra/compose/mediamtx/mediamtx.yml. The image has no shell, so it has no health check.
+  # Internal TLS: the API and the WHEP server use HTTPS, the auth callback to camera-relay too.
+  # RTSP between camera-relay and MediaMTX stays unencrypted: ffmpeg's RTSP client cannot check
+  # an RTSPS certificate (docs/ops/internal-tls.md, "What stays unencrypted").
   mediamtx:
     image: ${MEDIAMTX_IMAGE:-bluenviron/mediamtx:1.21.2}
     profiles: [relay]
@@ -1221,8 +1417,20 @@ services:
     security_opt: ["no-new-privileges:true"]
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - tls:/etc/mowdeck/tls:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     environment:
-      MTX_AUTHHTTPADDRESS: http://camera-relay:8000/internal/mediamtx/auth
+      # Go trusts SSL_CERT_FILE: the auth callback checks camera-relay's certificate.
+      SSL_CERT_FILE: /etc/mowdeck/tls/ca-bundle.pem
+      MTX_APIENCRYPTION: "yes"
+      MTX_APISERVERCERT: /etc/mowdeck/tls/mediamtx/tls.crt
+      MTX_APISERVERKEY: /etc/mowdeck/tls/mediamtx/tls.key
+      MTX_WEBRTCENCRYPTION: "yes"
+      MTX_WEBRTCSERVERCERT: /etc/mowdeck/tls/mediamtx/tls.crt
+      MTX_WEBRTCSERVERKEY: /etc/mowdeck/tls/mediamtx/tls.key
+      MTX_AUTHHTTPADDRESS: https://camera-relay:8000/internal/mediamtx/auth
       MTX_WEBRTCADDITIONALHOSTS: ${RELAY_ICE_HOSTS:-127.0.0.1}
       MTX_WEBRTCLOCALUDPADDRESS: :${RELAY_ICE_PORT:-8189}
       MTX_WEBRTCLOCALTCPADDRESS: :${RELAY_ICE_PORT:-8189}
@@ -1236,6 +1444,8 @@ services:
       - traefik.http.routers.mediamtx-whep.middlewares=mediamtx-whep-strip
       - traefik.http.middlewares.mediamtx-whep-strip.stripprefix.prefixes=/media/whep
       - traefik.http.services.mediamtx-whep.loadbalancer.server.port=8889
+      - traefik.http.services.mediamtx-whep.loadbalancer.server.scheme=https
+      - traefik.http.services.mediamtx-whep.loadbalancer.serverstransport=mediamtx@file
     stop_grace_period: 5s
     networks: [mowdeck]
 
@@ -1290,7 +1500,10 @@ services:
     command: ["python", "-m", "billing.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
     depends_on:
       postgres:
@@ -1315,21 +1528,24 @@ services:
     read_only: true
     tmpfs: [/tmp]
     volumes:
+      - tls:/etc/mowdeck/tls:ro
       - ../billing/prices.yaml:/etc/mowdeck/billing/prices.yaml:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/billing/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/billing/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: billing
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_BILLING:?set NATS_PASSWORD_BILLING in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://billing:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/billing
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_BILLING_PROVIDER: ${BILLING_PROVIDER:-stripe}
       MOWDECK_BILLING_STRIPE_SECRET_KEY: ${BILLING_STRIPE_SECRET_KEY:-}
       MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET: ${BILLING_STRIPE_WEBHOOK_SECRET:-}
@@ -1338,7 +1554,7 @@ services:
       MOWDECK_BILLING_PRICE_IDS: ${BILLING_PRICE_IDS:-}
       MOWDECK_BILLING_GRACE_DAYS: ${BILLING_GRACE_DAYS:-14}
       MOWDECK_BILLING_APP_URL: ${BILLING_APP_URL:-}
-      MOWDECK_BILLING_ENTITLEMENTS_URL: http://entitlements:8000
+      MOWDECK_BILLING_ENTITLEMENTS_URL: https://entitlements:8000
     labels:
       - traefik.enable=true
       - traefik.http.routers.billing.rule=PathPrefix(`/api/v1/billing`)
@@ -1357,8 +1573,10 @@ services:
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.depth=${GATEWAY_CLIENT_IP_DEPTH:-0}
       - traefik.http.middlewares.billing-webhook-ratelimit.ratelimit.sourcecriterion.ipstrategy.ipv6subnet=64
       - traefik.http.services.billing.loadbalancer.server.port=8000
+      - traefik.http.services.billing.loadbalancer.server.scheme=https
+      - traefik.http.services.billing.loadbalancer.serverstransport=billing@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1392,7 +1610,10 @@ services:
     command: ["python", "-m", "planner.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      <<: *tls-client
       MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
     depends_on:
       postgres:
@@ -1414,20 +1635,24 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
-      <<: *source-code
+      <<: [*source-code, *tls-client]
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/planner/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/planner/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: planner
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_PLANNER:?set NATS_PASSWORD_PLANNER in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://planner:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/planner
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_PLANNER_CUTTING_WIDTH_M: ${PLANNER_CUTTING_WIDTH_M:-0.4}
       MOWDECK_PLANNER_MAX_PARALLEL: ${PLANNER_MAX_PARALLEL:-2}
@@ -1436,8 +1661,10 @@ services:
       - traefik.http.routers.planner.rule=PathPrefix(`/api/v1/planner`)
       - traefik.http.routers.planner.entrypoints=web
       - traefik.http.services.planner.loadbalancer.server.port=8000
+      - traefik.http.services.planner.loadbalancer.server.scheme=https
+      - traefik.http.services.planner.loadbalancer.serverstransport=planner@file
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1482,10 +1709,20 @@ services:
     volumes:
       - matter-data:/data
       - ./secrets/matter:/run/secrets/matter:ro
+      - tls:/etc/mowdeck/tls:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     environment:
       <<: *source-code
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
+      # Internal TLS: the admin API serves HTTPS (Traefik and Identity check the certificate,
+      # which also names host.docker.internal). Its own calls go to Traefik on the host's
+      # loopback (MATTER_API_URL).
+      MOWDECK_MATTER_TLS_CERT_FILE: /etc/mowdeck/tls/matter-server/tls.crt
+      MOWDECK_MATTER_TLS_KEY_FILE: /etc/mowdeck/tls/matter-server/tls.key
+      NODE_EXTRA_CA_CERTS: /etc/mowdeck/tls/ca.crt
       MOWDECK_MATTER_API_URL: ${MATTER_API_URL:-http://127.0.0.1:${GATEWAY_HTTP_PORT:-80}}
       MOWDECK_MATTER_API_TOKENS_FILE: /run/secrets/matter/api-tokens
       MOWDECK_MATTER_HTTP_PORT: ${MATTER_HTTP_PORT:-8790}
@@ -1498,6 +1735,8 @@ services:
       - traefik.http.routers.matter.rule=PathPrefix(`/api/v1/matter`)
       - traefik.http.routers.matter.entrypoints=web
       - traefik.http.services.matter.loadbalancer.server.port=${MATTER_HTTP_PORT:-8790}
+      - traefik.http.services.matter.loadbalancer.server.scheme=https
+      - traefik.http.services.matter.loadbalancer.serverstransport=matter-server@file
     stop_grace_period: 20s
 
   # The web app (apps/web): a static SvelteKit PWA served by an unprivileged, read-only
@@ -1522,8 +1761,17 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     environment:
       <<: *source-code
+      # Internal TLS: Traefik reaches the app over HTTPS on 8443; plain HTTP on 8080 listens on
+      # the container's loopback only (the health check).
+      MOWDECK_WEB_TLS_CERT_FILE: /etc/mowdeck/tls/web/tls.crt
+      MOWDECK_WEB_TLS_KEY_FILE: /etc/mowdeck/tls/web/tls.key
       # Optional raster tiles under the map (empty: metric grid, no third party). Rendered into
       # /config.json and the CSP img-src at container start.
       MOWDECK_WEB_MAP_TILES: ${WEB_MAP_TILES:-}
@@ -1542,7 +1790,9 @@ services:
       - traefik.http.routers.web.rule=PathPrefix(`/`)
       - traefik.http.routers.web.entrypoints=web
       - traefik.http.routers.web.priority=1
-      - traefik.http.services.web.loadbalancer.server.port=8080
+      - traefik.http.services.web.loadbalancer.server.port=8443
+      - traefik.http.services.web.loadbalancer.server.scheme=https
+      - traefik.http.services.web.loadbalancer.serverstransport=web@file
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 5s
@@ -1557,6 +1807,9 @@ networks:
     name: ${MOWDECK_NETWORK:-mowdeck}
 
 volumes:
+  # Internal TLS: the private CA (tls-init only) and the certificates every container reads.
+  tls-ca:
+  tls:
   nats-data:
   postgres-data:
   notifications-data:

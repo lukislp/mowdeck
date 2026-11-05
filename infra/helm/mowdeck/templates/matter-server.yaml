@@ -58,5 +58,5 @@ spec:
       storage: {{ $v.persistence.size }}
 {{- end }}
 {{ include "mowdeck.workload" (dict "ctx" . "component" "matter-server" "key" "matterServer" "image" "matter-server"
-  "port" (int $c.MATTER_HTTP_PORT) "env" $env "secretFiles" $secretFiles "hostNetwork" true
+  "port" (int $c.MATTER_HTTP_PORT) "env" $env "secretFiles" $secretFiles "hostNetwork" true "tlsKind" "node"
   "volumes" (list $data) "volumeMounts" (list (dict "name" "data" "mountPath" "/data"))) }}

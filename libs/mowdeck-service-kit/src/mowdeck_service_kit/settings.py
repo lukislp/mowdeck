@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
@@ -24,6 +24,7 @@ from pydantic_settings import (
 )
 
 from mowdeck_service_kit.source import source_code_url
+from mowdeck_service_kit.tls import upgrade_internal_urls
 
 ENV_PREFIX = "MOWDECK_"
 FILE_SUFFIX = "_FILE"
@@ -77,6 +78,8 @@ class ServiceSettings(BaseSettings):
         validate_default=True,
         use_attribute_docstrings=True,
     )
+
+    _upgraded_urls: tuple[str, ...] = PrivateAttr(default=())
 
     service_name: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9\-]*$")
     """Name of the service, used in logs, metrics and traces (``MOWDECK_SERVICE_NAME``)."""
@@ -185,8 +188,31 @@ class ServiceSettings(BaseSettings):
     address is the entry this many places left of the gateway's own (see
     :mod:`mowdeck_service_kit.client_address`). Empty: the leftmost entry, as before."""
 
+    tls_cert_file: str | None = None
+    """Certificate (PEM) the HTTP server presents (``MOWDECK_TLS_CERT_FILE``). Together with
+    ``tls_key_file`` the service serves HTTPS only; Compose and Helm issue one per service from
+    the installation's private CA (docs/ops/internal-tls.md). Empty: plain HTTP (tests,
+    development outside the stack)."""
+
+    tls_key_file: str | None = None
+    """Private key (PEM) of ``tls_cert_file`` (``MOWDECK_TLS_KEY_FILE``)."""
+
+    tls_ca_file: str | None = None
+    """CA certificate (PEM) of the installation (``MOWDECK_TLS_CA_FILE``): NATS and PostgreSQL
+    connections are encrypted and verified against it, and an ``http://`` URL setting that names
+    a MowDeck service or OpenFGA is used as ``https://`` (an older ``.env`` keeps working).
+    HTTP clients trust it through ``SSL_CERT_FILE``, which the stack points to the CA plus the
+    public roots."""
+
     @field_validator(
-        "client_ip_depth", "nats_user", "nats_password", "nats_manage_streams", mode="before"
+        "client_ip_depth",
+        "nats_user",
+        "nats_password",
+        "nats_manage_streams",
+        "tls_cert_file",
+        "tls_key_file",
+        "tls_ca_file",
+        mode="before",
     )
     @classmethod
     def _empty_is_unset(cls, value: Any) -> Any:
@@ -198,6 +224,45 @@ class ServiceSettings(BaseSettings):
             msg = "set both MOWDECK_NATS_USER and MOWDECK_NATS_PASSWORD (or neither)"
             raise ValueError(msg)
         return self
+
+    @model_validator(mode="after")
+    def _tls_certificate_comes_with_its_key(self) -> Self:
+        if (self.tls_cert_file is None) != (self.tls_key_file is None):
+            msg = "set both MOWDECK_TLS_CERT_FILE and MOWDECK_TLS_KEY_FILE (or neither)"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _internal_urls_use_https(self) -> Self:
+        """With internal TLS, ``http://<service>`` URL settings become ``https://<service>``."""
+        if self.tls_ca_file is None:
+            return self
+        upgraded: list[str] = []
+        configured = set(self.model_fields_set)  # setattr below adds to it
+        for name in type(self).model_fields:
+            if not name.endswith(("_url", "_urls")):
+                continue
+            value = getattr(self, name)
+            if not isinstance(value, str):
+                continue
+            new = upgrade_internal_urls(value)
+            if new != value:
+                setattr(self, name, new)
+                if name in configured:
+                    upgraded.append(name)
+        self._upgraded_urls = tuple(upgraded)
+        return self
+
+    @property
+    def upgraded_internal_urls(self) -> tuple[str, ...]:
+        """Names of the configured URL settings (not defaults) that
+        :meth:`_internal_urls_use_https` switched to https; the service logs them."""
+        return self._upgraded_urls
+
+    @property
+    def tls_server_enabled(self) -> bool:
+        """Whether the HTTP server serves HTTPS (certificate and key are set)."""
+        return self.tls_cert_file is not None and self.tls_key_file is not None
 
     @field_validator("log_level", mode="before")
     @classmethod

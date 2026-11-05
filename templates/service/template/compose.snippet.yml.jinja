@@ -20,7 +20,11 @@ services:
     command: ["python", "-m", "{{ package_name }}.adapters.db.migrate"]
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      SSL_CERT_FILE: /etc/mowdeck/tls/ca-bundle.pem
+      MOWDECK_TLS_CA_FILE: /etc/mowdeck/tls/ca.crt
       MOWDECK_DATABASE_URL: postgresql://{{ package_name }}:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/{{ package_name }}
     depends_on:
       postgres:
@@ -40,10 +44,19 @@ services:
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
+    volumes:
+      - tls:/etc/mowdeck/tls:ro
     environment:
+      # Internal TLS (docs/ops/internal-tls.md): HTTPS with the certificate tls-init issues for
+      # this service (add --cert={{ service_name }}:10001:10001 to tls-init and a servers transport to
+      # traefik/internal-tls.yml); NATS, PostgreSQL and HTTP clients verify the stack's CA.
+      SSL_CERT_FILE: /etc/mowdeck/tls/ca-bundle.pem
+      MOWDECK_TLS_CA_FILE: /etc/mowdeck/tls/ca.crt
+      MOWDECK_TLS_CERT_FILE: /etc/mowdeck/tls/{{ service_name }}/tls.crt
+      MOWDECK_TLS_KEY_FILE: /etc/mowdeck/tls/{{ service_name }}/tls.key
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: {{ service_name }}
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }}:?set NATS_PASSWORD_{{ service_name | upper | replace('-', '_') }} in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
 {%- if needs_db %}
@@ -54,10 +67,12 @@ services:
       - traefik.http.routers.{{ service_name }}.rule=PathPrefix(`/api/v1/{{ service_name }}`)
       - traefik.http.routers.{{ service_name }}.entrypoints=web
       - traefik.http.services.{{ service_name }}.loadbalancer.server.port={{ http_port }}
+      - traefik.http.services.{{ service_name }}.loadbalancer.server.scheme=https
+      - traefik.http.services.{{ service_name }}.loadbalancer.serverstransport={{ service_name }}@file
     # Every 2 s while starting, then every 30 s: each check starts a Python interpreter, which on
     # a small host costs real CPU (docs/ops/load-testing.md).
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{{ http_port }}/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:{{ http_port }}/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -74,8 +74,50 @@ app.kubernetes.io/component: {{ .component }}
 
 {{/* In-cluster URL of a MowDeck service; call with (dict "ctx" $ "component" "identity"). */}}
 {{- define "mowdeck.serviceUrl" -}}
-{{- printf "http://%s:8000" (include "mowdeck.serviceName" .) }}
+{{- printf "%s://%s:8000" (include "mowdeck.tls.scheme" .ctx) (include "mowdeck.serviceName" .) }}
 {{- end }}
+
+{{/* Internal TLS (docs/ops/internal-tls.md) ---------------------------------------------- */}}
+
+{{/* "true" when internal TLS is on, else empty. */}}
+{{- define "mowdeck.tls.enabled" -}}
+{{- if .Values.internalTls.enabled }}true{{ end }}
+{{- end }}
+
+{{/* https with internal TLS, else http. */}}
+{{- define "mowdeck.tls.scheme" -}}
+{{- if .Values.internalTls.enabled }}https{{ else }}http{{ end }}
+{{- end }}
+
+{{/* "true" when cert-manager issues the certificates: provider certManager, or auto and the
+cluster serves cert-manager.io/v1. */}}
+{{- define "mowdeck.tls.certManager" -}}
+{{- $p := .Values.internalTls.provider | default "auto" }}
+{{- if not (has $p (list "auto" "certManager" "chart")) }}
+{{- fail "internalTls.provider must be auto, certManager or chart" }}
+{{- end }}
+{{- if or (eq $p "certManager") (and (eq $p "auto") (.Capabilities.APIVersions.Has "cert-manager.io/v1")) }}true{{ end }}
+{{- end }}
+
+{{/* "true" when the Ingress controller is Traefik with its CRDs: every backend then gets a
+ServersTransport that checks its certificate. */}}
+{{- define "mowdeck.tls.traefik" -}}
+{{- if and .Values.internalTls.enabled (.Capabilities.APIVersions.Has "traefik.io/v1alpha1/ServersTransport") }}true{{ end }}
+{{- end }}
+
+{{/* Secret with tls.crt, tls.key and ca.crt of a component; call with (dict "ctx" $ "component" "identity"). */}}
+{{- define "mowdeck.tls.secretName" -}}
+{{- printf "%s-tls" (include "mowdeck.serviceName" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/* Port of the web app: 8443 (HTTPS) with internal TLS, else 8080. */}}
+{{- define "mowdeck.webPort" -}}
+{{- if .Values.internalTls.enabled }}8443{{ else }}8080{{ end }}
+{{- end }}
+
+{{/* Where a pod mounts its certificate Secret, and the trust bundle of its HTTP clients. */}}
+{{- define "mowdeck.tls.dir" -}}/etc/mowdeck/tls{{- end }}
+{{- define "mowdeck.tls.bundle" -}}/etc/mowdeck/trust/ca-bundle.pem{{- end }}
 
 {{/* Secret with the application secrets (chart-created or secrets.existingSecret). */}}
 {{- define "mowdeck.secretName" -}}
@@ -87,10 +129,20 @@ app.kubernetes.io/component: {{ .component }}
 {{- if .Values.natsUrl }}
 {{- .Values.natsUrl }}
 {{- else if .Values.nats.enabled }}
-{{- printf "nats://%s:4222" (default (printf "%s-nats" .Release.Name) .Values.nats.fullnameOverride) }}
+{{- printf "%s://%s:4222" (ternary "tls" "nats" (eq (include "mowdeck.tls.enabled" .) "true")) (include "mowdeck.natsName" .) }}
 {{- else }}
 {{- fail "nats.enabled is false: set natsUrl to the URL of your NATS cluster (JetStream enabled)" }}
 {{- end }}
+{{- end }}
+
+{{/* Name of the in-chart NATS (its Service and the prefix of its certificate Secret). */}}
+{{- define "mowdeck.natsName" -}}
+{{- default (printf "%s-nats" .Release.Name) .Values.nats.fullnameOverride }}
+{{- end }}
+
+{{/* Name of the in-chart OpenFGA (its Service and the prefix of its certificate Secret). */}}
+{{- define "mowdeck.openfgaName" -}}
+{{- default (printf "%s-openfga" .Release.Name) .Values.openfga.fullnameOverride }}
 {{- end }}
 
 {{/* NATS user of a component (ADR 0074): the component name when secrets has its
@@ -116,7 +168,7 @@ NATS_PASSWORD_<COMPONENT>, else empty (the web app, MediaMTX, the Matter server)
 {{- if .Values.config.OPENFGA_API_URL }}
 {{- .Values.config.OPENFGA_API_URL }}
 {{- else if .Values.openfga.enabled }}
-{{- printf "http://%s:8080" (default (printf "%s-openfga" .Release.Name) .Values.openfga.fullnameOverride) }}
+{{- printf "%s://%s:8080" (include "mowdeck.tls.scheme" .) (include "mowdeck.openfgaName" .) }}
 {{- else }}
 {{- fail "openfga.enabled is false: set config.OPENFGA_API_URL to the URL of your OpenFGA" }}
 {{- end }}
@@ -171,6 +223,9 @@ NATS_PASSWORD_<COMPONENT>, else empty (the web app, MediaMTX, the Matter server)
 {{- $db := index .ctx.Values.postgresql.databases .db }}
 {{- $url := printf "postgresql://%s:%s@%s:%s/%s" (urlquery $db.user) (urlquery (include "mowdeck.pg.password" .)) (include "mowdeck.pg.host" .ctx) (include "mowdeck.pg.port" .ctx) $db.name }}
 {{- with .ctx.Values.postgresql.external.serviceUrlParams }}{{ if $.ctx.Values.postgresql.external.enabled }}{{ $url = printf "%s?%s" $url . }}{{ end }}{{ end }}
+{{- /* An external PostgreSQL is not signed by the internal CA: without parameters of its own the
+URL keeps asyncpg's default (ssl=prefer) instead of the internal TLS verification. */}}
+{{- if and .ctx.Values.postgresql.external.enabled .ctx.Values.internalTls.enabled (not .ctx.Values.postgresql.external.serviceUrlParams) }}{{ $url = printf "%s?ssl=prefer" $url }}{{ end }}
 {{- $url }}
 {{- end }}
 

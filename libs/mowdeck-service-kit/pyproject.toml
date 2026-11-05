@@ -37,6 +37,8 @@ db = [
   "sqlalchemy[asyncio]>=2.1.4",
   "asyncpg>=0.32.0",
 ]
+# The certificate job of the internal hops (python -m mowdeck_service_kit.certs, tls-init).
+certs = ["cryptography>=50.0.2"]
 testing = ["httpx>=0.28.1"]
 
 [tool.uv.sources]

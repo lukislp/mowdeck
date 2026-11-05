@@ -20,7 +20,7 @@ proprietary SDK, so MowDeck publishes none: the operator builds it (integrations
 and names it in agoraBridge.image.repository; the chart refuses to render without one. */ -}}
 {{- $mediamtx := include "mowdeck.serviceName" (dict "ctx" . "component" "mediamtx") }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (dict
-  "MOWDECK_RELAY_MEDIAMTX_API_URL" (printf "http://%s:9997" $mediamtx)
+  "MOWDECK_RELAY_MEDIAMTX_API_URL" (printf "%s://%s:9997" (include "mowdeck.tls.scheme" .) $mediamtx)
   "MOWDECK_RELAY_MEDIAMTX_RTSP_URL" (printf "rtsp://%s:8554" $mediamtx)
   "MOWDECK_RELAY_AGORA_BRIDGE_URL" "tcp://127.0.0.1:7700") }}
 {{- $sidecars := list }}

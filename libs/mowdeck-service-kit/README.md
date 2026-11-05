@@ -136,6 +136,12 @@ All settings come from environment variables with the prefix `MOWDECK_`. Any set
 | `MOWDECK_SOURCE_REF` | unset | Git ref of the build (`v<version>` of a release, a commit of a test build); unset: `v<version>` for a semantic version |
 | `MOWDECK_DEMO_MODE` | `false` | Public demo ([ADR 0068](../../docs/adr/0068-public-demo-mode.md)): `X-MowDeck-Demo: 1` on every response and the service's demo policy refuses its unsafe actions (403 `demo-mode`). Never on an installation with real mowers |
 | `MOWDECK_DEMO_SEED_TOKEN` | unset | Secret of the demo seed job: with it in `X-MowDeck-Demo-Seed` a request passes the demo policy and may call the seed endpoints (only in demo mode) |
+| `MOWDECK_TLS_CERT_FILE`, `MOWDECK_TLS_KEY_FILE` | unset | Internal TLS ([docs/ops/internal-tls.md](../../docs/ops/internal-tls.md)): certificate and key of the HTTPS listener (`run()` passes them to uvicorn); both or neither; unset: plain HTTP |
+| `MOWDECK_TLS_CA_FILE` | unset | The installation's CA: NATS (`tls` context of `JetStreamBus`) and PostgreSQL (`create_engine`, unless the URL sets `ssl`/`sslmode`) are encrypted and verified against it, and `*_url`/`*_urls` settings naming a MowDeck service or OpenFGA with `http://` are used as `https://` (logged when configured). HTTP clients trust it through `SSL_CERT_FILE` |
+
+### Internal TLS
+
+`python -m mowdeck_service_kit.certs` (extra `certs`, the Compose job `tls-init`) creates the private CA and one certificate per server and renews them; `mowdeck_service_kit.tls` holds the client context (`client_context(ca_file)`: TLS 1.2+, host name checked) and the URL upgrade of older configurations.
 
 ### Source code header (AGPL-3.0 section 13)
 

@@ -55,6 +55,12 @@
 #                                includeSubDomains" (no preload) on every page served over
 #                                HTTPS; false: never. Plain HTTP never gets the header.
 #
+#   MOWDECK_WEB_TLS_CERT_FILE    internal TLS (docs/ops/internal-tls.md): certificate and key of
+#   MOWDECK_WEB_TLS_KEY_FILE     the app's HTTPS listener on 8443, which the gateway uses; plain
+#                                HTTP on 8080 then listens on the container's loopback only (the
+#                                health check). Both empty: plain HTTP on 8080 (as before).
+#                                Rendered into /tmp/mowdeck/listen.conf.
+#
 # The build and its source code (AGPL-3.0 section 13, LICENSING.md), baked into the image by the
 # release build and overridable here; the app shows them on the sign-in page and under Settings:
 #   MOWDECK_VERSION              version of the build (empty: a development build)
@@ -236,6 +242,29 @@ if [ "$hsts_enabled" = true ]; then
   echo "mowdeck: Strict-Transport-Security (one year) on pages served over HTTPS"
 else
   echo "mowdeck: Strict-Transport-Security off (MOWDECK_WEB_HSTS=false)"
+fi
+
+# Internal TLS: HTTPS for the gateway when a certificate and its key are given. Only plain paths
+# reach the nginx configuration; anything else keeps plain HTTP and says why.
+tls_cert="${MOWDECK_WEB_TLS_CERT_FILE:-}"
+tls_key="${MOWDECK_WEB_TLS_KEY_FILE:-}"
+plain_path() { printf '%s' "$1" | grep -Eq '^/[A-Za-z0-9._/-]+$'; }
+if [ -n "$tls_cert" ] && [ -n "$tls_key" ] && plain_path "$tls_cert" && plain_path "$tls_key"; then
+  {
+    echo "# Internal TLS: HTTPS for the gateway, plain HTTP on the loopback (health check)."
+    echo "listen 8443 ssl;"
+    echo "listen 127.0.0.1:8080;"
+    echo "ssl_certificate $tls_cert;"
+    echo "ssl_certificate_key $tls_key;"
+    echo "ssl_protocols TLSv1.2 TLSv1.3;"
+    echo "ssl_session_cache shared:mowdeck_tls:1m;"
+  } > "$out/listen.conf"
+  echo "mowdeck: HTTPS on 8443 (internal TLS), plain HTTP on 127.0.0.1:8080 only"
+else
+  if [ -n "$tls_cert$tls_key" ]; then
+    echo "mowdeck: MOWDECK_WEB_TLS_CERT_FILE and MOWDECK_WEB_TLS_KEY_FILE must both be absolute paths; serving plain HTTP on 8080" >&2
+  fi
+  echo "listen 8080;" > "$out/listen.conf"
 fi
 
 # The notes of "Was ist neu": only a release build writes them into the image.

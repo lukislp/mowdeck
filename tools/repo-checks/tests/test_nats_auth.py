@@ -181,7 +181,10 @@ def test_compose_gives_every_service_its_own_user(gen: ModuleType, repo_root: Pa
     assert sorted(users.values()) == sorted(gen.USERS)
 
     nats = services["nats"]
-    assert nats["command"][:2] == ["-c", "/etc/nats/mowdeck/auth.conf"]
+    # server.conf (internal TLS, docs/ops/internal-tls.md) includes the generated auth.conf.
+    assert nats["command"][:2] == ["-c", "/etc/nats/mowdeck/server.conf"]
+    server = (repo_root / "infra" / "compose" / "nats" / "server.conf").read_text("utf-8")
+    assert "\ninclude auth.conf\n" in server
     assert "./nats:/etc/nats/mowdeck:ro" in nats["volumes"]
     assert set(nats["environment"]) == _password_names(repo_root)
     assert _password_names(repo_root) == {gen.password_variable(u) for u in gen.USERS}

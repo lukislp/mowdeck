@@ -20,6 +20,7 @@ service's inbox when the service subscribes to it.
 
 import asyncio
 import secrets
+import ssl
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -61,10 +62,24 @@ from mowdeck_service_kit.bus.base import (
 )
 from mowdeck_service_kit.logging import get_logger
 from mowdeck_service_kit.settings import NATS_INBOX, ServiceSettings
+from mowdeck_service_kit.tls import client_context
 
 _log = get_logger(__name__)
 
 _STREAM_POLL_SECONDS = 1.0
+
+
+def nats_tls_context(settings: ServiceSettings) -> ssl.SSLContext | None:
+    """The client TLS context for NATS: verified against ``tls_ca_file`` when it is set.
+
+    A ``tls://`` server URL without a CA file uses the system's trust store (an external NATS
+    with a public certificate); ``nats://`` without a CA file stays unencrypted (tests).
+    """
+    if settings.tls_ca_file is not None:
+        return client_context(settings.tls_ca_file)
+    if any(url.lower().startswith("tls://") for url in settings.nats_servers):
+        return ssl.create_default_context()
+    return None
 
 
 def stream_config(spec: StreamSpec) -> StreamConfig:
@@ -155,6 +170,7 @@ class JetStreamBus:
         inbox_prefix: str | None = None,
         manage_streams: bool = True,
         stream_wait_seconds: float = 120.0,
+        tls: ssl.SSLContext | None = None,
     ) -> None:
         if (user is None) != (password is None):
             msg = "a NATS user needs a password and a password needs a user"
@@ -166,6 +182,7 @@ class JetStreamBus:
         self.inbox_prefix = inbox_prefix or (f"{NATS_INBOX}.{user}" if user else NATS_INBOX)
         self.manage_streams = manage_streams
         self.stream_wait_seconds = stream_wait_seconds
+        self.tls = tls
         self.streams = tuple(streams)
         self.max_deliver = max_deliver
         self.ack_wait_seconds = ack_wait_seconds
@@ -190,6 +207,7 @@ class JetStreamBus:
             "inbox_prefix": settings.nats_inbox_prefix,
             "manage_streams": settings.nats_streams_managed,
             "stream_wait_seconds": settings.nats_stream_wait_seconds,
+            "tls": nats_tls_context(settings),
         }
         return cls(settings.nats_servers, name=settings.service_name, **{**defaults, **options})
 
@@ -217,9 +235,11 @@ class JetStreamBus:
         async def on_closed() -> None:
             _log.info("nats connection closed")
 
-        credentials: dict[str, str] = {}
+        credentials: dict[str, Any] = {}
         if self.user is not None and self._password is not None:
             credentials = {"user": self.user, "password": self._password}
+        if self.tls is not None:
+            credentials["tls"] = self.tls
         self._nc = await nats.connect(
             servers=self.servers,
             name=self.name,

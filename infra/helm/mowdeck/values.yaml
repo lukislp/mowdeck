@@ -450,7 +450,8 @@ postgresql:
     port: 5432
     # -- Query string appended to the service URLs, e.g. "ssl=require" (asyncpg).
     serviceUrlParams: ""
-  # -- Query string of the OpenFGA datastore URI (pgx), e.g. sslmode=require.
+  # -- Query string of the OpenFGA datastore URI (pgx), e.g. sslmode=require. With internal TLS
+  # and the in-cluster PostgreSQL the chart uses sslmode=verify-full with the internal CA instead.
   openfgaUriParams: sslmode=prefer
   cloudnativepg:
     # -- Name of the Cluster resource (default <fullname>-pg); services connect to <name>-rw.
@@ -494,6 +495,25 @@ postgresql:
     planner: {name: planner, user: planner}
     vision: {name: vision, user: vision}
     openfga: {name: openfga, user: openfga}
+
+# --- Internal TLS (docs/ops/internal-tls.md) ---
+# Every hop inside the release is encrypted with certificates of a private CA and every client
+# checks the server's certificate and name: the services (HTTPS on 8000, the web app on 8443),
+# NATS, OpenFGA, the in-cluster PostgreSQL (CloudNativePG serves the CA's certificate and refuses
+# connections without TLS), MediaMTX's API and WHEP server, and the Ingress controller to the
+# backends (Traefik: one ServersTransport per backend, rendered when its CRDs are installed).
+# One Secret <service>-tls per server (tls.crt, tls.key, ca.crt).
+internalTls:
+  # -- On by default. false is meant for debugging only; also set nats.config.nats.tls.enabled,
+  # nats.config.monitor.tls.enabled, openfga.http.tls.enabled and openfga.grpc.tls.enabled to
+  # false then.
+  enabled: true
+  # -- Who issues the certificates. auto: cert-manager when the cluster serves cert-manager.io/v1,
+  # else the chart; certManager: a self-signed CA Issuer of the release and one Certificate per
+  # server (renewed by cert-manager); chart: a CA the chart generates on the first install and
+  # keeps in the Secret <fullname>-internal-ca, certificates renewed by `helm upgrade` within a
+  # year of their end (both valid for 5 years, the CA for 20).
+  provider: auto
 
 # --- Ingress ---
 # Path routes identical to the Traefik rules of the Compose stack: /api/v1/<service> per service,
@@ -942,7 +962,7 @@ metrics:
 natsUrl: ""
 nats:
   enabled: true
-  # The services connect to nats://<fullnameOverride>:4222.
+  # The services connect to tls://<fullnameOverride>:4222 (nats:// without internal TLS).
   fullnameOverride: mowdeck-nats
   container:
     image:
@@ -981,10 +1001,26 @@ nats:
     # relative to the chart's /etc/nats-config/nats.conf.
     merge:
       $include: ../nats-mowdeck/auth.conf
+    # Internal TLS: the client port requires TLS with the certificate the chart issues in the
+    # Secret <fullnameOverride>-tls (keep the name in step with fullnameOverride); monitoring
+    # and the probes use HTTPS with the same certificate.
+    nats:
+      tls:
+        enabled: true
+        secretName: mowdeck-nats-tls
+        merge:
+          min_version: "1.2"
     cluster:
       # -- A three node cluster in the cloud (values-cloud.yaml); JetStream needs at least 2.
       enabled: false
       replicas: 3
+      # Internal TLS between the NATS pods (routes): the same certificate, which names the pods
+      # of the headless Service; each side checks the other against the internal CA.
+      tls:
+        enabled: true
+        secretName: mowdeck-nats-tls
+        merge:
+          ca_file: /etc/nats-certs/cluster/ca.crt
     jetstream:
       enabled: true
       fileStore:
@@ -999,6 +1035,8 @@ nats:
           storageClassName:
     monitor:
       enabled: true
+      tls:
+        enabled: true
   reloader:
     enabled: false
   natsBox:
@@ -1009,8 +1047,32 @@ nats:
 # the Secret openfgaSecret.name. Set enabled: false and config.OPENFGA_API_URL for an external one.
 openfga:
   enabled: true
-  # Services reach it at http://<fullnameOverride>:8080.
+  # Services reach it at https://<fullnameOverride>:8080 (http:// without internal TLS).
   fullnameOverride: mowdeck-openfga
+  # Internal TLS: both APIs with the certificate the chart issues in the Secret
+  # <fullnameOverride>-tls (keep the name in step with fullnameOverride); the health probe checks
+  # it with grpc_health_probe -tls. The migration init container verifies PostgreSQL with ca.crt.
+  http:
+    tls:
+      enabled: true
+      cert: /etc/mowdeck/tls/tls.crt
+      key: /etc/mowdeck/tls/tls.key
+  grpc:
+    tls:
+      enabled: true
+      cert: /etc/mowdeck/tls/tls.crt
+      key: /etc/mowdeck/tls/tls.key
+      ca: /etc/mowdeck/tls/ca.crt
+  extraVolumes:
+    - name: internal-tls
+      secret:
+        secretName: mowdeck-openfga-tls
+        defaultMode: 0440
+  extraVolumeMounts:
+    - {name: internal-tls, mountPath: /etc/mowdeck/tls, readOnly: true}
+  migrate:
+    extraVolumeMounts:
+      - {name: internal-tls, mountPath: /etc/mowdeck/tls, readOnly: true}
   replicaCount: 1
   image:
     # Same image as OPENFGA_IMAGE in infra/compose/.env.example.
@@ -1037,6 +1099,8 @@ openfga:
     runAsNonRoot: true
     runAsUser: 65532
     runAsGroup: 65532
+    # The certificate Secret (mode 0440) is readable through this group.
+    fsGroup: 65532
     seccompProfile:
       type: RuntimeDefault
   securityContext:

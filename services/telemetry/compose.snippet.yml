@@ -42,17 +42,17 @@ services:
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: telemetry
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_TELEMETRY:?set NATS_PASSWORD_TELEMETRY in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://telemetry:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/telemetry
       # The busiest pool of the stack: most of a mower page (docs/ops/compose.md, budget).
       MOWDECK_DATABASE_POOL_SIZE: "10"
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_TELEMETRY_HEARTBEAT_HISTORY_SECONDS: ${TELEMETRY_HEARTBEAT_HISTORY_SECONDS:-300}
       MOWDECK_TELEMETRY_RETENTION_HISTORY_DAYS: ${TELEMETRY_RETENTION_HISTORY_DAYS:-30}
       MOWDECK_TELEMETRY_RETENTION_POSITIONS_DAYS: ${TELEMETRY_RETENTION_POSITIONS_DAYS:-90}
@@ -63,7 +63,7 @@ services:
       - traefik.http.routers.telemetry.entrypoints=web
       - traefik.http.services.telemetry.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3

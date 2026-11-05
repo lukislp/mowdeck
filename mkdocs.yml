@@ -147,6 +147,7 @@ nav:
   - Operations:
       - ops/compose.md
       - ops/helm.md
+      - ops/internal-tls.md
       - ops/ble-bridge-esphome.md
       - ops/release.md
       - ops/vendor-lib-updates.md

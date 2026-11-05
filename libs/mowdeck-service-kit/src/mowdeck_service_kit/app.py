@@ -241,12 +241,18 @@ def run(
     """
     import uvicorn
 
+    if settings.upgraded_internal_urls:
+        _log.warning(
+            "internal http:// URLs used as https://; update them in the configuration",
+            settings=list(settings.upgraded_internal_urls),
+        )
     options: dict[str, Any] = {
         "host": settings.http_host,
         "port": settings.http_port,
         "log_config": None,
         "proxy_headers": True,
         "timeout_graceful_shutdown": int(settings.shutdown_grace_seconds) or None,
+        **server_tls_options(settings),
         **uvicorn_options,
     }
     if server_class is None:
@@ -256,6 +262,17 @@ def run(
     server.run()
     if not server.started:
         raise SystemExit(STARTUP_FAILURE_EXIT_CODE)
+
+
+def server_tls_options(settings: ServiceSettings) -> dict[str, Any]:
+    """The ``uvicorn.Config`` options for HTTPS, empty when no certificate is configured.
+
+    With a certificate the service listens with TLS only (TLS 1.2 or newer, Python's defaults);
+    Traefik, the other services and the container's health check connect over HTTPS.
+    """
+    if not settings.tls_server_enabled:
+        return {}
+    return {"ssl_certfile": settings.tls_cert_file, "ssl_keyfile": settings.tls_key_file}
 
 
 STARTUP_FAILURE_EXIT_CODE = 3

@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Internal TLS (docs/ops/internal-tls.md): Traefik's dynamic configuration (file provider). Every
+# service behind Traefik serves HTTPS with a certificate of the stack's private CA (tls-init).
+# Traefik reaches the containers by IP address, so each backend has a servers transport that
+# checks the certificate against the CA and the service's own name; a service's Docker labels
+# pick it with loadbalancer.serverstransport=<name>@file. Connections are kept alive and reused.
+
+http:
+  serversTransports:
+    identity:
+      serverName: identity
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    fleet:
+      serverName: fleet
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    device-gateway:
+      serverName: device-gateway
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    telemetry:
+      serverName: telemetry
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    realtime:
+      serverName: realtime
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    notifications:
+      serverName: notifications
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    scheduler:
+      serverName: scheduler
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    entitlements:
+      serverName: entitlements
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    planner:
+      serverName: planner
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    vision:
+      serverName: vision
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    assistant:
+      serverName: assistant
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    billing:
+      serverName: billing
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    web:
+      serverName: web
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    mediamtx:
+      serverName: mediamtx
+      rootCAs: [/etc/mowdeck/tls/ca.crt]
+    matter-server:
+      serverName: matter-server
+      rootCAs: [/etc/mowdeck/tls/ca.crt]

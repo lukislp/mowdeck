@@ -54,6 +54,13 @@ spec:
     "monitoring" (dict "enablePodMonitor" $pg.enablePodMonitor)
     "postgresql" (dict "parameters" (dict "max_connections" (toString (int $pg.maxConnections)))) }}
   {{- with $pg.storage.storageClass }}{{ $_ := set $spec.storage "storageClass" . }}{{ end }}
+  {{- if .Values.internalTls.enabled }}
+  {{- /* Internal TLS: the server certificate of templates/internal-tls.yaml (names -rw, -ro,
+  -r), so clients verify it against the internal CA; connections without TLS are refused. */}}
+  {{- $tlsSecret := printf "%s-postgres-tls" (include "mowdeck.fullname" .) }}
+  {{- $_ := set $spec "certificates" (dict "serverTLSSecret" $tlsSecret "serverCASecret" $tlsSecret) }}
+  {{- $_ := set $spec.postgresql "pg_hba" (list "hostnossl all all all reject") }}
+  {{- end }}
   {{- with $pg.imageName }}{{ $_ := set $spec "imageName" . }}{{ end }}
   {{- $managed := list }}
   {{- range $roles }}

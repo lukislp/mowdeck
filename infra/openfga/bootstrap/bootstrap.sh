@@ -26,6 +26,18 @@ trap 'rm -rf "$work"' EXIT
 
 log() { echo "authz-bootstrap: $*"; }
 
+# Internal TLS (MOWDECK_TLS_CA_FILE set, docs/ops/internal-tls.md): the stack's OpenFGA serves
+# HTTPS only, while an .env of an older release still names http://openfga:<port>.
+if [ -n "${MOWDECK_TLS_CA_FILE:-}" ]; then
+  case "$FGA_API_URL" in
+    http://openfga:* | http://openfga/* | http://openfga)
+      FGA_API_URL="https://${FGA_API_URL#http://}"
+      export FGA_API_URL
+      log "using $FGA_API_URL (internal TLS); update OPENFGA_API_URL in .env"
+      ;;
+  esac
+fi
+
 store_id="$(fga store list --name "$store_name" \
   | jq -r '.stores // [] | sort_by(.created_at) | .[0].id // empty')"
 if [ -z "$store_id" ]; then

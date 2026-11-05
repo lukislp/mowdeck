@@ -169,16 +169,19 @@ async function sample(list) {
       ? capture('docker', ['exec', byService.nats, 'wget', '-qO-', 'http://127.0.0.1:8222/varz'])
       : '',
     // Through the NATS container's wget: a Python process inside Realtime would cost the
-    // measured service CPU time.
+    // measured service CPU time. Internal TLS: wget checks Realtime's certificate against the
+    // stack's CA (docs/ops/internal-tls.md).
     byService.realtime && byService.nats
       ? capture('docker', [
           'exec',
+          '-e',
+          'SSL_CERT_FILE=/etc/mowdeck/tls/ca.crt',
           byService.nats,
           'wget',
           '-qO-',
           '-T',
           '5',
-          'http://realtime:8000/metrics',
+          'https://realtime:8000/metrics',
         ])
       : '',
   ]);

@@ -43,15 +43,15 @@ services:
       MOWDECK_ENVIRONMENT: ${MOWDECK_ENVIRONMENT:-dev}
       MOWDECK_LOG_LEVEL: ${MOWDECK_LOG_LEVEL:-INFO}
       MOWDECK_LOG_FORMAT: json
-      MOWDECK_NATS_URL: nats://nats:4222
+      MOWDECK_NATS_URL: tls://nats:4222
       MOWDECK_NATS_USER: vision
       MOWDECK_NATS_PASSWORD: ${NATS_PASSWORD_VISION:?set NATS_PASSWORD_VISION in infra/compose/.env (./nats-passwords.sh .env, docs/ops/compose.md)}
       MOWDECK_DATABASE_URL: postgresql://vision:${SERVICE_DB_PASSWORD:?set SERVICE_DB_PASSWORD}@postgres:5432/vision
-      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-http://openfga:8080}
+      MOWDECK_OPENFGA_API_URL: ${OPENFGA_API_URL:-https://openfga:8080}
       MOWDECK_OPENFGA_API_TOKEN: ${OPENFGA_API_TOKEN:-${OPENFGA_AUTHN_PRESHARED_KEYS:?set OPENFGA_AUTHN_PRESHARED_KEYS}}
       MOWDECK_OPENFGA_STORE_NAME: ${OPENFGA_STORE_NAME:-mowdeck}
       # Access tokens are verified locally against Identity's public keys.
-      MOWDECK_AUTH_JWKS_URL: http://identity:8000/.well-known/jwks.json
+      MOWDECK_AUTH_JWKS_URL: https://identity:8000/.well-known/jwks.json
       MOWDECK_ENTITLEMENTS_BILLING_ENABLED: ${ENTITLEMENTS_BILLING_ENABLED:-false}
       MOWDECK_VISION_DEFAULT_ENABLED: ${VISION_DEFAULT_ENABLED:-false}
       MOWDECK_VISION_DEFAULT_MODEL: ${VISION_DEFAULT_MODEL:-anthropic/claude-sonnet-5-5}
@@ -78,7 +78,7 @@ services:
       - traefik.http.routers.vision.entrypoints=web
       - traefik.http.services.vision.loadbalancer.server.port=8000
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/startupz', timeout=8)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('https://127.0.0.1:8000/startupz', timeout=8)"]
       interval: 30s
       timeout: 10s
       retries: 3

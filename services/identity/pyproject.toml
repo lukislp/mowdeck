@@ -18,7 +18,7 @@ dependencies = [
   "mowdeck-auth",
   "mowdeck-authz[fastapi]",
   "mowdeck-contracts",
-  "mowdeck-service-kit[db]",
+  "mowdeck-service-kit[certs,db]",
   "alembic>=1.16.0",
   "argon2-cffi>=25.1.0",
   "cryptography>=44.0.0",

@@ -6,6 +6,7 @@
  * plus the admin API for the web app's pairing codes. Started with `node src/main.ts` (Node 24
  * runs the TypeScript directly).
  */
+import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -67,6 +68,9 @@ async function main(): Promise<void> {
     },
     config.httpHost,
     config.httpPort,
+    config.tls
+      ? { cert: readFileSync(config.tls.certFile), key: readFileSync(config.tls.keyFile) }
+      : null,
   );
   log('info', 'matter.started', {
     version: config.version,

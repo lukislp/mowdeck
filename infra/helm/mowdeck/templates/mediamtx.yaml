@@ -13,7 +13,12 @@ identical copy of infra/compose/mediamtx/mediamtx.yml (the image's /mediamtx rea
 Media leaves on one ICE port for UDP and TCP (config.RELAY_ICE_PORT). ICE candidates carry the
 listener port, so the container listens on the port it is published on: a hostPort on the node
 (services.cameraRelay.mediamtx.hostPort, optional hostIP), announced under the addresses of
-config.RELAY_ICE_HOSTS. The hostPort allows one pod per node, hence one replica and Recreate. */ -}}
+config.RELAY_ICE_HOSTS. The hostPort allows one pod per node, hence one replica and Recreate.
+
+Internal TLS (docs/ops/internal-tls.md): the API and the WHEP server serve HTTPS with the Secret
+<service>-tls, the auth callback checks camera-relay's certificate (SSL_CERT_FILE). RTSP between
+camera-relay and MediaMTX stays unencrypted: ffmpeg's RTSP client cannot check an RTSPS
+certificate. */ -}}
 {{- if .Values.services.cameraRelay.enabled }}
 {{- $m := .Values.services.cameraRelay.mediamtx }}
 {{- $c := .Values.config }}
@@ -24,6 +29,8 @@ config.RELAY_ICE_HOSTS. The hostPort allows one pod per node, hence one replica 
 {{- end }}
 {{- $config := .Files.Get "files/mediamtx.yml" }}
 {{- $authUrl := printf "%s/internal/mediamtx/auth" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "camera-relay")) }}
+{{- $tls := .Values.internalTls.enabled }}
+{{- $tlsDir := include "mowdeck.tls.dir" . }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -41,6 +48,12 @@ metadata:
   name: {{ $name }}
   labels:
     {{- include "mowdeck.componentLabels" (dict "ctx" . "component" "mediamtx") | nindent 4 }}
+  {{- if include "mowdeck.tls.traefik" . }}
+  annotations:
+    # Internal TLS: Traefik reaches the WHEP server over HTTPS and checks its certificate.
+    traefik.ingress.kubernetes.io/service.serversscheme: https
+    traefik.ingress.kubernetes.io/service.serverstransport: {{ printf "%s-%s@kubernetescrd" .Release.Namespace $name }}
+  {{- end }}
 spec:
   type: ClusterIP
   selector:
@@ -112,6 +125,23 @@ spec:
               value: {{ printf ":%d" $icePort | quote }}
             - name: MTX_WEBRTCLOCALTCPADDRESS
               value: {{ printf ":%d" $icePort | quote }}
+            {{- if $tls }}
+            - name: MTX_APIENCRYPTION
+              value: "yes"
+            - name: MTX_APISERVERCERT
+              value: {{ printf "%s/tls.crt" $tlsDir | quote }}
+            - name: MTX_APISERVERKEY
+              value: {{ printf "%s/tls.key" $tlsDir | quote }}
+            - name: MTX_WEBRTCENCRYPTION
+              value: "yes"
+            - name: MTX_WEBRTCSERVERCERT
+              value: {{ printf "%s/tls.crt" $tlsDir | quote }}
+            - name: MTX_WEBRTCSERVERKEY
+              value: {{ printf "%s/tls.key" $tlsDir | quote }}
+            # Go trusts SSL_CERT_FILE: the auth callback checks camera-relay's certificate.
+            - name: SSL_CERT_FILE
+              value: {{ printf "%s/ca.crt" $tlsDir | quote }}
+            {{- end }}
           ports:
             - name: webrtc
               containerPort: 8889
@@ -148,8 +178,17 @@ spec:
             {{- toYaml $m.resources | nindent 12 }}
           volumeMounts:
             - {name: config, mountPath: /mediamtx.yml, subPath: mediamtx.yml, readOnly: true}
+            {{- if $tls }}
+            - {name: internal-tls, mountPath: {{ $tlsDir }}, readOnly: true}
+            {{- end }}
       volumes:
         - name: config
           configMap:
             name: {{ $name }}
+        {{- if $tls }}
+        - name: internal-tls
+          secret:
+            secretName: {{ include "mowdeck.tls.secretName" (dict "ctx" . "component" "mediamtx") }}
+            defaultMode: 0440
+        {{- end }}
 {{- end }}
