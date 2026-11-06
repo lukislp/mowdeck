@@ -10,7 +10,7 @@
 * ci.yml has no ``paths`` filter (required checks must always report), every scoped job waits
   for ``changes`` and runs unless its output is ``"false"``, and pushes are not scoped;
 * Dependabot's GitHub Actions and ClusterFuzzLite bumps are ``ci`` commits, runtime bumps stay
-  ``fix(deps)``; ``fix(ci)`` releases nothing (``.releaserc.json``) and the release workflow
+  ``fix(deps)``; ``fix(ci)`` releases nothing (``.github/lktec-bot.yml``) and the release workflow
   skips a release whose changes are CI configuration only.
 
 Policy: docs/dev/ci.md, docs/ops/release.md ("CI-only changes").
@@ -19,7 +19,6 @@ Policy: docs/dev/ci.md, docs/ops/release.md ("CI-only changes").
 from __future__ import annotations
 
 import importlib.util
-import json
 import shutil
 import subprocess
 import sys
@@ -71,7 +70,6 @@ STACK = {"docker", "camera_relay_media", "e2e", "e2e_web", "e2e_demo"}
         ".github/dependabot.yml",
         ".github/CODEOWNERS",
         ".github/PULL_REQUEST_TEMPLATE.md",
-        ".releaserc.json",
         "socket.yml",
         "osv-scanner.toml",
         ".clusterfuzzlite/requirements.txt",
@@ -340,19 +338,16 @@ def test_dependabot_ci_bumps_are_ci_commits(repo_root: Path) -> None:
 
 
 def _release_rules(repo_root: Path) -> list[dict[str, Any]]:
-    config = json.loads((repo_root / ".releaserc.json").read_text("utf-8"))
-    analyzer = next(
-        p for p in config["plugins"] if isinstance(p, list) and p[0].endswith("commit-analyzer")
-    )
-    rules: list[dict[str, Any]] = analyzer[1]["releaseRules"]
+    policy = yaml.safe_load((repo_root / ".github" / "lktec-bot.yml").read_text("utf-8"))
+    rules: list[dict[str, Any]] = policy["modules"]["release"]["rules"]
     return rules
 
 
 def test_fix_ci_releases_nothing(repo_root: Path) -> None:
     rules = _release_rules(repo_root)
-    assert {"type": "fix", "scope": "ci", "release": False} in rules
+    assert {"type": "fix", "scope": "ci", "release": "none"} in rules
     for rule in rules:
-        if rule.get("release"):
+        if rule.get("release") != "none":
             # ci and chore keep the default (no release); deps fixes are not caught by a ci rule.
             assert rule.get("type") not in {"ci", "chore"}, rule
             assert rule.get("scope") not in {"ci"}, rule
@@ -360,14 +355,14 @@ def test_fix_ci_releases_nothing(repo_root: Path) -> None:
 
 
 def test_release_skips_ci_only_changes(repo_root: Path) -> None:
-    steps = _workflow(repo_root, "release.yml")["jobs"]["version"]["steps"]
-    run = next(s["run"] for s in steps if s.get("id") == "version")
+    steps = _workflow(repo_root, "release.yml")["jobs"]["guard"]["steps"]
+    run = next(s["run"] for s in steps if s.get("id") == "guard")
     assert "ci_scope.py release-guard" in run
     assert "git describe --tags --abbrev=0 --match 'v*'" in run
     assert '= "ci_only=true"' in run
     # The guard only ever prevents a release; the error paths fall through to the release.
     guard = run.index("ci_scope.py release-guard")
-    assert run.index("release=true") > guard
+    assert run.index("skip=true") > guard
 
 
 # --- the command line against a real repository -----------------------------------------------
