@@ -116,8 +116,8 @@ importers:
         version: 0.17.0
     devDependencies:
       '@inlang/paraglide-js':
-        specifier: 2.29.3
-        version: 2.29.3(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
+        specifier: 3.0.0
+        version: 3.0.0(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
       '@scalar/api-reference':
         specifier: 1.76.4
         version: 1.76.4(@oxc-project/types@0.155.0)(axios@1.20.0)(change-case@5.4.4)(lightningcss@1.33.0)(rolldown@1.2.15)(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(zod@4.6.7)
@@ -669,17 +669,14 @@ packages:
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
 
-  '@inlang/paraglide-js@2.29.3':
-    resolution: {integrity: sha512-aI9gT7zGTpr/l8tZM7OXHrgGruZ6jcu2iIqIw8QXKOGOY4akF3u1cIK6EBsttBm+DHI0FGiwCl8xVUjz7kDZHg==}
+  '@inlang/paraglide-js@3.0.0':
+    resolution: {integrity: sha512-wEs1S9pQMB6cHN4a6svK7nUnSiVuyHP08HRrFIItUw9p5HHJ7KSLRVc2MoCQzUmTVd5aSaOADIkLawOAMQ5m6A==}
     hasBin: true
     peerDependencies:
       eslint: ^9.0.0 || ^10.0.0
-      typescript: '>=5.6'
       vite: '>=5.0.0'
     peerDependenciesMeta:
       eslint:
-        optional: true
-      typescript:
         optional: true
       vite:
         optional: true
@@ -687,8 +684,8 @@ packages:
   '@inlang/recommend-sherlock@0.2.1':
     resolution: {integrity: sha512-ckv8HvHy/iTqaVAEKrr+gnl+p3XFNwe5D2+6w6wJk2ORV2XkcRkKOJ/XsTUJbPSiyi4PI+p+T3bqbmNx/rDUlg==}
 
-  '@inlang/sdk@4.1.0':
-    resolution: {integrity: sha512-pPlaxyemcFMBcwBx31zbSNWwKORSLc2yv93v0uGCh4QgNh/kBRuLlBxbubmME6UJFsj+5nbao2WDZjz3Fzs+FA==}
+  '@inlang/sdk@4.1.1':
+    resolution: {integrity: sha512-eeRnaW6mZPctXd8mwnATWEQgSg0J+EneUsBX2pJEl/7YRfosApCoc5aR4bHKwizLDd0CB3rtfuqteYirG5VSsg==}
     engines: {node: '>=20.0.0'}
 
   '@internationalized/date@3.12.4':
@@ -2599,8 +2596,8 @@ packages:
   known-css-properties@0.37.0:
     resolution: {integrity: sha512-JCDrsP4Z1Sb9JwG0aJ8Eo2r7k4Ou5MwmThS/6lcIe1ICyb7UBJKGRIUUdqc2ASdE/42lgz6zFUnzAIhtXnBVrQ==}
 
-  kysely@0.28.18:
-    resolution: {integrity: sha512-lf6nEHwPlaWbUDw5rycPSkEVGVC7sF7hzY7kH0OryleqK8Ym0zZ+RjI8o+RpHHlxpbKVC1d+UoQSW8GFxGQf4Q==}
+  kysely@0.28.19:
+    resolution: {integrity: sha512-sXoKWuQjtorwxDLiws0ZSPGGne/hs+fGHIII7vXquSBFgHwLXgFIHN9tTv3kNdVkJ5d3xtXC84GjjWMYLqdFWg==}
     engines: {node: '>=20.0.0'}
 
   leaflet@1.9.4:
@@ -3526,6 +3523,9 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  tslib@2.9.1:
+    resolution: {integrity: sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==}
+
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
@@ -4313,17 +4313,17 @@ snapshots:
   '@emnapi/core@1.11.1':
     dependencies:
       '@emnapi/wasi-threads': 1.2.2
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@emnapi/runtime@1.11.1':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@emnapi/wasi-threads@1.2.2':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@eslint-community/eslint-utils@4.10.1(eslint@10.14.0(jiti@2.7.0))':
@@ -4417,32 +4417,33 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@inlang/paraglide-js@2.29.3(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))':
+  '@inlang/paraglide-js@3.0.0(eslint@10.14.0(jiti@2.7.0))(typescript@6.0.3)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))':
     dependencies:
       '@inlang/recommend-sherlock': 0.2.1
-      '@inlang/sdk': 4.1.0
+      '@inlang/sdk': 4.1.1
       commander: 11.1.0
       consola: 3.4.0
       jiti: 2.7.0
       json5: 2.2.3
-      jsonc-parser: 3.3.1
+      magic-string: 0.30.21
       unplugin: 2.3.11
       urlpattern-polyfill: 10.1.0
       valibot: 1.5.0(typescript@6.0.3)
     optionalDependencies:
       eslint: 10.14.0(jiti@2.7.0)
-      typescript: 6.0.3
       vite: 8.3.5(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)
+    transitivePeerDependencies:
+      - typescript
 
   '@inlang/recommend-sherlock@0.2.1':
     dependencies:
       comment-json: 4.6.2
 
-  '@inlang/sdk@4.1.0':
+  '@inlang/sdk@4.1.1':
     dependencies:
       '@lix-js/sdk': 0.20.1
       '@sinclair/typebox': 0.31.30
-      kysely: 0.28.18
+      kysely: 0.28.19
       uuid: 14.0.3
 
   '@internationalized/date@3.12.4':
@@ -5364,7 +5365,7 @@ snapshots:
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
-      tslib: 2.8.1
+      tslib: 2.9.1
     optional: true
 
   '@types/aria-query@5.0.4': {}
@@ -6695,7 +6696,7 @@ snapshots:
 
   known-css-properties@0.37.0: {}
 
-  kysely@0.28.18: {}
+  kysely@0.28.19: {}
 
   leaflet@1.9.4: {}
 
@@ -7841,6 +7842,9 @@ snapshots:
       typescript: 6.0.3
 
   tslib@2.8.1: {}
+
+  tslib@2.9.1:
+    optional: true
 
   type-check@0.4.0:
     dependencies:
