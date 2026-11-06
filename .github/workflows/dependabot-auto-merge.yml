@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+
+
 name: Dependabot auto-merge
 
 # Thin caller of the automerge workflow of lukislp/lktec-bot (a GitHub App: routine Dependabot

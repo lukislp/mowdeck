@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+
+
 # Policy of the lktec-bot GitHub App for this repository. Committed to the default branch: the
 # bot reads it from there, never from a pull request. See docs/modules/automerge.md in
 # lukislp/lktec-bot for every key.
