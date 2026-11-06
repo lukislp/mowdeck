@@ -3,12 +3,13 @@
 
 name: release
 
-# Publishes a MowDeck release (docs/ops/release.md). Every push to main asks semantic-release
-# (.releaserc.json, Conventional Commits) whether the commits since the last tag warrant a release:
-# fix/refactor/perf -> patch, feat -> minor, and while the version line is 0.x a breaking change is
-# a minor too. When they do, the run
-#   * creates the SSH-signed tag v<version> and the GitHub release with the notes semantic-release
-#     writes from the commits (job tag),
+# Publishes a MowDeck release (docs/ops/release.md). Every push to main is looked at by the
+# release module of the lktec-bot GitHub App (policy and rules: .github/lktec-bot.yml, documented
+# in docs/modules/release.md of lukislp/lktec-bot): the Conventional Commits since the last tag
+# decide whether a release is warranted. fix/refactor/perf -> patch, feat -> minor, and while the
+# version line is 0.x a breaking change is a minor too. When they do, the run
+#   * lets the App create the tag v<version> (created through the API, not SSH-signed) and the
+#     GitHub release with the notes it writes from the commits (job release),
 #   * checks every image built from that tag with the licence gate before anything is pushed
 #     (job licence-gate: no Agora SDK, only open source licences, the licence label of each
 #     Dockerfile; LICENSING.md),
@@ -27,7 +28,7 @@ name: release
 # commits between the tags, with the German and English texts of apps/web/whats-new/*.json
 # (docs/ops/release.md, "Notes for the app").
 # Nothing is published from a push whose commits are docs/ci/chore/test only (fix(ci) included,
-# .releaserc.json), nor when every file changed since the last tag is CI configuration
+# .github/lktec-bot.yml), nor when every file changed since the last tag is CI configuration
 # (tools/repo-checks/scripts/ci_scope.py release-guard). By hand the workflow
 # builds a test version (for example 0.1.0-rc.1) from any branch: images and chart, no tag, no
 # GitHub release, no :latest. Versions are set at build time (image labels, chart version and
@@ -49,6 +50,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read # the reusable workflow looks up which commit of itself it was called at
 
 env:
   # Base images from the repository's GHCR mirror (see ci.yml); the mirror holds every
@@ -62,13 +64,60 @@ env:
   DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
-  version:
+  # Whether a release is allowed at all: when every file changed since the last tag is CI
+  # configuration (workflows, Dependabot, release config, CI scripts; CI_PATTERNS of
+  # ci_scope.py), nothing an installation runs changed, so nothing is published whatever the
+  # commit types say. The release module has no such rule, so the guard stays here and only ever
+  # prevents a release; any error of the check (no tag, git, the script) falls through to the
+  # release. Pushes only (a test build has no tag to guard).
+  guard:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    # @semantic-release/github's verifyConditions checks that the token may push (contents:
-    # write), even in a dry run.
-    permissions:
-      contents: write
+    timeout-minutes: 10
+    outputs:
+      skip: ${{ steps.guard.outputs.skip }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: guard
+        run: |
+          set -eu
+          skip=false
+          if last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null)" &&
+            [ "$(python3 tools/repo-checks/scripts/ci_scope.py release-guard --base "$last_tag" --head HEAD)" = "ci_only=true" ]; then
+            skip=true
+            echo "Only CI configuration changed since $last_tag: nothing to publish (docs/ops/release.md, 'CI-only changes')." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "skip=$skip" | tee -a "$GITHUB_OUTPUT"
+
+  # The release: the lktec-bot App works out the version from the Conventional Commits since the
+  # highest v* tag (rules: .github/lktec-bot.yml), and creates the tag v<version> together with
+  # the GitHub release and its generated notes through the GitHub API. It runs before anything is
+  # built, so nothing is published under a version that has no tag; the jobs below build from
+  # the tag's commit (this run's commit: a run whose commit is no longer the tip of main is
+  # skipped and the newer push's run releases it). The tag is not SSH-signed; the images, the
+  # chart and the release files are what is signed and attested.
+  release:
+    needs: guard
+    if: github.event_name == 'push' && needs.guard.outputs.skip != 'true'
+    uses: lukislp/lktec-bot/.github/workflows/release.yml@0c0eccf67f1f06f21fd110626322a92c92e4cb82 # v0.1.1
+    secrets:
+      app-id: ${{ secrets.LKTEC_BOT_APP_ID }}
+      private-key: ${{ secrets.LKTEC_BOT_PRIVATE_KEY }}
+
+  # The version of this run for the jobs below: the released version of a push, or the input of a
+  # test build (no tag, no GitHub release, no :latest).
+  version:
+    needs: [guard, release]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -76,91 +125,26 @@ jobs:
       latest: ${{ steps.version.outputs.latest }}
       owner: ${{ steps.version.outputs.owner }}
     steps:
-      - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
-        with:
-          egress-policy: audit
-      # ref: main (the branch tip), not the event SHA: semantic-release refuses to release from a
-      # checkout that is behind the remote, and the real release in job tag is cut from the tip.
-      - if: github.event_name == 'push'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: main
-      # semantic-release runs from lukislp/ci-workflows' pinned toolchain (lock file in the
-      # action) instead of a registry install per run or a package.json here. The deploy key (if
-      # set) makes the tag push in job tag a push by a key rather than by GITHUB_TOKEN, so it
-      # starts the tag workflows (helm-kind.yml); verifyConditions runs a push --dry-run here too.
-      - if: github.event_name == 'push'
-        name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
-        with:
-          deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
-      # Dry run: computes the next version from the commits since the last tag without tagging.
-      # "No relevant changes" is the expected outcome for docs/ci/chore-only pushes, not a failure.
-      - if: github.event_name == 'push'
-        id: semrel
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
-        with:
-          dry-run: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
       - id: version
         env:
           EVENT: ${{ github.event_name }}
-          PUBLISHED: ${{ steps.semrel.outputs.new_release_published }}
-          NEXT_VERSION: ${{ steps.semrel.outputs.new_release_version }}
+          RELEASED: ${{ needs.release.outputs.released }}
+          RELEASED_VERSION: ${{ needs.release.outputs.version }}
           INPUT_VERSION: ${{ inputs.version }}
           OWNER: ${{ github.repository_owner }}
-          SHA: ${{ github.sha }}
-          SIGNING_KEY: ${{ secrets.DEPLOY_SIGNING_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
-          # gh_retry: waits for GITHUB_TOKEN's API quota instead of failing (read-only calls).
-          . tools/repo-checks/scripts/gh_retry.sh
           owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
           release=false
           build=false
           version=""
           if [ "$EVENT" = push ]; then
-            if [ "$PUBLISHED" != true ]; then
-              echo "No releasable commits since the last tag (docs, ci, chore, test only): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
-            elif [ "$(git rev-parse HEAD)" != "$SHA" ]; then
-              echo "main moved past this run's commit ($SHA): the newer push's run releases it." | tee -a "$GITHUB_STEP_SUMMARY"
-            # Whatever the commit types say: when every file changed since the last tag is CI
-            # configuration (workflows, Dependabot, release config, CI scripts; CI_PATTERNS of
-            # ci_scope.py), nothing an installation runs changed, so nothing is published. Any
-            # error here (no tag, git, the script) falls through to the release.
-            elif last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null)" &&
-              [ "$(python3 tools/repo-checks/scripts/ci_scope.py release-guard --base "$last_tag" --head HEAD)" = "ci_only=true" ]; then
-              echo "Only CI configuration changed since $last_tag: nothing to publish (docs/ops/release.md, 'CI-only changes')." | tee -a "$GITHUB_STEP_SUMMARY"
-            else
-              version="$NEXT_VERSION"
-              # semantic-release starts a repository without tags at 1.0.0. MowDeck's line starts
-              # at 0.x from the initial tag v0.0.0 (docs/ops/release.md), so a missing tag is a
-              # setup error, never a reason to publish 1.0.0.
-              if [ -z "$(git tag --list 'v*')" ]; then
-                echo "::error::no v* tag exists, so semantic-release would publish $version. Create the initial tag v0.0.0 first (docs/ops/release.md, 'Setting up releases')."
-                exit 1
-              fi
-              # Signed releases: the tag is signed with DEPLOY_SIGNING_KEY, whose public half must
-              # be a signing key of the owner's account, or GitHub shows the tag as unverified.
-              if [ -z "$SIGNING_KEY" ]; then
-                echo "::error::DEPLOY_SIGNING_KEY is not set: the release tag cannot be signed (docs/ops/release.md, 'Setting up releases')."
-                exit 1
-              fi
-              key="$RUNNER_TEMP/signing_key"
-              printf '%s\n' "$SIGNING_KEY" > "$key"
-              chmod 600 "$key"
-              public="$(ssh-keygen -y -f "$key" | awk '{print $2}')"
-              rm -f "$key"
-              keys="$(gh_retry gh api --paginate "users/$OWNER/ssh_signing_keys?per_page=100" --jq '.[].key')"
-              if ! printf '%s\n' "$keys" | grep -qF "$public"; then
-                echo "::error::the public half of DEPLOY_SIGNING_KEY is not a signing key of $OWNER (github.com/settings/keys), so the tag would show as unverified."
-                exit 1
-              fi
+            if [ "$RELEASED" = true ]; then
+              version="$RELEASED_VERSION"
               release=true
               build=true
+            else
+              echo "No release for this push (the decision is in the job summary of the release job): nothing to publish. This is the common case, not a failure." | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           else
             version="$INPUT_VERSION"
@@ -178,104 +162,6 @@ jobs:
             echo "owner=$owner"
           } | tee -a "$GITHUB_OUTPUT"
 
-  # The real semantic-release run: the signed tag v<version> and the GitHub release with the
-  # generated notes. It runs before anything is built, so nothing is published under a version
-  # that has no tag; the jobs below build from the tag.
-  tag:
-    needs: version
-    if: needs.version.outputs.release == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      # @semantic-release/github comments on the released pull requests and issues.
-      issues: write
-      pull-requests: write
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: main
-      # semantic-release tags the checked-out tip of main; the build jobs check out this run's
-      # commit (github.sha). Both must be the same commit, or nothing is tagged (a newer push's
-      # run, queued behind this one, then releases).
-      - name: The tip of main is this run's commit
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          head="$(git rev-parse HEAD)"
-          if [ "$head" != "$SHA" ]; then
-            echo "::error::main moved to $head since this run started at $SHA; not tagging. The run of the newer push releases."
-            exit 1
-          fi
-      - name: Push as the semantic-release deploy key (if configured)
-        uses: lukislp/ci-workflows/.github/actions/deploy-key-push@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
-        with:
-          deploy-key: ${{ secrets.SEMANTIC_RELEASE_DEPLOY_KEY }}
-      # semantic-release creates its tag with a plain `git tag <name> <sha>`. With tag.gpgSign git
-      # makes that an annotated tag signed with the SSH key; the "editor" writes the tag message,
-      # and the tagger is the owner's noreply address, which GitHub needs to show "Verified".
-      - name: Sign the release tag with the SSH signing key
-        env:
-          SIGNING_KEY: ${{ secrets.DEPLOY_SIGNING_KEY }}
-        run: |
-          set -eu
-          key="$RUNNER_TEMP/release_signing_key"
-          printf '%s\n' "$SIGNING_KEY" > "$key"
-          chmod 600 "$key"
-          # git's SSH signing loads the public key from user.signingkey.
-          ssh-keygen -y -f "$key" > "$key.pub"
-          git config gpg.format ssh
-          git config user.signingkey "$key.pub"
-          git config tag.gpgSign true
-          cat > "$RUNNER_TEMP/tag-message.sh" <<'EOF'
-          #!/bin/sh
-          printf 'MowDeck %s\n' "$RELEASE_VERSION" > "$1"
-          EOF
-          chmod +x "$RUNNER_TEMP/tag-message.sh"
-          {
-            echo "GIT_EDITOR=$RUNNER_TEMP/tag-message.sh"
-            echo "GIT_COMMITTER_NAME=mowdeck-release"
-            echo "GIT_COMMITTER_EMAIL=155678024+lukislp@users.noreply.github.com"
-          } >> "$GITHUB_ENV"
-      - id: semrel
-        uses: lukislp/ci-workflows/.github/actions/semantic-release@ea532e9b173cf0e512c9d54c18886eebd0b0d1ab # v1.8.24
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      # No retry from a newer tip (unlike the repositories that build after tagging from main):
-      # the build jobs check out this run's commit, so the tag may only ever land on it. When a
-      # push raced in, this job fails before tagging and the newer push's run releases.
-      # The jobs below build this run's commit: make sure the tag exists on exactly that commit,
-      # is signed and that GitHub verifies its signature.
-      - name: Check the signed tag and the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPOSITORY: ${{ github.repository }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -eu
-          # Read-only API calls, retried on the rate limit (gh_retry.sh).
-          . tools/repo-checks/scripts/gh_retry.sh
-          tag="v$RELEASE_VERSION"
-          test "$(git cat-file -t "$tag")" = tag
-          test "$(git rev-parse "$tag^{commit}")" = "$SHA"
-          git cat-file -p "$tag" | grep -q 'BEGIN SSH SIGNATURE'
-          gh_retry gh release view "$tag" -R "$REPOSITORY" --json tagName --jq .tagName
-          object="$(gh_retry gh api "repos/$REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
-          verification="$(gh_retry gh api "repos/$REPOSITORY/git/tags/$object" --jq '.verification | "\(.verified) \(.reason)"')"
-          verified="${verification%% *}"
-          reason="${verification#* }"
-          if [ "$verified" != true ]; then
-            echo "::warning::GitHub does not show $tag as verified (reason: $reason)."
-          fi
-          echo "- signed tag \`$tag\` (verified: $verified)" >> "$GITHUB_STEP_SUMMARY"
-
   # Licence gate (LICENSING.md, apps/web/README.md "Agora Web SDK and third-party licences"):
   # every image is built once for linux/amd64 into the runner's Docker engine, never pushed, and
   # checked before the images job publishes anything: no Agora package or file (the Agora SDKs
@@ -283,10 +169,10 @@ jobs:
   # label of the Dockerfile and the MowDeck licence texts inside. Its matrix equals the images
   # matrix (tools/repo-checks, test_release_licences.py).
   licence-gate:
-    needs: [version, tag]
-    # Checks the release tag (or the commit of a test build) after job tag and before anything is
-    # pushed; status functions keep it from being skipped with tag on a test build.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
+    needs: [version, release]
+    # Checks the release tag (or the commit of a test build) after job release and before anything is
+    # pushed; status functions keep it from being skipped with release on a test build.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -398,8 +284,8 @@ jobs:
             --sbom "$RUNNER_TEMP/sbom.syft.json" --licenses "$LICENSES" $FLAGS
 
   images:
-    needs: [version, tag, licence-gate]
-    # Only after the licence gate passed for every image (on a test build tag is skipped, so the
+    needs: [version, release, licence-gate]
+    # Only after the licence gate passed for every image (on a test build release is skipped, so the
     # condition names the gate instead of relying on the default success()).
     if: ${{ !cancelled() && needs.licence-gate.result == 'success' }}
     runs-on: ubuntu-24.04
@@ -566,7 +452,7 @@ jobs:
           upload-release-assets: false
 
   chart:
-    needs: [version, tag, licence-gate, images]
+    needs: [version, release, licence-gate, images]
     if: ${{ !cancelled() && needs.images.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -653,8 +539,8 @@ jobs:
   # iOS app goes to TestFlight on demand from an existing release (apple-testflight.yml) or is
   # built and installed on the owner's Mac (apps/mobile/scripts), never in this workflow.
   android:
-    needs: [version, tag]
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
+    needs: [version, release]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -710,8 +596,8 @@ jobs:
   # attestation over all of them, attached as mowdeck-<version>.intoto.jsonl; then the image
   # digests and the verification commands go into the release notes.
   publish:
-    needs: [version, tag, licence-gate, images, chart, android]
-    if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.tag.result == 'success' && needs.licence-gate.result == 'success' && needs.images.result == 'success' && needs.chart.result == 'success' && needs.android.result == 'success' }}
+    needs: [version, release, licence-gate, images, chart, android]
+    if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.release.outputs.released == 'true' && needs.licence-gate.result == 'success' && needs.images.result == 'success' && needs.chart.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-24.04
     # Room for the signing retries (cosign_retry.sh waits up to about 4 minutes per asset).
     timeout-minutes: 45
@@ -836,7 +722,7 @@ jobs:
             echo
             echo "## Verify"
             echo
-            echo "Tag \`$tag\` is SSH-signed. Images and chart are signed keyless with Sigstore and carry GitHub build provenance; every file below has a \`.sigstore.json\` bundle, \`SHA256SUMS\` lists them, and \`mowdeck-$VERSION.intoto.jsonl\` is their build provenance. Details: docs/ops/release.md#verifying-a-release."
+            echo "Tag \`$tag\` was created by the lktec-bot GitHub App through the GitHub API and carries no signature of its own. Images and chart are signed keyless with Sigstore and carry GitHub build provenance; every file below has a \`.sigstore.json\` bundle, \`SHA256SUMS\` lists them, and \`mowdeck-$VERSION.intoto.jsonl\` is their build provenance. Details: docs/ops/release.md#verifying-a-release."
             echo
             echo '```bash'
             echo "cosign verify ghcr.io/$OWNER/mowdeck/<image>@<digest> \\"

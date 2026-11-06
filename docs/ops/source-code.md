@@ -26,7 +26,7 @@ The release workflow passes, for every image:
 
 ```text
 MOWDECK_VERSION=<version>                     # e.g. 0.3.0
-MOWDECK_SOURCE_REF=v<version>                 # the signed tag; a test build without a tag: the commit SHA
+MOWDECK_SOURCE_REF=v<version>                 # the release tag; a test build without a tag: the commit SHA
 MOWDECK_SOURCE_URL=<server_url>/<repository>  # ${{ github.server_url }}/${{ github.repository }}
 ```
 

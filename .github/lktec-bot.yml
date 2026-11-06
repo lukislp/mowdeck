@@ -22,3 +22,19 @@ modules:
     # equal to VENDOR_LIBS of tools/repo-checks/scripts/vendor_lib_guard.py by
     # tools/repo-checks/tests/test_dependabot.py.
     exclude: [pymammotion, pyworxcloud, aioautomower]
+
+  # Tags and publishes a release from the Conventional Commits on the default branch (see
+  # docs/modules/release.md in lukislp/lktec-bot). MowDeck stays on the 0.x line: a breaking
+  # change is a minor release (docs/ops/release.md).
+  release:
+    enabled: true
+    mode: tag
+    tag-format: "v{version}"
+    branch: main
+    # Only used while no tag matches tag-format; the line starts at 0.x from the tag v0.0.0.
+    first-version: "0.1.0"
+    # Translated one to one from the former semantic-release rules.
+    rules:
+      - {breaking: true, release: minor}
+      - {type: refactor, release: patch}
+      - {type: fix, scope: ci, release: none}
