@@ -59,7 +59,7 @@ A contract you cannot meet yet goes into `ProviderUnderTest.known_violations` wi
 ## 5. Register the provider
 
 1. Add the package to `services/device-gateway/pyproject.toml` (the only service that installs adapters) and run `uv lock`.
-2. Register the vendor library for hardware-tested updates: `VENDOR_LIBS` in `tools/repo-checks/scripts/vendor_lib_guard.py`, `exclude-dependencies` in `.github/workflows/dependabot-auto-merge.yml`, and a checklist in [Vendor library updates](../ops/vendor-lib-updates.md).
+2. Register the vendor library for hardware-tested updates: `VENDOR_LIBS` in `tools/repo-checks/scripts/vendor_lib_guard.py`, `modules.automerge.exclude` in `.github/lktec-bot.yml`, and a checklist in [Vendor library updates](../ops/vendor-lib-updates.md).
 3. Document it: the package README (what the user provides, capabilities, limits, rate limits, the fake accounts, "untested on real hardware"), a row in [Cloud providers](cloud-providers.md) and in [Libraries](libraries.md), and `LICENSING.md` for a GPL package.
 4. The repository checks then cover it too: `test_vendor_isolation.py` keeps the vendor out of the core and `test_provider_texts.py` checks the descriptor's languages.
 5. It stays off by default (`enabled_by_default=False`, `tested_on_hardware=False`) until someone tested it on a real mower; operators enable it with `MOWDECK_CLOUD_PROVIDERS_ENABLE=acme` (Compose: `GATEWAY_CLOUD_PROVIDERS_ENABLE`).
