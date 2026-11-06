@@ -10,7 +10,7 @@
  *   node build-tools/whats-new.mjs --version 0.29.0 --out static/whats-new.json
  *
  * Source: the Conventional Commit subjects between the release tags (the same ones
- * semantic-release reads) plus the curated texts in `whats-new/*.json` (one file per change,
+ * the release module reads) plus the curated texts in `whats-new/*.json` (one file per change,
  * keyed by the pull request number that squash merge puts at the end of the subject).
  *
  *   * Only feat, fix and perf commits are user-facing. ci, build, chore, test, docs, style and

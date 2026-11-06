@@ -14,7 +14,7 @@ Two users, both on the runner's ``python3`` (3.12 or newer):
   so a changed anchor counts for every job that uses it), and a change outside ``jobs`` (``on``,
   ``env``, ``permissions``, ...) runs everything. On a push or by hand (``--all``) every job
   runs, as before.
-* the job ``version`` of ``.github/workflows/release.yml`` runs ``release-guard`` with the last
+* the job ``guard`` of ``.github/workflows/release.yml`` runs ``release-guard`` with the last
   release tag: when every file changed since then is CI configuration (``CI_PATTERNS``), it
   prints ``ci_only=true`` and no release is published, whatever the commit types say.
 
@@ -95,7 +95,6 @@ CI_SCRIPTS = (
 
 CI_PATTERNS = (
     ".github/*",
-    ".releaserc.json",
     "socket.yml",
     "osv-scanner.toml",
     ".pre-commit-config.yaml",

@@ -8,7 +8,7 @@ The first job, `changes`, lists the files the pull request changes (the diff bet
 
 | Changed path | Jobs that run (besides `ci-config`) |
 | --- | --- |
-| `.github/**` (workflows, Dependabot, templates), `.releaserc.json`, `socket.yml`, `osv-scanner.toml`, `.pre-commit-config.yaml`, `.clusterfuzzlite/**`, repo-checks tests and CI-only scripts | none; for `ci.yml` the jobs whose definition changed (below) |
+| `.github/**` (workflows, Dependabot, templates, the release policy), `socket.yml`, `osv-scanner.toml`, `.pre-commit-config.yaml`, `.clusterfuzzlite/**`, repo-checks tests and CI-only scripts | none; for `ci.yml` the jobs whose definition changed (below) |
 | `docs/**`, `mkdocs.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `ROADMAP.md` | docs |
 | `infra/helm/**` | helm |
 | `tests/load/**` | compose |
@@ -50,4 +50,4 @@ Other workflows that only matter for some paths keep their own `paths` filter, b
 
 ## Releases from CI-only changes
 
-A pull request that only changes CI configuration releases nothing (details in [Releases](../ops/release.md#ci-only-changes)): Dependabot's GitHub Actions and ClusterFuzzLite bumps are `ci:` commits, `fix(ci):` is not a release type in `.releaserc.json`, and the release workflow skips a release whose changes since the last tag are CI configuration only.
+A pull request that only changes CI configuration releases nothing (details in [Releases](../ops/release.md#ci-only-changes)): Dependabot's GitHub Actions and ClusterFuzzLite bumps are `ci:` commits, `fix(ci):` is not a release type in `.github/lktec-bot.yml`, and the release workflow skips a release whose changes since the last tag are CI configuration only.

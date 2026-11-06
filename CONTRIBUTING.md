@@ -18,14 +18,14 @@ MowDeck has one maintainer ([GOVERNANCE.md](GOVERNANCE.md)), so the process is d
 
 ## Releases
 
-Releases are automatic: every push to `main` runs semantic-release (`.github/workflows/release.yml`, `.releaserc.json`), and the Conventional Commit types since the last tag decide whether and how the version moves. So the commit type is part of the change, not a formality; with a squash merge it is the pull request title.
+Releases are automatic: every push to `main` runs the release module of the lktec-bot GitHub App (`.github/workflows/release.yml`, rules in `.github/lktec-bot.yml`), and the Conventional Commit types since the last tag decide whether and how the version moves. So the commit type is part of the change, not a formality; with a squash merge it is the pull request title.
 
 - `fix:`, `perf:`, `refactor:` release a patch, `feat:` a minor version.
-- MowDeck is on the **0.x line**: a breaking change (`feat!:`, `fix(api)!:` or a `BREAKING CHANGE:` footer) releases a minor version, never 1.0.0. Mark it anyway, the release notes list it under "BREAKING CHANGES". Going to 1.0.0 is a deliberate change of `.releaserc.json` by the owner ([Releases](docs/ops/release.md#commit-types-and-versions)).
+- MowDeck is on the **0.x line**: a breaking change (`feat!:`, `fix(api)!:` or a `BREAKING CHANGE:` footer) releases a minor version, never 1.0.0. Mark it anyway, the release notes list it under "BREAKING CHANGES". Going to 1.0.0 is a deliberate change of `.github/lktec-bot.yml` by the owner ([Releases](docs/ops/release.md#commit-types-and-versions)).
 - `docs:`, `ci:`, `chore:`, `test:`, `style:`, `build:` release nothing. Use them for changes that ship nothing to an installation, and `fix:` or `feat:` when a user would notice.
 - CI-only changes never release: write them as `ci:` (`fix(ci):` releases nothing either), Dependabot's GitHub Actions bumps arrive as `ci: bump ...`, and the release workflow skips a release whose changes since the last tag are CI configuration only ([CI-only changes](docs/ops/release.md#ci-only-changes)). Runtime dependency bumps stay `fix(deps):` and release a patch.
 - Pull requests run only the CI jobs their changes need; a CI-only pull request runs `ci-config` (actionlint, shellcheck, repo-checks) and the jobs whose definition it changes ([CI and pull request scope](docs/dev/ci.md)).
-- Never tag by hand. The release tag is SSH-signed, images, chart and release files are signed with Sigstore and carry build provenance; how to verify them is in [Releases](docs/ops/release.md#verifying-a-release).
+- Never tag by hand. The release tag is created by the App through the API and carries no signature; images, chart and release files are signed with Sigstore and carry build provenance; how to verify them is in [Releases](docs/ops/release.md#verifying-a-release).
 
 ## Definition of done
 

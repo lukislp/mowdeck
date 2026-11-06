@@ -51,7 +51,7 @@ Only the latest release and the `main` branch receive security fixes. There are 
 
 ## Verifying releases
 
-Releases come only from the release workflow on `main` (`.github/workflows/release.yml`). The tag `v<version>` is an SSH-signed annotated tag that GitHub shows as verified. Every container image and the Helm chart in GHCR are signed keyless with Sigstore (Cosign) and carry a GitHub build provenance attestation (SLSA provenance). Every file attached to a GitHub release has a Sigstore bundle (`<file>.sigstore.json`), and the release lists their checksums in `SHA256SUMS` and their build provenance in `mowdeck-<version>.intoto.jsonl`. The signing identity is `https://github.com/lukislp/mowdeck/.github/workflows/release.yml@refs/heads/main` with the issuer `https://token.actions.githubusercontent.com`:
+Releases come only from the release workflow on `main` (`.github/workflows/release.yml`). The tag `v<version>` is created by the lktec-bot GitHub App through the GitHub API and carries no signature of its own; what to verify are the signed images, chart and release files below. Every container image and the Helm chart in GHCR are signed keyless with Sigstore (Cosign) and carry a GitHub build provenance attestation (SLSA provenance). Every file attached to a GitHub release has a Sigstore bundle (`<file>.sigstore.json`), and the release lists their checksums in `SHA256SUMS` and their build provenance in `mowdeck-<version>.intoto.jsonl`. The signing identity is `https://github.com/lukislp/mowdeck/.github/workflows/release.yml@refs/heads/main` with the issuer `https://token.actions.githubusercontent.com`:
 
 ```bash
 cosign verify ghcr.io/lukislp/mowdeck/<image>:<version> \
