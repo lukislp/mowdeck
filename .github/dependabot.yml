@@ -74,7 +74,7 @@ updates:
     # release gets its own PR, so new releases are visible. Such a PR is labelled vendor-lib and
     # needs-hardware-test (vendor-lib-label.yml), the check "vendor-lib / hardware test" fails
     # until the owner has tested it on a real mower and removed needs-hardware-test, and
-    # dependabot-auto-merge.yml never merges it (exclude-dependencies). Policy and checklist:
+    # the lktec-bot auto-merge never merges it (exclude in .github/lktec-bot.yml). Policy and checklist:
     # docs/ops/vendor-lib-updates.md.
     ignore:
       # The workspace members are sources of this repository ({ workspace = true }), but

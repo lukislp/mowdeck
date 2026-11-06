@@ -16,7 +16,7 @@ A bug in a new release can break a command, in the worst case the emergency stop
 2. **`vendor-lib-label.yml` labels the PR** `vendor-lib` and `needs-hardware-test` when the PR is opened or reopened. This applies to any PR whose `uv.lock` changes the version of a vendor library, Dependabot's included. A PR that only adds a new adapter with its library is no update and gets no label.
 3. **The check `vendor-lib / hardware test`** (`vendor-lib-guard.yml`) fails while the PR updates a vendor library and either carries `needs-hardware-test` or has no `vendor-lib` label yet. Its job summary lists the updated libraries and the next steps. Every other PR passes at once, so the check can be a required check without holding back routine updates.
 4. **CI runs the adapters' unit tests against the new release**: the `python` job installs the PR's `uv.lock` and runs every test under `libs/`. That includes the controller path of each adapter with `EmergencyStop`, `PauseMow`, `ReturnToDock` and `StartMow` against the fake vendor client built from the library's real data classes. A red test there is a regression in the library or in the adapter's use of it. Fix the adapter in the same PR or close the PR. The Mammotion adapter also records the release it was tested against (`PYMAMMOTION_VERSION` in `mowdeck_control_mammotion/__init__.py`), and `test_mammotion_package_is_gpl_and_pins_pymammotion` fails until that constant matches the pin. Update the constant together with the test result, after the hardware test.
-5. **`dependabot-auto-merge.yml` never approves or merges it** (`exclude-dependencies: pymammotion,pyworxcloud,aioautomower`, also inside grouped PRs).
+5. **`dependabot-auto-merge.yml` never approves or merges it** (`exclude: [pymammotion, pyworxcloud, aioautomower]` under `modules.automerge` in `.github/lktec-bot.yml`, also inside grouped PRs).
 
 ## What the owner does
 
@@ -76,4 +76,4 @@ No manual driving: the Automower Connect API has no such command.
 
 ## Adding a vendor library
 
-A new adapter declares its library in `[tool.mowdeck.adapter] vendor-modules`. Add it to `VENDOR_LIBS` in `tools/repo-checks/scripts/vendor_lib_guard.py`, to `exclude-dependencies` in `.github/workflows/dependabot-auto-merge.yml` and to the tables on this page. `tools/repo-checks/tests/test_dependabot.py` fails until the first two match.
+A new adapter declares its library in `[tool.mowdeck.adapter] vendor-modules`. Add it to `VENDOR_LIBS` in `tools/repo-checks/scripts/vendor_lib_guard.py`, to `modules.automerge.exclude` in `.github/lktec-bot.yml` and to the tables on this page. `tools/repo-checks/tests/test_dependabot.py` fails until the first two match.

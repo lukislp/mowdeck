@@ -8,7 +8,8 @@
 * the uv entry ignores the workspace members' own names (Dependabot looks them up on PyPI and
   fails the run), but never a vendor library, and does not group them;
 * every vendor library of an adapter (``[tool.mowdeck.adapter] vendor-modules``) is listed in
-  ``VENDOR_LIBS`` of ``scripts/vendor_lib_guard.py``, and that list is the auto-merge exclusion;
+  ``VENDOR_LIBS`` of ``scripts/vendor_lib_guard.py``, and that list is the auto-merge exclusion
+  (``modules.automerge.exclude`` in ``.github/lktec-bot.yml``, the policy of the lktec-bot App);
 * the guard script finds updates in a lock file pair and fails until the label is removed;
 * the guard and label workflows run on the right events with the least permissions.
 
@@ -129,9 +130,8 @@ def test_every_adapter_vendor_module_is_a_vendor_lib(repo_root: Path, guard: Mod
 
 
 def test_auto_merge_excludes_exactly_the_vendor_libs(repo_root: Path, guard: ModuleType) -> None:
-    workflow = _workflow(repo_root, "dependabot-auto-merge.yml")
-    raw = workflow["jobs"]["dependabot"]["with"]["exclude-dependencies"]
-    excluded = [name.strip() for name in raw.replace(",", " ").split()]
+    policy = yaml.safe_load((repo_root / ".github" / "lktec-bot.yml").read_text("utf-8"))
+    excluded = policy["modules"]["automerge"]["exclude"]
     assert sorted(excluded) == sorted(guard.VENDOR_LIBS)
 
 
