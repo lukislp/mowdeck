@@ -72,7 +72,7 @@ jobs:
   # release. Pushes only (a test build has no tag to guard).
   guard:
     if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       skip: ${{ steps.guard.outputs.skip }}
@@ -116,7 +116,7 @@ jobs:
   version:
     needs: [guard, release]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -173,7 +173,7 @@ jobs:
     # Checks the release tag (or the commit of a test build) after job release and before anything is
     # pushed; status functions keep it from being skipped with release on a test build.
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       contents: read
@@ -288,7 +288,7 @@ jobs:
     # Only after the licence gate passed for every image (on a test build release is skipped, so the
     # condition names the gate instead of relying on the default success()).
     if: ${{ !cancelled() && needs.licence-gate.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -454,7 +454,7 @@ jobs:
   chart:
     needs: [version, release, licence-gate, images]
     if: ${{ !cancelled() && needs.images.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -541,7 +541,7 @@ jobs:
   android:
     needs: [version, release]
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.version.outputs.build == 'true' && (needs.release.result == 'success' || needs.release.result == 'skipped') }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     env:
       MOWDECK_VERSION: ${{ needs.version.outputs.version }}
@@ -598,7 +598,7 @@ jobs:
   publish:
     needs: [version, release, licence-gate, images, chart, android]
     if: ${{ !cancelled() && needs.version.outputs.release == 'true' && needs.release.outputs.released == 'true' && needs.licence-gate.result == 'success' && needs.images.result == 'success' && needs.chart.result == 'success' && needs.android.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Room for the signing retries (cosign_retry.sh waits up to about 4 minutes per asset).
     timeout-minutes: 45
     permissions:

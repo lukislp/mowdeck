@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   sync:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Pushes the rendered pages to the wiki repository with GITHUB_TOKEN.
     permissions:
       contents: write
