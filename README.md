@@ -5,6 +5,7 @@
 [![License: AGPL-3.0](https://img.shields.io/github/license/lukislp/mowdeck)](LICENSING.md)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB)](https://www.python.org/)
 [![Node](https://img.shields.io/badge/Node-24-339933)](https://nodejs.org/)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lukislp/mowdeck?quickstart=1)
 
 MowDeck is a self-hosted control centre for robotic mowers. It runs on a mini PC or Raspberry Pi at home with Docker Compose, keeps your data in your own house, and gives you and your family one web app for everything the mower does: live status and map, starting a job with your own settings, spot mowing that MowDeck steers itself, schedules that respect the weather, the cameras, notifications on the phone, and an optional AI assistant for a stuck mower. The same images also run on Kubernetes if you prefer a server.
 
@@ -99,6 +100,7 @@ Roadmap and what is done: [docs/phases.md](docs/phases.md).
 | `apps/mobile/` | iOS and Android app shells (Capacitor) that load the web app from the MowDeck server; Mac install scripts and the Android APK build ([guide](docs/ops/mobile-apps.md), AGPL-3.0) |
 | `bridge/` | ESP32 bridge firmware ([build guide](docs/ops/ble-bridge-esphome.md)) |
 | `integrations/` | Placeholder for client integrations; the Home Assistant integration `mowdeck` lives in its own repository [`lukislp/mowdeck-hacs`](https://github.com/lukislp/mowdeck-hacs) ([guide](docs/dev/home-assistant.md)) |
+| `.devcontainer/` | GitHub Codespaces / Dev Container: toolchains and the running Compose stack ([guide](docs/dev/getting-started.md#github-codespaces)) |
 | `infra/compose/` | Docker Compose stack (Traefik, NATS, PostgreSQL, OpenFGA) |
 | `infra/helm/` | Helm chart `mowdeck` for Kubernetes (cloud and homelab), its checks and the kind install test |
 | `templates/` | Service template (later) |
@@ -123,6 +125,8 @@ On Kubernetes (released images and chart; see [docs/ops/helm.md](docs/ops/helm.m
 ```bash
 helm install mowdeck oci://ghcr.io/lukislp/charts/mowdeck --version <version> -n mowdeck --create-namespace -f my-values.yaml
 ```
+
+No local setup: the "Open in GitHub Codespaces" badge at the top of this page gives you the toolchains and the running stack in the browser ([details](docs/dev/getting-started.md#github-codespaces)).
 
 Development:
 
