@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# actionlint 1.7.12 does not know the Ubuntu 26.04 runner labels yet (its built-in list ends at
+# 24.04), so the ci-config job failed on every `runs-on: ubuntu-26.04`. Listing the labels here
+# makes the label check accept them. Remove this file once an actionlint release knows them.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
