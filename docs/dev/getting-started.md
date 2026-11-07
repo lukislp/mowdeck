@@ -39,7 +39,7 @@ docker compose -f infra/compose/docker-compose.yml up -d --wait
 
 **What you get:** Python 3.13 with uv (`uv sync` done), Node 24 with pnpm (`pnpm install` done), the lint, test and docs commands below, pre-commit hooks, Docker with Compose v2, and the complete stack running inside the Codespace. The machine needs 4 CPUs, 16 GB of memory and 64 GB of storage (`hostRequirements`; pick the 4-core machine type or larger).
 
-**First start:** several minutes. The Codespace installs the toolchains, then builds about a dozen images from the checkout and waits until every service is healthy (`.devcontainer/post-start.sh`, its output is in the creation log). Later starts reuse the Docker cache and take a minute or two.
+**First start:** several minutes. The Codespace installs the toolchains and the dependencies (`on-create.sh`, `update-content.sh`; with a prebuild these are already done), writes the `.env` (`generate-env.sh`), then builds about a dozen images from the checkout and waits until every service is healthy (`post-start.sh`, its output is in the creation log). Later starts reuse the Docker cache and take a minute or two.
 
 **The web app:** forwarded port 80, labelled "MowDeck (Traefik)", at `https://<codespace-name>-80.app.github.dev` (the Ports tab has the link; the start script prints it too). The port is private: only you, signed in to GitHub, can open it. Register the first account, it becomes the owner, and add a simulated mower. `uv run mkdocs serve -a 0.0.0.0:8000` serves the docs on forwarded port 8000.
 

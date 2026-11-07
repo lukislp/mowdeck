@@ -12,7 +12,9 @@
     "80": { "label": "MowDeck (Traefik)", "protocol": "http", "onAutoForward": "openBrowser" },
     "8000": { "label": "Documentation (mkdocs serve)", "onAutoForward": "notify" }
   },
-  "postCreateCommand": ".devcontainer/post-create.sh",
+  "onCreateCommand": ".devcontainer/on-create.sh",
+  "updateContentCommand": ".devcontainer/update-content.sh",
+  "postCreateCommand": ".devcontainer/generate-env.sh",
   "postStartCommand": ".devcontainer/post-start.sh",
   "customizations": {
     "vscode": {
