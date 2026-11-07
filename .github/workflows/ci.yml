@@ -45,7 +45,7 @@ jobs:
   # Which jobs this run needs: one output per scoped job, "true" or "false". The other jobs run
   # unless their output is "false", so a failed classification runs them (fail safe).
   changes:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       python: ${{ steps.scope.outputs.python }}
@@ -97,7 +97,7 @@ jobs:
   ci-config:
     if: ${{ !cancelled() && github.event_name != 'push' }}
     needs: [changes]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       ACTIONLINT_VERSION: 1.7.12
@@ -144,7 +144,7 @@ jobs:
   python:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.python != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     services:
       postgres:
@@ -267,7 +267,7 @@ jobs:
   openfga-model:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.openfga_model != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Harden the runner
@@ -299,7 +299,7 @@ jobs:
   docs:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Harden the runner
@@ -325,7 +325,7 @@ jobs:
   web:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.web != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Harden the runner
@@ -353,7 +353,7 @@ jobs:
   compose:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.compose != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Harden the runner
@@ -387,7 +387,7 @@ jobs:
   gradle-wrapper:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.gradle_wrapper != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Harden the runner
@@ -405,7 +405,7 @@ jobs:
   helm:
     needs: [changes]
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.helm != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       KUBECONFORM_VERSION: v0.8.0
@@ -439,7 +439,7 @@ jobs:
   docker:
     needs: [changes]
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.docker != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - name: Harden the runner
@@ -627,7 +627,7 @@ jobs:
   # it when it runs and also run when it is skipped (only their own definition changed).
   camera-relay-media:
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.camera_relay_media != 'false' && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [changes, docker]
     timeout-minutes: 20
     steps:
@@ -672,7 +672,7 @@ jobs:
   # job (same scopes); `compose up --build` then finds every layer in the builder.
   e2e:
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e != 'false' && contains(fromJSON('["success", "skipped"]'), needs.python.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [changes, python, docker]
     timeout-minutes: 30
     steps:
@@ -829,7 +829,7 @@ jobs:
   e2e-web-shard:
     name: e2e-web shard ${{ matrix.shard }}
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e_web != 'false' && contains(fromJSON('["success", "skipped"]'), needs.web.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [changes, web, docker]
     # A shard takes about 5 min of setup and a quarter of the suite; one retried slow spec (a test
     # timeout of 3 min) must still fit.
@@ -1012,7 +1012,7 @@ jobs:
   # banner on every main page and the API refusals.
   e2e-demo:
     if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.e2e_demo != 'false' && contains(fromJSON('["success", "skipped"]'), needs.web.result) && contains(fromJSON('["success", "skipped"]'), needs.docker.result) }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [changes, web, docker]
     timeout-minutes: 30
     env:
@@ -1135,7 +1135,7 @@ jobs:
   # when the pull request changes nothing the suite depends on.
   e2e-web:
     if: ${{ github.event_name != 'push' && !cancelled() && needs.changes.outputs.e2e_web != 'false' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [changes, e2e-web-shard]
     timeout-minutes: 10
     steps:
