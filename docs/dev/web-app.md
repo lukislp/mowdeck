@@ -194,6 +194,10 @@ In the image, `nginx/40-mowdeck-runtime-config.sh` (an `/docker-entrypoint.d` ho
 
 **Privacy.** Tiles are off by default. With tiles, every map view tells the tile server which tiles are shown, which is the location of the garden, plus the viewer's IP address. The public OpenStreetMap servers have a usage policy that does not fit an app (https://operations.osmfoundation.org/policies/tiles/); use your own or a commercial provider and show the attribution it requires (`openstreetmap.org` URLs get "© OpenStreetMap contributors" automatically). An API key in the template is visible to every user.
 
+## Report a problem
+
+Settings → About has a "Report a problem" button. It opens the repository's bug report form (`.github/ISSUE_TEMPLATE/bug_report.yml`) on GitHub in a new tab, with the fields filled in from the running app: `version` (the build, or "dev build"), `mower` (model and link kind of the first mower, empty without one) and `environment` (app version with its source address, platform web, iOS or Android shell with browser and OS, locale, whether this is the demo, and, for a release build of the official repository, a Codespaces link to the exact version). Only this environment data is sent: no tokens, account names, serial numbers, positions, mower ids or log lines, and the form shows everything before anything is submitted. It is a plain external link, so it works on the demo too. Code: `apps/web/src/lib/support/` (`report-problem.ts` builds the address, a test reads the form's YAML so the field ids cannot drift).
+
 ## What's new ("Was ist neu")
 
 After an update the first app open shows a compact sheet, "Was ist neu in vX.Y.Z", with the

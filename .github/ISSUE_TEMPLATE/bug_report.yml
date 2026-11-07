@@ -25,6 +25,12 @@ body:
       label: Mower and link
       description: Mower model and firmware, and the link in use (cloud, Bluetooth bridge, simulator).
   - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Filled in by the app's Report a problem button; edit if needed.
+      render: text
+  - type: textarea
     id: logs
     attributes:
       label: Logs or screenshots
