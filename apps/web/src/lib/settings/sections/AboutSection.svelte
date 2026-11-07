@@ -7,6 +7,8 @@
 -->
 <script lang="ts">
   import SourceCode from '#lib/components/SourceCode.svelte';
+  import ReportProblem from '#lib/support/ReportProblem.svelte';
 </script>
 
 <SourceCode variant="sheet" />
+<ReportProblem />
