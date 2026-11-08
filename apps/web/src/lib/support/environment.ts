@@ -7,6 +7,7 @@
  * `report-problem.ts`. Environment data only (see the privacy note there).
  */
 import type { SourceInfo } from '#lib/legal/source.js';
+import { displayModel } from '#lib/mower/limits.js';
 
 import { parseUserAgent, type ClientPlatform, type ReportProblemInput } from './report-problem';
 
@@ -19,6 +20,25 @@ export interface EnvironmentDeps {
   demo: boolean;
   /** The first mower the user can see, reduced to what the form needs. */
   mower?: { model: string | null; connection_kind: string | null } | null;
+}
+
+/**
+ * The first mower for the form, with the model the mower list shows: the model its capabilities
+ * report (`LUBA 2 AWD 3000X`), else the one registered in Fleet. Fleet's value is what the
+ * vendor's device list carried at linking time and can be a series or a name the owner gave
+ * (`Luba VP`), so it is only the fallback.
+ */
+export function firstMower(
+  mowers: readonly { id: string; model?: string | null; connection_kind: string }[],
+  capabilities: readonly { mower_id: string; capabilities: { model?: string | null } | null }[],
+): EnvironmentDeps['mower'] {
+  const first = mowers[0];
+  if (!first) return null;
+  const caps = capabilities.find((item) => String(item.mower_id) === String(first.id));
+  return {
+    model: displayModel(caps?.capabilities ?? null, first),
+    connection_kind: first.connection_kind,
+  };
 }
 
 export function gatherEnvironment(deps: EnvironmentDeps): ReportProblemInput {
