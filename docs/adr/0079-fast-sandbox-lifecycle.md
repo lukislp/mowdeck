@@ -51,6 +51,8 @@ The shared demo's seed job uses the same endpoint and gets the same history.
 | --- | --- | --- |
 | `DEMO_SANDBOX_POOL` (`MOWDECK_IDENTITY_DEMO_SANDBOX_POOL`) | `8` (was `2`) | Ready sandboxes |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_PARALLEL` | `3` | Sandboxes made on the spot at once |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_ATTEMPTS` | `3` | Tries per visitor before `503 demo-full` (added 2026-11-08, see Consequences) |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_RETRY_SECONDS` | `2` | Pause between two tries |
 
 `demo/demo.env` needs no new key. A `demo.env` that sets `DEMO_SANDBOX_POOL=2` explicitly keeps the old pool; remove the line (or raise it) to get the new default.
 
@@ -88,6 +90,7 @@ With the cap raised for the run (`DEMO_SANDBOX_MAX=60`), 60 such visitors: "Try 
 - Bursts of visitors are served from the pool with history; the pool refill no longer blocks Telemetry, so the visitors already inside keep fast mower pages.
 - Telemetry keeps one template mower per garden per day (about 7,000 rows each); the first pool fill of a UTC day pays the simulation once.
 - A sandbox made on the spot still has no history (a burst beyond pool and refill), and a visitor may wait a few seconds for a turn instead of failing.
+- Addendum (2026-11-08): right after a start of the stack, the first authorization checks against a cold OpenFGA exceed the 2 s timeout, so Fleet answers `503` and the Scheduler denies (`404`), the first sandboxes of the pool and of the first visitors failed, and the CI job `e2e-demo` was flaky (the first "Try the demo" of a run). A sandbox made on the spot is now tried `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_ATTEMPTS` (3) times with a fresh sandbox, `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_RETRY_SECONDS` (2) apart, before the visitor is turned away; each failed sandbox is purged as before. The pool refill already retries on its next round.
 - Tests: Telemetry (`test_telemetry_demo_history.py`: a copy equals the direct ingestion on memory and PostgreSQL, the thinning mark, idempotence, a new day's template, a restart, another account), Identity (`test_identity_demo_sandbox_bursts.py`: parallel creation under the cap, the bound and a waiting visitor taking a refill, a failed creation giving its place back, the sweep after a logout and after the settle time; the provisioner's parallel calls on one client; `update_where` on both stores), `mowdeck-auth` (a burst on a fresh cache, random key ids during a fetch).
 
 ## Alternatives considered

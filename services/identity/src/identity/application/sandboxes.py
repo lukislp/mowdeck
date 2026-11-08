@@ -13,10 +13,12 @@ zones and inbox, so nobody sees another visitor's actions. The lifecycle of one 
 2. **Claim.** "Try the demo" takes the oldest ready sandbox and starts a login session of its
    user, the same tokens and cookie as any sign-in (``POST /demo/session``). With an empty pool
    a sandbox is made on the spot without history (about a second), at most ``make_parallel``
-   at once; a visitor waiting for a turn takes a sandbox the refill made meanwhile. The number
-   of active sandboxes is capped (``max_active``; visitors waiting for a sandbox made on the
-   spot count too): one more visitor gets :class:`DemoFull` with a time to come back; one
-   address may start ``per_address_per_hour`` sandboxes an hour.
+   at once; a visitor waiting for a turn takes a sandbox the refill made meanwhile. A failed
+   attempt (right after a start the first checks against a cold OpenFGA time out) is purged
+   and a fresh sandbox tried, ``make_attempts`` times in all, before the visitor is turned
+   away. The number of active sandboxes is capped (``max_active``; visitors waiting for a
+   sandbox made on the spot count too): one more visitor gets :class:`DemoFull` with a time to
+   come back; one address may start ``per_address_per_hour`` sandboxes an hour.
 3. **Idle and expiry.** The sweep runs every minute, a few seconds after a logout, and when a
    purge waiting for ``settle`` is due. A sandbox whose user's newest login session
    row (every refresh writes one; the web app refreshes every few minutes while a tab is open)
@@ -72,6 +74,12 @@ class SandboxConfig:
     """Ready sandboxes kept for the next visitors (a resting one costs only its rows)."""
     make_parallel: int = 3
     """Sandboxes made on the spot at once when the pool is empty; more visitors wait a turn."""
+    make_attempts: int = 3
+    """Tries to make a visitor's sandbox on the spot before the visitor is turned away: right
+    after a start the first checks against a cold OpenFGA time out (Fleet answers 503, the
+    Scheduler denies), and a fresh sandbox a moment later goes through."""
+    make_retry_wait: timedelta = timedelta(seconds=2)
+    """Pause between two such attempts."""
     idle: timedelta = timedelta(minutes=30)
     """A sandbox without a session refresh for this long is deleted."""
     max_age: timedelta = timedelta(hours=6)
@@ -195,17 +203,32 @@ class SandboxService:
                 if pooled is not None:
                     self._reserved, reserved = self._reserved - 1, False
                     return pooled, False
-                sandbox = await self._create(claimed_at=self.deps.clock())
-                self._reserved, reserved = self._reserved - 1, False
-                try:
-                    await self._fill_services(sandbox, history=False)
-                except Exception as exc:
-                    _log.warning("a sandbox could not be prepared", error=repr(exc))
-                    await self._mark(sandbox, "provisioning failed")
-                    msg = "the demo could not prepare your sandbox; try again in a minute"
-                    raise DemoFull(msg, 60) from exc
-                await self._set_state(sandbox, SandboxState.ACTIVE)
-                return sandbox, True
+                attempts = max(1, self.config.make_attempts)
+                last: Exception | None = None
+                for attempt in range(1, attempts + 1):
+                    sandbox = await self._create(claimed_at=self.deps.clock())
+                    self._reserved, reserved = self._reserved - 1, False
+                    try:
+                        await self._fill_services(sandbox, history=False)
+                    except Exception as exc:
+                        last = exc
+                        _log.warning(
+                            "a sandbox could not be prepared",
+                            error=repr(exc),
+                            attempt=attempt,
+                            attempts=attempts,
+                        )
+                        await self._mark(sandbox, "provisioning failed")
+                        if attempt < attempts:
+                            # The purged row no longer counts to the cap: hold the place again
+                            # until the next attempt's row exists.
+                            self._reserved, reserved = self._reserved + 1, True
+                            await asyncio.sleep(self.config.make_retry_wait.total_seconds())
+                        continue
+                    await self._set_state(sandbox, SandboxState.ACTIVE)
+                    return sandbox, True
+                msg = "the demo could not prepare your sandbox; try again in a minute"
+                raise DemoFull(msg, 60) from last
         finally:
             if reserved:
                 self._reserved -= 1

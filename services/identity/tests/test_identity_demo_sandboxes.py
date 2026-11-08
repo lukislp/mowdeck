@@ -29,6 +29,8 @@ SANDBOXES: dict[str, Any] = {
     "demo_seed_token": SEED,
     "identity_demo_sandboxes": True,
     "identity_demo_sandbox_pool": 0,
+    # No pause between the attempts to make a visitor's sandbox (the tests run in real time).
+    "identity_demo_sandbox_make_retry_seconds": 0,
 }
 
 
@@ -39,6 +41,8 @@ class FakeProvisioner:
         self.provisioned: list[tuple[UUID, bool]] = []
         self.purged: list[tuple[str, UUID]] = []
         self.fail_provision = False
+        self.fail_provision_times = 0
+        """Fail this many provisionings, then succeed (a cold start, ADR 0079)."""
         self.fail_purge: dict[str, int] = {}
 
     @property
@@ -50,7 +54,8 @@ class FakeProvisioner:
 
     async def provision(self, account_id: UUID, access_token: str, *, history: bool) -> None:
         assert access_token  # the sandbox user's own token
-        if self.fail_provision:
+        if self.fail_provision or self.fail_provision_times > 0:
+            self.fail_provision_times = max(0, self.fail_provision_times - 1)
             msg = "fleet did not answer"
             raise RuntimeError(msg)
         self.provisioned.append((account_id, history))
@@ -157,9 +162,28 @@ async def test_a_sandbox_that_cannot_be_prepared_is_given_up() -> None:
         response = await h.client.post(f"{API}/demo/session", headers=REFRESH)
         rows = await _rows(h)
     assert response.status_code == 503
+    # One fresh sandbox per attempt (the default is three), every one of them purged.
     assert [(r.state, r.purge_reason) for r in rows] == [
         (SandboxState.PURGING, "provisioning failed")
-    ]
+    ] * 3
+    assert fake.provisioned == []
+
+
+async def test_a_visitor_sandbox_is_tried_again_when_a_service_fails_once() -> None:
+    """Right after a start the first checks against a cold OpenFGA time out (ADR 0079): the
+    failed sandbox is purged and a fresh one goes through, the visitor never sees the failure."""
+    fake = FakeProvisioner()
+    fake.fail_provision_times = 1
+    async with harness(provisioner=fake, **SANDBOXES) as h:
+        visitor = await _enter(h)
+        rows = await _rows(h)
+    assert {r.state: r.purge_reason for r in rows} == {
+        SandboxState.PURGING: "provisioning failed",
+        SandboxState.ACTIVE: None,
+    }
+    active = [r.account_id for r in rows if r.state is SandboxState.ACTIVE]
+    assert active == [UUID(visitor["me"]["account_id"])]
+    assert len(fake.provisioned) == 1  # only the attempt that succeeded reached the services
 
 
 async def _purge_everything(h: Harness) -> None:

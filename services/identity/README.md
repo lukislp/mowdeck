@@ -196,6 +196,8 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAX` | `40` | Sandboxes held at once; one more visitor gets `503 demo-full` with `Retry-After` |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_POOL` | `8` | Ready sandboxes (with history) kept for the next visitors; refilled one at a time, about a second each ([ADR 0079](../../docs/adr/0079-fast-sandbox-lifecycle.md)) |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_PARALLEL` | `3` | Sandboxes made on the spot at once when the pool is empty; further visitors wait for a turn or take a refilled pool sandbox ([ADR 0079](../../docs/adr/0079-fast-sandbox-lifecycle.md)) |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_ATTEMPTS` | `3` | Tries to make a visitor's sandbox on the spot before the visitor gets `503 demo-full`: right after a start the first checks against a cold OpenFGA time out (Fleet answers 503, the Scheduler denies), the failed sandbox is purged and a fresh one tried ([ADR 0079](../../docs/adr/0079-fast-sandbox-lifecycle.md)) |
+| `MOWDECK_IDENTITY_DEMO_SANDBOX_MAKE_RETRY_SECONDS` | `2` | Pause between two such attempts |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_IDLE_MINUTES` | `30` | A sandbox is deleted this long after its last session refresh, or right after a logout |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_MAX_HOURS` | `6` | A sandbox is deleted this long after it was claimed |
 | `MOWDECK_IDENTITY_DEMO_SANDBOX_PER_ADDRESS_PER_HOUR` | `6` | Sandboxes one client address (IPv6 per /64) may start an hour (`429`) |
