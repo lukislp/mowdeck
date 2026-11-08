@@ -43,7 +43,7 @@ export async function fetchWhatsNew(
   fetchFn: typeof fetch = (input, init) => fetch(input, init),
 ): Promise<WhatsNewRelease[] | null> {
   try {
-    const response = await fetchFn('/whats-new.json', { cache: 'no-cache', credentials: 'omit' });
+    const response = await fetchFn('/whats-new.json', { cache: 'no-cache', credentials: 'same-origin' });
     if (!response.ok) return null;
     if (!(response.headers.get('content-type') ?? '').includes('json')) return null;
     return parseWhatsNew(await response.json());

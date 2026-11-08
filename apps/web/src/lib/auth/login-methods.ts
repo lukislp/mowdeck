@@ -26,7 +26,11 @@ export function loginMethods(fetchFn: typeof fetch = defaultFetch): Promise<Logi
 
 async function read(fetchFn: typeof fetch): Promise<LoginMethods | null> {
   try {
-    const response = await fetchFn(`${IDENTITY}/login-methods`, { credentials: 'omit' });
+    // same-origin, not omit: a proxy that authenticates every request (a private GitHub Codespaces
+    // port) refuses one without its cookie, and the passkey, GitHub and Apple buttons vanished.
+    const response = await fetchFn(`${IDENTITY}/login-methods`, {
+      credentials: 'same-origin',
+    });
     if (!response.ok) return null;
     const body: unknown = await response.json();
     return body && typeof body === 'object' ? (body as LoginMethods) : null;
