@@ -15,7 +15,7 @@
 <script lang="ts">
   import { Button, Panel } from '@mowdeck/ui';
 
-  import { fleetApi, unwrap } from '#lib/api/client.js';
+  import { fleetApi, telemetryApi, unwrap } from '#lib/api/client.js';
   import { loadConfig } from '#lib/config.js';
   import { demo } from '#lib/demo/state.svelte.js';
   import { DEFAULT_SOURCE, type SourceInfo } from '#lib/legal/source.js';
@@ -23,7 +23,7 @@
   import { getLocale } from '#lib/paraglide/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
 
-  import { gatherEnvironment, type EnvironmentDeps } from './environment';
+  import { firstMower, gatherEnvironment, type EnvironmentDeps } from './environment';
   import { reportProblemUrl } from './report-problem';
 
   interface Props {
@@ -43,11 +43,15 @@
   });
 
   $effect(() => {
-    void unwrap(fleetApi.GET('/api/v1/fleet/mowers'))
-      .then((list) => {
-        const first = list.items[0];
-        mower = first ? { model: first.model, connection_kind: first.connection_kind } : null;
-      })
+    // The model as the mower list shows it (the capabilities' own name, else Fleet's); a
+    // failing capabilities request only leaves Fleet's value.
+    const capabilities = unwrap(
+      telemetryApi.GET('/api/v1/telemetry/accounts/me/mowers/capabilities'),
+    )
+      .then((found) => found.items)
+      .catch(() => []);
+    void Promise.all([unwrap(fleetApi.GET('/api/v1/fleet/mowers')), capabilities])
+      .then(([list, caps]) => (mower = firstMower(list.items, caps)))
       .catch(() => (mower = null));
   });
 
