@@ -202,6 +202,15 @@ class Settings(ServiceSettings):
     visitors wait for a turn (or for a refilled pool sandbox) instead of overloading the
     other services."""
 
+    identity_demo_sandbox_make_attempts: int = Field(default=3, ge=1, le=10)
+    """Tries to make a visitor's sandbox on the spot before the visitor is turned away with
+    ``503 demo-full``: right after a start the first checks against a cold OpenFGA time out
+    (Fleet answers 503, the Scheduler denies), and a fresh sandbox a moment later goes
+    through; the failed one is purged."""
+
+    identity_demo_sandbox_make_retry_seconds: float = Field(default=2.0, ge=0, le=60)
+    """Pause between two such attempts."""
+
     identity_demo_sandbox_idle_minutes: int = Field(default=30, ge=5, le=24 * 60)
     """A sandbox is deleted this long after its last session refresh (the web app refreshes
     every few minutes while a tab is open), or right after a logout."""
@@ -273,6 +282,8 @@ class Settings(ServiceSettings):
             max_active=self.identity_demo_sandbox_max,
             pool_size=self.identity_demo_sandbox_pool,
             make_parallel=self.identity_demo_sandbox_make_parallel,
+            make_attempts=self.identity_demo_sandbox_make_attempts,
+            make_retry_wait=timedelta(seconds=self.identity_demo_sandbox_make_retry_seconds),
             idle=timedelta(minutes=self.identity_demo_sandbox_idle_minutes),
             max_age=timedelta(hours=self.identity_demo_sandbox_max_hours),
             per_address_per_hour=self.identity_demo_sandbox_per_address_per_hour,
