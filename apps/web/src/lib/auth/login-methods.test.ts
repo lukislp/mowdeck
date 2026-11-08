@@ -22,7 +22,7 @@ describe('login methods', () => {
     expect([passkey, github, apple]).toEqual([true, false, true]);
     expect(fetchFn).toHaveBeenCalledOnce();
     expect(fetchFn).toHaveBeenCalledWith('/api/v1/identity/login-methods', {
-      credentials: 'omit',
+      credentials: 'same-origin',
     });
   });
 

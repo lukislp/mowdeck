@@ -26,7 +26,9 @@ describe('githubEnabled', () => {
   it('reads only the flag of the login methods and never rejects', async () => {
     const on = vi.fn(async () => json(200, { password: true, passkey: false, github: true }));
     expect(await githubEnabled(on)).toBe(true);
-    expect(on).toHaveBeenCalledWith('/api/v1/identity/login-methods', { credentials: 'omit' });
+    expect(on).toHaveBeenCalledWith('/api/v1/identity/login-methods', {
+      credentials: 'same-origin',
+    });
     expect(await githubEnabled(async () => json(200, { github: 'yes' }))).toBe(false);
     expect(await githubEnabled(async () => json(500))).toBe(false);
     expect(
