@@ -3,7 +3,7 @@
   "build": { "dockerfile": "Dockerfile" },
   "features": {
     "ghcr.io/devcontainers/features/node:2": { "version": "24.21.0" },
-    "ghcr.io/devcontainers/features/docker-in-docker:4": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:4": { "moby": false },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "hostRequirements": { "cpus": 4, "memory": "16gb", "storage": "64gb" },
