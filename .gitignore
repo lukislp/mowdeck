@@ -76,3 +76,6 @@ infra/helm/**/*.tgz
 blob-report/
 merged-report/
 all-blob-reports/
+
+# The Codespace's post-start output (.devcontainer/post-start.sh)
+.devcontainer/post-start.log
