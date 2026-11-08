@@ -50,4 +50,4 @@ Other workflows that only matter for some paths keep their own `paths` filter, b
 
 ## Releases from CI-only changes
 
-A pull request that only changes CI configuration releases nothing (details in [Releases](../ops/release.md#ci-only-changes)): Dependabot's GitHub Actions and ClusterFuzzLite bumps are `ci:` commits, `fix(ci):` is not a release type in `.github/lktec-bot.yml`, and the release workflow skips a release whose changes since the last tag are CI configuration only.
+A pull request that only changes CI configuration releases nothing (details in [Releases](../ops/release.md#ci-only-changes)): Dependabot's GitHub Actions, ClusterFuzzLite and dev container bumps are `ci:` commits, `fix(ci):` is not a release type in `.github/lktec-bot.yml`, and the release workflow skips a release whose changes since the last tag are CI configuration only.

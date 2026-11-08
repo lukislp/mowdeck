@@ -332,6 +332,8 @@ def test_dependabot_ci_bumps_are_ci_commits(repo_root: Path) -> None:
     }
     assert prefixes[("github-actions", "/")] == "ci"
     assert prefixes[("pip", "/.clusterfuzzlite")] == "ci"
+    assert prefixes[("devcontainers", "/")] == "ci"
+    assert prefixes[("docker", "/.devcontainer")] == "ci"
     # Runtime dependencies still release a patch.
     assert prefixes[("uv", "/")] == "fix(deps)"
     assert prefixes[("npm", "/")] == "fix(deps)"
