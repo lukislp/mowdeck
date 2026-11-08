@@ -7,6 +7,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "hostRequirements": { "cpus": 4, "memory": "16gb", "storage": "64gb" },
+  "containerEnv": { "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0" },
   "forwardPorts": [80, 8000],
   "portsAttributes": {
     "80": { "label": "MowDeck (Traefik)", "protocol": "http", "onAutoForward": "openBrowser" },
