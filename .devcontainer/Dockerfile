@@ -5,7 +5,7 @@
 # mcr.microsoft.com/devcontainers/python, pinned by digest like the stack's base images. Digest
 # only, because the Dev Container CLI does not parse "tag@digest"; bump by looking the tag up
 # again (`docker buildx imagetools inspect mcr.microsoft.com/devcontainers/python:1-3.13-bookworm`).
-FROM mcr.microsoft.com/devcontainers/python@sha256:0aa711e570b306c02946cdda67587ce8c65978dbb65691341cbcfd4854dfcfff
+FROM mcr.microsoft.com/devcontainers/python@sha256:eb39f07323784af4c7558396808ceb01dacbe6dd7c63614f34d0235d0344a0ff
 
 # The image ships the Yarn apt repository, whose signing key is no longer accepted
 # (NO_PUBKEY 62D54FD4003F6525), so every `apt-get update` fails and with it every Dev Container
