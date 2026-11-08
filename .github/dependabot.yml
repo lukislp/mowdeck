@@ -60,6 +60,35 @@ updates:
     reviewers:
       - "lukislp"
     open-pull-requests-limit: 5
+  # The Codespaces dev container (docs/adr/0080-codespaces-dev-container.md): the features in
+  # .devcontainer/devcontainer.json, pinned by .devcontainer/devcontainer-lock.json. All feature
+  # bumps share one PR. Dev tooling only, so ci: releases nothing.
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "ci"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 5
+    groups:
+      devcontainer-features:
+        patterns:
+          - "*"
+  # The base image of the dev container, pinned by digest in .devcontainer/Dockerfile (FROM
+  # mcr.microsoft.com/devcontainers/python@sha256:...). The Dockerfile is the only one
+  # Dependabot reads in this directory; the service Dockerfiles take their images from
+  # *_IMAGE variables (see "Container images" above).
+  - package-ecosystem: docker
+    directory: /.devcontainer
+    schedule:
+      interval: daily
+    commit-message:
+      prefix: "ci"
+    reviewers:
+      - "lukislp"
+    open-pull-requests-limit: 5
   # One uv workspace with a single uv.lock for every service, library and tool. From the root
   # Dependabot reads the root pyproject.toml and every workspace member's pyproject.toml (the
   # [tool.uv.workspace] members globs; they must not end in "/", which Dependabot's uv fetcher

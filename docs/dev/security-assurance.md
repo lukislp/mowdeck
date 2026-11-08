@@ -85,7 +85,7 @@ How the Saltzer and Schroeder principles show up in the code:
 | A03 Injection | SQLAlchemy with bound parameters, no string-built SQL. Svelte output encoding and a strict CSP. No shell execution with user input. ruff's bandit rules (`S`) and CodeQL on every pull request |
 | A04 Insecure design | ADRs for every architecture decision, this page, the mower safety rules, bounded inputs |
 | A05 Security misconfiguration | Hardening headers set by the web container and the service kit, hardened containers, the chart and the Compose files validated in CI, development keys refused in production |
-| A06 Vulnerable and outdated components | Dependabot (pip, uv, npm, GitHub Actions), dependency review, Socket, OSV-Scanner exceptions documented in `osv-scanner.toml`, OpenSSF Scorecard |
+| A06 Vulnerable and outdated components | Dependabot (pip, uv, npm, GitHub Actions, dev container), dependency review, Socket, OSV-Scanner exceptions documented in `osv-scanner.toml`, OpenSSF Scorecard |
 | A07 Identification and authentication failures | Argon2id, throttling, passkeys, rotating refresh tokens with reuse detection, 10 minute access tokens, new-login alerts |
 | A08 Software and data integrity failures | Locked dependencies (`uv.lock`, `pnpm-lock.yaml`), SHA-pinned actions, signed commits required on `main`, signed releases with provenance |
 | A09 Logging and monitoring failures | Structured logs, security events per user, metrics and traces (OpenTelemetry), health endpoints ([ADR 0077](../adr/0077-liveness-readiness-and-routing.md)) |

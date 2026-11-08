@@ -41,3 +41,4 @@ Options considered: Docker Compose through the repository's own services only (n
 - Nothing else depends on the public origin: the web app and the APIs use relative URLs and the Host header they receive, and no service has a setting for the forwarder's address beyond the ones above.
 - Verification of the forwarded flow (registration, login, WebSocket) can only be done in a real Codespace; the CI of this repository checks the files, not a Codespace.
 - Follow-up: if the forwarder turns out to send a reliable `X-Forwarded-For`, trusting it with `GATEWAY_CLIENT_IP_DEPTH=1` would give per-client throttling.
+- Dependabot keeps the dev container current (`.github/dependabot.yml`): the `devcontainers` ecosystem bumps the features in `devcontainer.json` and `devcontainer-lock.json` in one grouped pull request, the `docker` ecosystem on `/.devcontainer` bumps the digest of the base image in the `Dockerfile`. Both arrive as `ci:` commits and release nothing.
