@@ -13,7 +13,7 @@ import {
   FORM_FIELDS,
   MAX_URL_LENGTH,
   clip,
-  codespacesUrl,
+  codespacesSteps,
   environmentText,
   mowerText,
   parseUserAgent,
@@ -49,7 +49,7 @@ describe('environmentText', () => {
         'Platform: web, Chrome 142 on Windows',
         'Locale: de',
         'Demo: no',
-        'Reproduce in Codespaces: https://codespaces.new/lukislp/mowdeck?ref=v0.60.3&quickstart=1',
+        'Reproduce in Codespaces: https://codespaces.new/lukislp/mowdeck, then run: git checkout v0.60.3 && .devcontainer/post-start.sh',
       ].join('\n'),
     );
   });
@@ -63,7 +63,7 @@ describe('environmentText', () => {
   it('names the commit of a development build', () => {
     const source = { ...DEFAULT_SOURCE, ref: 'abc1234' };
     expect(versionText(source)).toBe('dev build (abc1234)');
-    expect(codespacesUrl(source)).toBeNull();
+    expect(codespacesSteps(source)).toBeNull();
   });
 
   it('names the app shells and the demo', () => {
@@ -80,9 +80,16 @@ describe('environmentText', () => {
   });
 
   it('offers no Codespace for a fork or a non-semver version', () => {
-    expect(codespacesUrl({ ...RELEASE, repository: 'https://example.org/fork' })).toBeNull();
-    expect(codespacesUrl({ ...RELEASE, version: 'nightly' })).toBeNull();
-    expect(codespacesUrl({ ...RELEASE, version: 'v1.2.3' })).toContain('ref=v1.2.3');
+    expect(codespacesSteps({ ...RELEASE, repository: 'https://example.org/fork' })).toBeNull();
+    expect(codespacesSteps({ ...RELEASE, version: 'nightly' })).toBeNull();
+  });
+
+  it('opens a plain Codespace and checks out the release afterwards', () => {
+    // codespaces.new ignores a ref query parameter and a Codespace always starts from a branch.
+    const steps = codespacesSteps({ ...RELEASE, version: 'v1.2.3' });
+    expect(steps?.url).toBe('https://codespaces.new/lukislp/mowdeck');
+    expect(steps?.url).not.toContain('?');
+    expect(steps?.commands).toBe('git checkout v1.2.3 && .devcontainer/post-start.sh');
   });
 
   it('keeps line breaks in values from adding lines', () => {
