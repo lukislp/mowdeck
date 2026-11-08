@@ -169,7 +169,9 @@ let pending: Promise<RuntimeConfig> | null = null;
 
 /** Fetch `/config.json` once per page load; never rejects. */
 export function loadConfig(fetchFn: typeof fetch = (input, init) => fetch(input, init)) {
-  pending ??= fetchFn('/config.json', { cache: 'no-cache', credentials: 'omit' })
+  // same-origin: behind a proxy that authenticates every request (a private Codespaces port) a
+  // request without its cookie is redirected, and the app ran on the default config.
+  pending ??= fetchFn('/config.json', { cache: 'no-cache', credentials: 'same-origin' })
     .then(async (response) => {
       if (!response.ok) return DEFAULT_CONFIG;
       const type = response.headers.get('content-type') ?? '';

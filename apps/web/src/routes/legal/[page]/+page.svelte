@@ -45,7 +45,7 @@
     try {
       const response = await fetch(`/legal/${which}.md`, {
         cache: 'no-cache',
-        credentials: 'omit',
+        credentials: 'same-origin',
       });
       const type = response.headers.get('content-type') ?? '';
       // A missing file in `vite dev` answers with the SPA fallback (HTML).
