@@ -71,13 +71,22 @@ export function versionText(source: SourceInfo): string {
   return source.ref ? `dev build (${source.ref})` : 'dev build';
 }
 
-/** The Codespaces link of the exact release; null without a release version. */
-export function codespacesUrl(source: SourceInfo): string | null {
+/**
+ * How to reproduce a release in a Codespace: the link of a new Codespace and the commands that
+ * switch it to the reported release. A Codespace always starts from a branch: GitHub takes a tag
+ * as `ref` but checks out the default branch, and codespaces.new ignores a `ref` query parameter
+ * and fails to provision with it. So the link opens the default branch and the release is checked
+ * out afterwards; `post-start.sh` then rebuilds the stack from that checkout. Null without a
+ * release version, and for a fork (its tags are not ours to open).
+ */
+export function codespacesSteps(source: SourceInfo): { url: string; commands: string } | null {
   const ref = releaseRef(source.version);
-  // Only for the official repository: a fork's tags are not ours to open in a Codespace.
   if (!ref || source.repository !== OFFICIAL_REPOSITORY) return null;
   const path = OFFICIAL_REPOSITORY.replace('https://github.com/', '');
-  return `https://codespaces.new/${path}?ref=${encodeURIComponent(ref)}&quickstart=1`;
+  return {
+    url: `https://codespaces.new/${path}`,
+    commands: `git checkout ${ref} && .devcontainer/post-start.sh`,
+  };
 }
 
 const PLATFORM_NAME: Record<ClientPlatform, string> = {
@@ -96,8 +105,10 @@ export function environmentText(input: ReportProblemInput): string {
     `Locale: ${oneLine(input.locale) || 'unknown'}`,
     `Demo: ${input.demo ? 'yes' : 'no'}`,
   ];
-  const codespaces = codespacesUrl(source);
-  if (codespaces) lines.push(`Reproduce in Codespaces: ${codespaces}`);
+  const codespaces = codespacesSteps(source);
+  if (codespaces) {
+    lines.push(`Reproduce in Codespaces: ${codespaces.url}, then run: ${codespaces.commands}`);
+  }
   return lines.map(oneLine).join('\n');
 }
 
