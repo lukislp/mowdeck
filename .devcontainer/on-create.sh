@@ -10,9 +10,8 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-# uv, at the version of the stack's images (UV_IMAGE in infra/compose/.env.example).
-uv_version="$(sed -n 's|^UV_IMAGE=.*/uv:\([0-9.]*\)@.*|\1|p' infra/compose/.env.example)"
-pip install --user --quiet "uv==${uv_version}"
+# uv is part of the image (.devcontainer/Dockerfile copies it from the pinned UV_IMAGE).
+uv --version
 
 # pnpm, at the version of package.json "packageManager" (Corepack reads it).
 sudo env "PATH=$PATH" corepack enable
