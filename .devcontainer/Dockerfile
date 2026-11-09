@@ -13,3 +13,8 @@ FROM mcr.microsoft.com/devcontainers/python@sha256:eb39f07323784af4c7558396808ce
 # Yarn: pnpm comes through Corepack (on-create.sh). Remove the source before the features run.
 RUN rm -f /etc/apt/sources.list.d/yarn.list /etc/apt/sources.list.d/yarn.sources \
     && rm -f /usr/share/keyrings/yarn-archive-keyring.gpg /etc/apt/trusted.gpg.d/yarn.gpg
+
+# uv, copied from the stack's uv image (UV_IMAGE of infra/compose/.env.example, pinned by digest;
+# tools/repo-checks/tests/test_devcontainer.py keeps them equal) - like .clusterfuzzlite/Dockerfile,
+# so no unpinned `pip install uv` is needed in on-create.sh.
+COPY --from=ghcr.io/astral-sh/uv:0.12.24@sha256:3af4716e991d6956a41e573eab705d0ee08500cd829ed30293eb8472f372c65a /uv /uvx /usr/local/bin/
