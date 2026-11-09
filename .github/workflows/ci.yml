@@ -848,7 +848,7 @@ jobs:
       # equal the @playwright/test version of tests/e2e-web; after a Dependabot bump of that
       # package set v<version>-noble and the "Digest" line of
       # `docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`.
-      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -1016,7 +1016,7 @@ jobs:
     needs: [changes, web, docker]
     timeout-minutes: 30
     env:
-      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
       COMPOSE_FILES: -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.e2e.yml -f infra/compose/docker-compose.demo.yml
     steps:
       - name: Harden the runner
