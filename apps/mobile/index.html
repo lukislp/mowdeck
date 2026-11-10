@@ -24,6 +24,7 @@
         <p class="overline">MowDeck · Server</p>
         <h1 data-t="title">Connect MowDeck</h1>
         <p class="lead" data-t="lead"></p>
+        <p class="lead" data-t="explain"></p>
         <form id="connect" novalidate>
           <label class="field">
             <span class="label" data-t="label">Server address</span>
@@ -48,8 +49,36 @@
             <button id="anyway" class="secondary" type="button" data-t="useAnyway" hidden>
               Use anyway
             </button>
+            <button
+              id="demo"
+              class="secondary"
+              type="button"
+              data-t="tryDemo"
+              aria-describedby="demo-note"
+            >
+              Try the demo
+            </button>
           </div>
+          <p id="demo-note" class="hint" data-t="demoNote"></p>
         </form>
+        <nav class="links" data-t-label="moreInfo">
+          <a
+            id="about"
+            href="https://github.com/lukislp/mowdeck"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-t="about"
+            >What is MowDeck?</a
+          >
+          <a
+            id="privacy"
+            href="https://github.com/lukislp/mowdeck/blob/main/docs/ops/mobile-apps.md#privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-t="privacy"
+            >Privacy</a
+          >
+        </nav>
       </section>
     </main>
     <script type="module" src="./src/launcher.ts"></script>

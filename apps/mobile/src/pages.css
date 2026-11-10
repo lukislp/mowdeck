@@ -138,6 +138,27 @@ input[aria-invalid='true'] {
   background: var(--md-state-paused-bg);
 }
 
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--md-space-2) var(--md-space-6);
+}
+
+.links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--md-target);
+  color: var(--md-color-ink);
+  font-size: var(--md-font-size-14);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.links a:focus-visible {
+  outline: 2px solid var(--md-color-focus);
+  outline-offset: 2px;
+}
+
 .server code {
   font-family: var(--md-font-mono);
   font-size: var(--md-font-size-14);
