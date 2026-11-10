@@ -6,7 +6,9 @@
   the user holds `billing.manage`): the plans on sale with their price, an Upgrade per plan while
   the account has no running subscription (Stripe Checkout), Manage subscription (the customer
   portal) once the account is a customer, the subscription's status and the invoices with links
-  to the provider's pages.
+  to the provider's pages. Inside the native app shells (`purchasable` false, App Store guideline
+  3.1.1) the plan and the subscription's state stay, but nothing leads to the provider: no plans
+  with prices, no Upgrade, no portal, no invoice links, only a sentence without a link.
 -->
 <script lang="ts">
   import { Button, Icon, ProblemNotice } from '@mowdeck/ui';
@@ -32,6 +34,8 @@
     status: BillingStatus;
     /** Key of the plan that applies now (`accountPlan.current?.plan`). */
     currentPlan: string | null;
+    /** `canPurchaseHere(...)`: false inside the native app shells. */
+    purchasable: boolean;
     account?: BillingAccount;
     /** Sends the browser to the provider (tests replace it). */
     redirect?: (url: string) => void;
@@ -39,6 +43,7 @@
   let {
     status,
     currentPlan,
+    purchasable,
     account = new BillingAccount(),
     redirect = (url) => window.location.assign(url),
   }: Props = $props();
@@ -121,7 +126,9 @@
     <p class="muted" role="status"><SlowLoading /></p>
   {/if}
 
-  {#if status.plans.length}
+  {#if !purchasable}
+    <p class="fine" data-testid="billing-managed-on-web">{m.billing_managed_on_web()}</p>
+  {:else if status.plans.length}
     <section aria-labelledby="billing-plans-head">
       <h4 id="billing-plans-head">{m.billing_plans()}</h4>
       <ul class="offers">
@@ -160,7 +167,7 @@
     </section>
   {/if}
 
-  {#if summary?.has_customer}
+  {#if purchasable && summary?.has_customer}
     <div class="portal">
       <Button
         icon="link"
@@ -197,8 +204,8 @@
       {:else}
         <ul class="invoices">
           {#each account.invoices as invoice, index (invoiceKey(invoice.number, invoice.issued_at, index))}
-            {@const hosted = safeExternalUrl(invoice.hosted_url)}
-            {@const pdf = safeExternalUrl(invoice.pdf_url)}
+            {@const hosted = purchasable ? safeExternalUrl(invoice.hosted_url) : null}
+            {@const pdf = purchasable ? safeExternalUrl(invoice.pdf_url) : null}
             <li class="invoice" data-status={invoice.status}>
               <span class="number">{invoice.number ?? m.billing_invoice_no_number()}</span>
               <span class="date">{formatDate(invoice.issued_at)}</span>

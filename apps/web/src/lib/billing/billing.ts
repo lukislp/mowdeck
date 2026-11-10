@@ -75,6 +75,17 @@ export function resetBillingProbe(): void {
   pending = null;
 }
 
+/**
+ * Whether a purchase or the management of a subscription may start from this client. Inside the
+ * iOS and Android app shells it may not (App Store guideline 3.1.1: no external payment for
+ * digital goods, no call to action pointing to one): the plan and its state stay visible, every
+ * action that leads to the payment provider is absent. The one place that decides it; the
+ * billing panel and every other entry to the provider ask this.
+ */
+export function canPurchaseHere(nativeShellActive: boolean): boolean {
+  return !nativeShellActive;
+}
+
 /** The subscription still runs (or is being set up): checkout is closed, the portal is the way. */
 export function hasOpenSubscription(subscription: Subscription | null | undefined): boolean {
   return !!subscription && !CLOSED.includes(subscription.status);

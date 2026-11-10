@@ -96,7 +96,7 @@ bash apps/mobile/scripts/sign-and-install.sh # signature check + devicectl insta
 ### First start on the iPhone
 
 1. If iOS says "Untrusted Developer": Settings → General → VPN & Device Management → your developer certificate → Trust. (With a paid team and a development profile this usually is not needed; it is needed once per team on a new phone.)
-2. The app asks for the **server address**, for example `mowdeck.home.lan` or `https://mowdeck.example.org`. It checks that a MowDeck server answers there (`/manifest.webmanifest`); "Use anyway" skips the check.
+2. The app asks for the **server address**, for example `mowdeck.home.lan` or `https://mowdeck.example.org`. It checks that a MowDeck server answers there (`/manifest.webmanifest`); "Use anyway" skips the check. Without a server of your own, "Try the demo" on the same screen connects to the [public demo](../adr/0068-public-demo-mode.md) (`https://mowdeck-demo.lktec.org`) through the same address check and the same error display; the screen also says in two sentences what the app needs and links to the project page and to [Privacy](#privacy). The demo address is the constant `DEMO_SERVER_URL` in `apps/mobile/src/demo-server.ts`. The "Server not reachable" page has no demo action. It needs an app build with this change.
 3. Log in as in the browser. The app asks once for permission to send notifications; allow it.
 4. To switch servers later: "Change server" on the sign-in and registration pages (under the form), or Settings → Notifications → "Server" when signed in. Both ask for confirmation, then sign out of the old server (push token, widget credential, session; best effort, an unreachable server does not block it) and return to the first-launch screen. The public demo does not lock it. If the server is unreachable at start, the app shows "Server not reachable" with "Try again" and "Choose another server".
 5. The language: the web app has a German/English switch in the footer of the sign-in and registration pages and under Settings → Account. The two bundled pages (first-launch and "Server not reachable") have their own German/English toggle that remembers the choice on the device and otherwise follows the system language; it needs an app build with this change, everything else arrives with a server update.
@@ -253,6 +253,14 @@ Without a keystore the APK is debug-signed. Release signing:
 2. Locally: `MOWDECK_ANDROID_KEYSTORE=mowdeck-release.jks MOWDECK_ANDROID_KEYSTORE_PASSWORD=... MOWDECK_ANDROID_KEY_ALIAS=mowdeck bash apps/mobile/scripts/build-android.sh`.
 3. For the release workflow, add repository secrets: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 mowdeck-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, optionally `ANDROID_KEY_PASSWORD` (defaults to the keystore password). The job `android` of `release.yml` builds the APK on ubuntu for every release ([Releases](release.md)) and the release attaches it, with its checksum, Sigstore bundle and build provenance; without the secret the job only warns and the release has no APK. Pull requests never build the native apps (minute budget); the CI job `web` runs the mobile package's lint, `tsc` check and tests, and the CI job `python` the TestFlight readiness checks of the iOS project (`tools/repo-checks/tests/test_ios_release.py`).
 
+## App Review
+
+For an App Store review (guideline 2.1: the reviewer must be able to use the app) the path is: first launch -> **Try the demo** -> the demo's "Try the demo" sign-in, which gives every visitor an own sandbox account with simulated mowers ([ADR 0076](../adr/0076-demo-sandboxes.md)). No account, server or mower is needed. State that in the review notes. What the demo cannot show, because [ADR 0068](../adr/0068-public-demo-mode.md) switches it off there: push notifications (no APNs devices, no ntfy), the widgets, the Live Activity and the Apple Watch app (they need a widget credential or a push channel). The demo is reset regularly and may answer `503 demo-full` when its sandbox pool is busy; "Try again" later. See [ADR 0036](../adr/0036-native-app-shells-with-capacitor.md) for the shell itself.
+
+## Privacy
+
+The app has no analytics, advertising or tracking SDK and talks only to the MowDeck server the user entered, plus the system services of the notification channel (APNs on the iPhone). This holds for the App Privacy answer in App Store Connect with one exception: **"Try the demo" connects the app to the public demo, which the developer operates** (`https://mowdeck-demo.lktec.org`). It is the only case where the app talks to a developer-operated server, and only after the user taps the button; the demo holds simulated data and sandbox accounts that are deleted after 30 minutes without a visit. The first-launch screen links the project page (`https://github.com/lukislp/mowdeck`) and this section. A separate privacy policy page of the developer, as App Store Connect asks for (a "Privacy Policy URL"), does not exist yet; until it does, this section is what the screen links to.
+
 ## Privacy manifests and the App Privacy answer
 
 App Store Connect rejects an upload whose code uses a "required reason" API without a privacy manifest (ITMS-91053). Every bundle with an executable needs its own `PrivacyInfo.xcprivacy`; the manifest of the app does not cover an extension or the watch app ([Describing use of required reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)). MowDeck ships four, each declaring the same single category:
@@ -272,7 +280,7 @@ All manifests say `NSPrivacyTracking` false, no tracking domains and no collecte
 
 **App Privacy answer in App Store Connect: "Data Not Collected"** for the app as distributed from this repository, because nothing is sent to the developer. Two caveats keep that true only while they hold:
 
-- The developer-operated demo (`mowdeck-demo.lktec.org`): a user who signs in there sends their sign-in and usage to a server the developer runs. While the demo is only a server a user chooses to enter, the answer stays "Data Not Collected"; if the app ever points at it by default, or offers a demo login in the store build, review the answer again (collected data is then linked to a developer-run service).
+- The developer-operated demo (`mowdeck-demo.lktec.org`): a user who signs in there sends their sign-in and usage to a server the developer runs. The first-launch screen offers it as "Try the demo" (see [Privacy](#privacy)), so review the answer before a store submission: the sandbox accounts are anonymous and deleted after 30 minutes without a visit and the data is simulated, but what the demo server itself records (for example access logs) counts as a developer-run service.
 - A push relay operated by the developer (for example to deliver APNs pushes for hosted installs without each owner holding an Apple key) would receive device tokens and notification content. That changes the answer (Device ID, possibly Other User Content, for App Functionality) and the manifest's `NSPrivacyCollectedDataTypes`, and needs an ADR.
 
 ## Icons and splash screens
@@ -304,6 +312,10 @@ On Windows `@capacitor/assets` can fail with `EBUSY` on `mipmap-anydpi-v26/ic_la
 | "Mit Passkey anmelden" missing in the app | The build is older than the passkey hand-off (`MowDeckShell.openAuthSession`): install a current build. Or passkeys are off on the server ([Passkeys](passkeys.md)). |
 | The browser opens for the passkey but the app does not take over | Tap "App öffnen" on the page; if more than a minute passed, sign in again from the app. |
 | Android: nothing in the background | Expected without ntfy; set up ntfy. Some vendors also kill background apps aggressively ([dontkillmyapp.com](https://dontkillmyapp.com)). |
+
+## App Store notes: payment
+
+App Store guideline 3.1.1 forbids sending users from the app to an external payment for digital goods, and a call to action pointing to one. On a server with billing enabled, the web app therefore shows the plan inside the iOS and Android app shells (name, state, renewal or end date), but no plans with prices, no Upgrade or Subscribe, no customer portal and no invoice links to the provider's pages: one sentence says that the plan is managed in the web app in a browser, without a link. The decision is `canPurchaseHere` in `apps/web/src/lib/billing/billing.ts` (false when `nativeShell.active`). A browser, including the PWA, keeps the full billing panel. Billing is off by default and in the demo, so most installations show no billing element in either case.
 
 ## What has been verified where
 
