@@ -1,0 +1,82 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Lukas Körber -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MowDeck</title>
+  </head>
+  <body>
+    <main class="page">
+      <header class="band" aria-hidden="true">
+        <svg class="mark" viewBox="0 0 100 100" focusable="false">
+          <polygon points="50,22 78,76 50,62 22,76" />
+        </svg>
+      </header>
+      <section class="panel">
+        <div class="language" role="group" data-t-label="language">
+          <button type="button" data-language="de" aria-pressed="false">Deutsch</button>
+          <button type="button" data-language="en" aria-pressed="false">English</button>
+        </div>
+        <p class="overline">MowDeck · App</p>
+        <h1 data-t="aboutTitle">About the app</h1>
+
+        <dl class="facts">
+          <div>
+            <dt class="label" data-t="aboutVersion">Version</dt>
+            <dd id="version"></dd>
+          </div>
+          <div>
+            <dt class="label" data-t="aboutBuild">Build</dt>
+            <dd id="build"></dd>
+          </div>
+        </dl>
+
+        <section class="block" aria-labelledby="licence-title">
+          <h2 id="licence-title" class="label" data-t="aboutLicenceTitle">Licence</h2>
+          <p class="lead">
+            <a
+              id="licence"
+              href="https://www.gnu.org/licenses/agpl-3.0.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GNU AGPL-3.0</a
+            >
+          </p>
+          <p class="lead" data-t="aboutLicence"></p>
+        </section>
+
+        <section class="block" aria-labelledby="source-title">
+          <h2 id="source-title" class="label" data-t="aboutSourceTitle">Source code</h2>
+          <p id="source-lead" class="lead"></p>
+          <p class="lead">
+            <a
+              id="source"
+              class="source-link"
+              href="https://github.com/lukislp/mowdeck"
+              target="_blank"
+              rel="noopener noreferrer"
+              >github.com/lukislp/mowdeck</a
+            >
+          </p>
+        </section>
+
+        <p class="lead" data-t="aboutAffiliation"></p>
+
+        <section class="block" aria-labelledby="notices-title">
+          <h2 id="notices-title" class="label" data-t="aboutNoticesTitle">Third-party software</h2>
+          <p class="lead" data-t="aboutNoticesLead"></p>
+          <div id="notices" aria-live="polite"></div>
+        </section>
+
+        <div class="actions">
+          <button id="back" class="secondary" type="button" data-t="back">Back</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./src/about.ts"></script>
+  </body>
+</html>

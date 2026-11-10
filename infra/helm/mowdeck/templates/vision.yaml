@@ -6,13 +6,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 context to a vision model (any family through LiteLLM), drives approved maneuvers through
 fleet.drive.* (Compose services vision and vision-migrate). The users' provider keys are
 encrypted with secrets.VISION_SECRETS_KEY; config.VISION_DEFAULT_* offers the installation's
-model (off by default), its key is secrets.VISION_DEFAULT_API_KEY. Automatic analyses on errors
+model (off by default; VISION_DEFAULT_LOCAL says it runs on the operator's own hardware, ADR 0081),
+its key is secrets.VISION_DEFAULT_API_KEY. Automatic analyses on errors
 (ADR 0035): config.VISION_AUTO_*. */ -}}
 {{- $c := .Values.config }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
   "MOWDECK_VISION_DEFAULT_ENABLED" (toString $c.VISION_DEFAULT_ENABLED)
   "MOWDECK_VISION_DEFAULT_MODEL" $c.VISION_DEFAULT_MODEL
   "MOWDECK_VISION_DEFAULT_API_BASE" $c.VISION_DEFAULT_API_BASE
+  "MOWDECK_VISION_DEFAULT_LOCAL" (toString $c.VISION_DEFAULT_LOCAL)
   "MOWDECK_VISION_ALLOW_FAKE_PROVIDER" (toString $c.VISION_ALLOW_FAKE_PROVIDER)
   "MOWDECK_VISION_USER_API_BASE_POLICY" $c.VISION_USER_API_BASE_POLICY
   "MOWDECK_VISION_PROPOSAL_TTL_SECONDS" (toString $c.VISION_PROPOSAL_TTL_SECONDS)

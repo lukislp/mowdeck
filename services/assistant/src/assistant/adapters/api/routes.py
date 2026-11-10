@@ -39,6 +39,7 @@ async def assistant_status(caller: CallerDep, service: ServiceDep) -> StatusOut:
     "/mowers/{mower_id}/proposals",
     responses={
         404: {"description": "The mower does not exist or the caller cannot see it."},
+        403: {"description": "`assistant-consent-required`: no consent to a cloud AI."},
         409: {"description": "`assistant-provider-missing`: no AI provider configured."},
         422: {"description": "Empty or too long text, or an unknown time zone."},
         429: {"description": "`assistant-limit`: the caller's or the provider's limit."},

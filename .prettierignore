@@ -24,6 +24,7 @@ apps/web/screenshots
 apps/mobile/ios
 apps/mobile/android
 apps/mobile/www
+apps/mobile/public/third-party-notices.json
 apps/mobile/resources
 libs/mowdeck-contracts
 services

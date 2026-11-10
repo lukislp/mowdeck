@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib.util
+import json
 import plistlib
 import re
 import shutil
@@ -27,6 +28,9 @@ from typing import Any
 import pytest
 import yaml
 
+NOTICES = (
+    Path(__file__).resolve().parents[3] / "apps" / "mobile" / "public" / "third-party-notices.json"
+)
 TEAM = "ABCDE12345"
 BUNDLE = "app.mowdeck.mobile"
 FUTURE = dt.datetime(2099, 1, 1)
@@ -251,6 +255,77 @@ def test_project_file_integrity(check: ModuleType, repo_root: Path) -> None:
     assert any("defined twice" in p for p in check.check_project_integrity(twice))
 
 
+PBXPROJ = "apps/mobile/ios/App/App.xcodeproj/project.pbxproj"
+OTHER = '"NSLocalNetworkUsageDescription" = "Something else.";\n'
+
+
+def _localisation(repo_root: Path, tmp_path: Path) -> tuple[Path, dict[str, Any], str]:
+    """A copy of the app folder's InfoPlist.strings files, the Info.plist and the project."""
+    ios = repo_root / "apps/mobile/ios/App/App"
+    app = tmp_path / "App"
+    for language in ("en", "de"):
+        (app / f"{language}.lproj").mkdir(parents=True)
+        shutil.copy(ios / f"{language}.lproj/InfoPlist.strings", app / f"{language}.lproj")
+    info = plistlib.loads((ios / "Info.plist").read_bytes())
+    return app, info, (repo_root / PBXPROJ).read_text("utf-8")
+
+
+def test_local_network_prompt_is_localised(check: ModuleType, repo_root: Path) -> None:
+    ios = repo_root / "apps/mobile/ios/App/App"
+    info = plistlib.loads((ios / "Info.plist").read_bytes())
+    pbxproj = (repo_root / PBXPROJ).read_text("utf-8")
+    assert check.check_localised_info(info, ios, pbxproj) == []
+    de = check.parse_strings((ios / "de.lproj/InfoPlist.strings").read_text("utf-8"))
+    en = check.parse_strings((ios / "en.lproj/InfoPlist.strings").read_text("utf-8"))
+    assert en["NSLocalNetworkUsageDescription"] == info["NSLocalNetworkUsageDescription"]
+    assert "MowDeck-Server" in de["NSLocalNetworkUsageDescription"]
+    assert "lokalen Netzwerk" in de["NSLocalNetworkUsageDescription"]
+
+
+def test_info_plist_strings_are_a_variant_group_of_the_app_target(
+    check: ModuleType, repo_root: Path
+) -> None:
+    pbxproj = (repo_root / PBXPROJ).read_text("utf-8")
+    objects = check._objects(pbxproj)
+    group = next(b for b in objects.values() if "name = InfoPlist.strings;" in b)
+    assert "isa = PBXVariantGroup;" in group
+    children = re.findall(r"[0-9A-F]{24} /\* (\w+) \*/", group)
+    assert children == ["en", "de"]
+    # the variant group is a child of the App group and a resource of the app target only
+    resources = [b for b in objects.values() if "InfoPlist.strings in Resources" in b]
+    assert len([b for b in resources if "isa = PBXResourcesBuildPhase;" in b]) == 1
+    # the build file itself and its entry in the phase: one target, never the extensions
+    assert pbxproj.count("InfoPlist.strings in Resources") == 2
+
+
+def test_localised_info_problems(check: ModuleType, repo_root: Path, tmp_path: Path) -> None:
+    app, info, pbxproj = _localisation(repo_root, tmp_path)
+    (app / "de.lproj" / "InfoPlist.strings").unlink()
+    assert "App/de.lproj/InfoPlist.strings is missing" in check.check_localised_info(
+        info, app, pbxproj
+    )
+    shutil.copy(repo_root / "apps/mobile/ios/App/App/de.lproj/InfoPlist.strings", app / "de.lproj")
+    (app / "en.lproj" / "InfoPlist.strings").write_text(OTHER, "utf-8")
+    problems = check.check_localised_info(info, app, pbxproj)
+    assert any("differs from the default in Info.plist" in p for p in problems)
+    (app / "de.lproj" / "InfoPlist.strings").write_text(OTHER, "utf-8")
+    assert any("not translated" in p for p in check.check_localised_info(info, app, pbxproj))
+    (app / "de.lproj" / "InfoPlist.strings").write_text("/* empty */\n", "utf-8")
+    assert any(
+        "has no NSLocalNetworkUsageDescription" in p
+        for p in check.check_localised_info(info, app, pbxproj)
+    )
+    unwired = pbxproj.replace("path = de.lproj/InfoPlist.strings;", "path = x;")
+    assert any("not referenced" in p for p in check.check_localised_info(info, app, unwired))
+    unwired = pbxproj.replace("InfoPlist.strings in Resources", "X in Resources")
+    assert any("not a resource" in p for p in check.check_localised_info(info, app, unwired))
+
+
+def test_strings_parser(check: ModuleType) -> None:
+    text = '/* c */\n"a" = "x \\"q\\" y";\n// not a comment line\n"b" = "2";\n'
+    assert check.parse_strings(text) == {"a": 'x "q" y', "b": "2"}
+
+
 def test_project_files_resolve_through_the_groups(check: ModuleType, repo_root: Path) -> None:
     # PR #172 pointed the MowDeckWidgets group and its settings into App/, where nothing is.
     pbxproj = (repo_root / "apps/mobile/ios/App/App.xcodeproj/project.pbxproj").read_text("utf-8")
@@ -352,6 +427,8 @@ def _built_app(tmp_path: Path, **info: Any) -> Path:
     app = tmp_path / "App.app"
     (app / "public").mkdir(parents=True)
     (app / "public" / "index.html").write_text("<html></html>", "utf-8")
+    (app / "public" / "about.html").write_text("<html></html>", "utf-8")
+    (app / "public" / "third-party-notices.json").write_bytes(NOTICES.read_bytes())
     (app / "Assets.car").write_bytes(b"car")
     plist = {
         "CFBundleIdentifier": BUNDLE,
@@ -470,6 +547,52 @@ def test_built_app_needs_the_watch_app(check: ModuleType, tmp_path: Path) -> Non
     app = _built_app(tmp_path / "again")
     with pytest.raises(check.CheckError, match=r"MowDeckWatch\.app: CFBundleVersion"):
         check.check_app(app, "0.3.12", "999")
+
+
+def test_built_app_needs_the_about_page_and_the_notices(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    (app / "public" / "about.html").unlink()
+    with pytest.raises(check.CheckError, match=r"About page is missing"):
+        check.check_app(app, "0.3.12", "312")
+    app = _built_app(tmp_path / "again")
+    (app / "public" / "third-party-notices.json").unlink()
+    with pytest.raises(check.CheckError, match="third-party notices are missing"):
+        check.check_app(app, "0.3.12", "312")
+
+
+@pytest.mark.parametrize(
+    ("content", "fragment"),
+    [
+        ("not json", "is not a notices file"),
+        ('{"licences": [{"text": "MIT", "packages": []}]}', "lists no packages"),
+        ('{"licences": [{"text": " ", "packages": [{"copyright": ["c"]}]}]}', "lists no packages"),
+        (
+            '{"licences": [{"text": "MIT", "packages": [{"name": "x", "copyright": []}]}]}',
+            "without a copyright notice",
+        ),
+    ],
+)
+def test_built_notices_must_be_a_real_notices_file(
+    check: ModuleType, tmp_path: Path, content: str, fragment: str
+) -> None:
+    app = _built_app(tmp_path)
+    (app / "public" / "third-party-notices.json").write_text(content, "utf-8")
+    with pytest.raises(check.CheckError, match=fragment):
+        check.check_app(app, "0.3.12", "312", notices=tmp_path / "none.json")
+
+
+def test_built_notices_must_be_the_committed_file(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    committed = json.loads(NOTICES.read_text("utf-8"))
+    committed["licences"][0]["text"] += " changed"
+    (app / "public" / "third-party-notices.json").write_text(json.dumps(committed), "utf-8")
+    with pytest.raises(check.CheckError, match="did not bundle the committed file"):
+        check.check_app(app, "0.3.12", "312")
+
+
+def test_the_committed_notices_file_is_what_the_bundle_check_expects(check: ModuleType) -> None:
+    assert check.NOTICES == NOTICES
+    assert NOTICES.is_file()
 
 
 def test_built_app_reports_what_it_found(check: ModuleType, tmp_path: Path) -> None:

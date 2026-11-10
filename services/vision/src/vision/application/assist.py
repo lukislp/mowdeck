@@ -105,6 +105,7 @@ from vision.application.providers import ProviderService
 from vision.domain.context import Motion, PreviousRound, SceneContext, build_context, pose_of
 from vision.domain.errors import (
     ConflictError,
+    ConsentRequired,
     InvalidInput,
     NotFoundError,
     PhotoUnavailable,
@@ -842,6 +843,20 @@ class VisionService:
         context: SceneContext,
     ) -> None:
         started = time.monotonic()
+        try:
+            # The last moment before anything is sent: a consent withdrawn while the photo was
+            # taken or the light switched on stops the analysis (ADR 0081).
+            requester = Principal(
+                subject=proposal.requested_by.subject,
+                account_id=proposal.account_id,
+                kind=proposal.requested_by.kind,
+            )
+            await self.providers.recheck_consent(requester, provider)
+        except ConsentRequired:
+            await self._analysis_failed(
+                proposal, provider, "consent to the AI provider was withdrawn", started
+            )
+            return
         try:
             assessment = await self.factory.create(provider).analyse(images, context, proposal.task)
         except ProviderFailed as exc:

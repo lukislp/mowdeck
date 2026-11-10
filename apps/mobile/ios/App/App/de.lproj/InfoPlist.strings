@@ -1,0 +1,7 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Lukas Körber
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* Shown by iOS when the app first reaches a device in the local network (the MowDeck server). */
+"NSLocalNetworkUsageDescription" = "MowDeck verbindet sich mit dem MowDeck-Server, dessen Adresse du eingegeben hast, wenn er in deinem lokalen Netzwerk steht (zum Beispiel mowdeck.home.lan), um deine Mähroboter anzuzeigen und zu steuern.";
