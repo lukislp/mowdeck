@@ -328,6 +328,26 @@ def test_widget_entitlements_share_the_groups(check: ModuleType, repo_root: Path
     assert len(check.check_widget_entitlements(app, widgets)) == 2
 
 
+UD = "NSPrivacyAccessedAPICategoryUserDefaults"
+
+
+def _manifest(categories: dict[str, list[str]] | None = None, **overrides: Any) -> dict[str, Any]:
+    """A privacy manifest as the repository ships them: user defaults for the app's own state
+    (CA92.1) and the App Group (1C8F.1), no tracking, nothing collected."""
+    categories = {UD: ["CA92.1", "1C8F.1"]} if categories is None else categories
+    manifest: dict[str, Any] = {
+        "NSPrivacyTracking": False,
+        "NSPrivacyTrackingDomains": [],
+        "NSPrivacyCollectedDataTypes": [],
+        "NSPrivacyAccessedAPITypes": [
+            {"NSPrivacyAccessedAPIType": name, "NSPrivacyAccessedAPITypeReasons": reasons}
+            for name, reasons in categories.items()
+        ],
+    }
+    manifest.update(overrides)
+    return manifest
+
+
 def _built_app(tmp_path: Path, **info: Any) -> Path:
     app = tmp_path / "App.app"
     (app / "public").mkdir(parents=True)
@@ -396,6 +416,8 @@ def _built_app(tmp_path: Path, **info: Any) -> Path:
             fmt=plistlib.FMT_BINARY,
         )
     )
+    for bundle in (app, widgets, watch, complication):
+        (bundle / "PrivacyInfo.xcprivacy").write_bytes(plistlib.dumps(_manifest()))
     return app
 
 
@@ -471,6 +493,155 @@ def test_built_app_problems(check: ModuleType, tmp_path: Path) -> None:
     assert "ITMS-90713" in text
     assert "camera.js mentions Agora" in text
     assert "AgoraRtcKit.framework: Agora files" in text
+
+
+# --- privacy manifests (ITMS-91053) ------------------------------------------------------------
+
+
+def _ios_tree(tmp_path: Path, check: ModuleType, uses: dict[str, str]) -> Path:
+    """The target folders with one Swift file each: ``uses`` maps a target name to the source
+    line of its file (no entry: a target that uses no required-reason API)."""
+    for target in check.TARGETS:
+        for source in (target.folder, *target.sources):
+            (tmp_path / source).mkdir(parents=True, exist_ok=True)
+        (tmp_path / target.sources[0] / "File.swift").write_text(
+            uses.get(target.name, "") + "\n", "utf-8"
+        )
+    return tmp_path
+
+
+def test_repository_manifests_declare_what_the_sources_use(
+    check: ModuleType, repo_root: Path
+) -> None:
+    ios = repo_root / "apps" / "mobile" / "ios"
+    assert check.check_privacy_manifests(ios) == []
+    # The inventory behind the manifests: user defaults in the app and in the shared package,
+    # nothing else, and the notification extension uses no required-reason API.
+    app = check.used_required_reason_apis([ios / "App" / "App", ios / "MowerWidgetKit" / "Sources"])
+    assert set(app) == {UD}
+    assert {"MainViewController.swift", "SharedState.swift", "WatchLink.swift"} <= set(app[UD])
+    extension = check.used_required_reason_apis(
+        [ios / "App" / "NotificationService", ios / "NotificationServiceKit" / "Sources"]
+    )
+    assert extension == {}
+    assert not (ios / "App" / "NotificationService" / "PrivacyInfo.xcprivacy").exists()
+
+
+def test_every_manifest_is_in_the_project(check: ModuleType, repo_root: Path) -> None:
+    pbxproj = (repo_root / "apps/mobile/ios/App/App.xcodeproj/project.pbxproj").read_text("utf-8")
+    objects = check._objects(pbxproj)
+    refs = {oid for oid, body in objects.items() if "path = PrivacyInfo.xcprivacy;" in body}
+    files = {
+        oid
+        for oid, body in objects.items()
+        if "isa = PBXBuildFile;" in body and any(ref in body for ref in refs)
+    }
+    phases = [b for b in objects.values() if "isa = PBXResourcesBuildPhase;" in b]
+    groups = [b for b in objects.values() if "isa = PBXGroup;" in b]
+    assert len(refs) == 4
+    # One build file per manifest, each in a Resources phase and each in a group (the notification
+    # extension has neither: it uses no required-reason API).
+    assert len(files) == 4
+    assert sum(any(f in b for f in files) for b in phases) == 4
+    assert sum(any(r in b for r in refs) for b in groups) == 4
+
+
+def test_used_apis_are_found_by_category(check: ModuleType, tmp_path: Path) -> None:
+    (tmp_path / "A.swift").write_text(
+        "// UserDefaults in a comment\nlet t = ProcessInfo.processInfo.systemUptime\n"
+        "let v = try url.resourceValues(forKeys: [.volumeAvailableCapacityKey])\n"
+        "let d = attrs[.modificationDate]\nlet k = mode.activeInputModes\n",
+        "utf-8",
+    )
+    found = check.used_required_reason_apis([tmp_path])
+    assert set(found) == {
+        "NSPrivacyAccessedAPICategorySystemBootTime",
+        "NSPrivacyAccessedAPICategoryDiskSpace",
+        "NSPrivacyAccessedAPICategoryFileTimestamp",
+        "NSPrivacyAccessedAPICategoryActiveKeyboards",
+    }
+
+
+def test_manifest_accepts_the_declared_use(check: ModuleType) -> None:
+    assert check.check_privacy_manifest(_manifest(), [UD], "X") == []
+
+
+@pytest.mark.parametrize(
+    ("manifest", "fragment"),
+    [
+        (_manifest(NSPrivacyTracking=True), "NSPrivacyTracking must be false"),
+        (_manifest(NSPrivacyTrackingDomains=["t.example"]), "NSPrivacyTrackingDomains"),
+        (
+            _manifest(NSPrivacyCollectedDataTypes=[{"NSPrivacyCollectedDataType": "x"}]),
+            "NSPrivacyCollectedDataTypes",
+        ),
+        (_manifest({}), "uses NSPrivacyAccessedAPICategoryUserDefaults but does not declare"),
+        (_manifest({UD: []}), "needs approved reason codes"),
+        (_manifest({UD: ["CA92.1", "ZZZZ.9"]}), r"not approved: \['ZZZZ.9'\]"),
+        (_manifest({UD: ["DDA9.1"]}), "needs approved reason codes"),
+        (
+            _manifest({UD: ["CA92.1"], "NSPrivacyAccessedAPICategoryDiskSpace": ["E174.1"]}),
+            "declares NSPrivacyAccessedAPICategoryDiskSpace but no source uses it",
+        ),
+        (_manifest({"NSPrivacyAccessedAPICategoryOther": ["X"]}), "not a required-reason"),
+    ],
+)
+def test_manifest_problems(check: ModuleType, manifest: dict[str, Any], fragment: str) -> None:
+    problems = check.check_privacy_manifest(manifest, [UD], "X")
+    assert any(re.search(fragment, problem) for problem in problems), problems
+
+
+def test_missing_manifest_of_a_target_that_uses_an_api(check: ModuleType, tmp_path: Path) -> None:
+    ios = _ios_tree(tmp_path, check, {"MowDeckWidgets": "let d = UserDefaults.standard"})
+    problems = check.check_privacy_manifests(ios)
+    assert len(problems) == 1
+    assert "MowDeckWidgets: uses" in problems[0]
+    assert "ITMS-91053" in problems[0]
+    (ios / "MowDeckWidgets" / "PrivacyInfo.xcprivacy").write_bytes(plistlib.dumps(_manifest()))
+    assert check.check_privacy_manifests(ios) == []
+
+
+def test_new_api_in_a_target_must_be_declared(check: ModuleType, tmp_path: Path) -> None:
+    ios = _ios_tree(tmp_path, check, {"MowDeckWatch": "let u = ProcessInfo().systemUptime"})
+    (ios / "MowDeckWatch" / "PrivacyInfo.xcprivacy").write_bytes(plistlib.dumps(_manifest()))
+    problems = check.check_privacy_manifests(ios)
+    assert any("uses NSPrivacyAccessedAPICategorySystemBootTime" in p for p in problems)
+    assert any("declares NSPrivacyAccessedAPICategoryUserDefaults but no" in p for p in problems)
+
+
+def test_unreadable_manifest_is_reported(check: ModuleType, tmp_path: Path) -> None:
+    ios = _ios_tree(tmp_path, check, {})
+    (ios / "MowDeckWatch" / "PrivacyInfo.xcprivacy").write_text("not a plist", "utf-8")
+    problems = check.check_privacy_manifests(ios)
+    assert len(problems) == 1
+    assert "MowDeckWatch/PrivacyInfo.xcprivacy is not a valid plist" in problems[0]
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    [
+        "",
+        "PlugIns/MowDeckWidgets.appex",
+        "Watch/MowDeckWatch.app",
+        "Watch/MowDeckWatch.app/PlugIns/MowDeckWatchWidgets.appex",
+    ],
+)
+def test_built_app_needs_a_manifest_in_every_bundle(
+    check: ModuleType, tmp_path: Path, bundle: str
+) -> None:
+    app = _built_app(tmp_path)
+    (app / bundle / "PrivacyInfo.xcprivacy").unlink()
+    with pytest.raises(check.CheckError, match=r"PrivacyInfo\.xcprivacy is missing") as err:
+        check.check_app(app, "0.3.12", "312")
+    assert "ITMS-91053" in str(err.value)
+    if bundle:
+        assert bundle in str(err.value)
+
+
+def test_built_notification_extension_needs_no_manifest(check: ModuleType, tmp_path: Path) -> None:
+    app = _built_app(tmp_path)
+    assert not (app / "PlugIns" / "NotificationService.appex" / "PrivacyInfo.xcprivacy").exists()
+    check.check_app(app, "0.3.12", "312")
 
 
 # --- ios_signing.py --------------------------------------------------------------------------
