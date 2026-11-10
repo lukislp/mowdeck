@@ -8,6 +8,7 @@
  * page; `close()` stops the polling.
  */
 import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+import { DECLINED, consent, type ConsentGuard } from '#lib/consent/consent.svelte.js';
 
 import {
   VISION_PROBLEMS,
@@ -90,13 +91,19 @@ export class AssistStore {
 
   #api: VisionApi;
   #timers: AssistTimers;
+  #consent: ConsentGuard;
   #timer: unknown = null;
   /** Bumped by open/close so answers for an earlier mower or proposal are dropped. */
   #generation = 0;
 
-  constructor(api: VisionApi = visionCalls(), timers: AssistTimers = browserTimers) {
+  constructor(
+    api: VisionApi = visionCalls(),
+    timers: AssistTimers = browserTimers,
+    guard: ConsentGuard = consent,
+  ) {
     this.#api = api;
     this.#timers = timers;
+    this.#consent = guard;
   }
 
   /**
@@ -167,8 +174,11 @@ export class AssistStore {
     this.busy = 'start';
     this.problem = null;
     try {
-      const created = await this.#api.recover(mowerId, task, images);
-      if (generation === this.#generation) this.#show(created);
+      // A cloud model needs the user's consent first; "not now" leaves the sheet as it was.
+      const created = await this.#consent.guard('assist', () =>
+        this.#api.recover(mowerId, task, images),
+      );
+      if (created !== DECLINED && generation === this.#generation) this.#show(created);
     } catch (error) {
       const problem = asProblem(error);
       if (generation !== this.#generation) return;
@@ -199,7 +209,10 @@ export class AssistStore {
 
   /** Another round with fresh snapshots (allowed while `canRetry`). */
   retry(images: VisionImage[] = []): Promise<void> {
-    return this.#decide('retry', (id) => this.#api.retry(id, images));
+    return this.#decide('retry', async (id) => {
+      const next = await this.#consent.guard('assist', () => this.#api.retry(id, images));
+      return next === DECLINED ? null : next;
+    });
   }
 
   /** Stop polling and forget the proposal (the sheet closed). */
@@ -212,7 +225,10 @@ export class AssistStore {
     this.loading = false;
   }
 
-  async #decide(action: AssistAction, call: (id: string) => Promise<Proposal>): Promise<void> {
+  async #decide(
+    action: AssistAction,
+    call: (id: string) => Promise<Proposal | null>,
+  ): Promise<void> {
     const current = this.proposal;
     if (!current || this.busy) return;
     const generation = this.#generation;
@@ -220,7 +236,7 @@ export class AssistStore {
     this.problem = null;
     try {
       const next = await call(current.id);
-      if (generation === this.#generation) this.#show(next);
+      if (next && generation === this.#generation) this.#show(next);
     } catch (error) {
       if (generation !== this.#generation) return;
       this.problem = asProblem(error);

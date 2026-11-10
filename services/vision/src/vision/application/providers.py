@@ -31,6 +31,7 @@ from mowdeck_control import flat_png
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.entitlements import Entitlements
 
+from vision.application.consent import ConsentGate
 from vision.application.ports import (
     Clock,
     ProviderFactory,
@@ -38,6 +39,7 @@ from vision.application.ports import (
     Store,
     StructuredFactory,
 )
+from vision.domain.consent import Destination, classify_installation, classify_own
 from vision.domain.context import Motion, SceneContext
 from vision.domain.errors import (
     ConflictError,
@@ -81,6 +83,9 @@ class HostedDefault:
     model: str
     api_base: str | None = None
     api_key: str | None = field(default=None, repr=False)
+    local: bool = False
+    """The operator's statement that the default runs on its own hardware (no cloud): see
+    :func:`~vision.domain.consent.classify`. Unset means cloud."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +164,10 @@ class ProviderView:
     hosted_available: bool
     hosted_model: str | None
     effective: Effective
+    destination: Destination | None
+    """Where a request goes now (None without a provider), with its kind."""
+    hosted_destination: Destination | None
+    """Where a request to the installation default goes (None when it is not available)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +197,7 @@ class ProviderService:
         hosted: HostedDefault,
         policy: ProviderPolicy,
         clock: Clock,
+        consent: ConsentGate,
         structured_factory: StructuredFactory | None = None,
     ) -> None:
         self.store = store
@@ -197,6 +207,7 @@ class ProviderService:
         self.hosted = hosted
         self.policy = policy
         self.clock = clock
+        self.consent = consent
         self.structured_factory = structured_factory
 
     # --- families -------------------------------------------------------------------------
@@ -235,6 +246,10 @@ class ProviderService:
             hosted_available=hosted,
             hosted_model=self.hosted.model if hosted else None,
             effective=effective,
+            destination=_destination(own)
+            if effective == "own" and own
+            else self.hosted_destination(hosted),
+            hosted_destination=self.hosted_destination(hosted),
         )
 
     async def put(self, principal: Principal, update: ProviderUpdate) -> ProviderView:
@@ -312,21 +327,57 @@ class ProviderService:
     # --- resolution -----------------------------------------------------------------------
 
     async def resolve(self, principal: Principal) -> ProviderConfig:
-        """The provider of one request (own, else hosted, else ``vision-provider-missing``)."""
+        """The provider of one request (own, else hosted, else ``vision-provider-missing``).
+
+        This is the one place every request that sends user data to a model passes, so it is
+        also where the consent is enforced (ADR 0081): a cloud destination without a covering
+        consent of the caller raises :class:`~vision.domain.errors.ConsentRequired`."""
         user, account = _ids(principal)
         own = await self.store.get_provider(user, account)
         if own is not None and own.enabled:
-            return self._config(own)
-        if await self.hosted_available(account):
-            return ProviderConfig(
+            config = self._config(own)
+        elif await self.hosted_available(account):
+            config = ProviderConfig(
                 model=self.hosted.model,
                 family=family_of(self.hosted.model),
                 hosted=True,
                 api_base=self.hosted.api_base,
                 api_key=self.hosted.api_key,
             )
-        raise ProviderMissing(
-            "no vision provider is available: configure your own under Settings, AI provider"
+        else:
+            raise ProviderMissing(
+                "no vision provider is available: configure your own under Settings, AI provider"
+            )
+        await self.consent.check(principal, self._destination_of(config))
+        return config
+
+    async def recheck_consent(self, principal: Principal, config: ProviderConfig) -> None:
+        """Check the consent again for an already resolved ``config``, right before the model is
+        asked (a consent withdrawn since the request started stops it)."""
+        await self.consent.check(principal, self._destination_of(config))
+
+    async def destination(self, principal: Principal) -> Destination | None:
+        """Where the caller's next request would go, None without a provider."""
+        user, account = _ids(principal)
+        own = await self.store.get_provider(user, account)
+        if own is not None and own.enabled:
+            return _destination(own)
+        return self.hosted_destination(await self.hosted_available(account))
+
+    def hosted_destination(self, available: bool) -> Destination | None:
+        if not available:
+            return None
+        return self._installation_destination()
+
+    def _destination_of(self, config: ProviderConfig) -> Destination:
+        if config.hosted:
+            return self._installation_destination()
+        return classify_own(config.model, api_base=config.api_base)
+
+    def _installation_destination(self) -> Destination:
+        """Local only by the operator's declaration, never by guessing (ADR 0081)."""
+        return classify_installation(
+            self.hosted.model, api_base=self.hosted.api_base, declared_local=self.hosted.local
         )
 
     def _config(self, own: UserProvider) -> ProviderConfig:
@@ -520,6 +571,10 @@ def _ids(principal: Principal) -> tuple[UUID, UUID]:
     if principal.account_id is None:
         raise InvalidInput("this operation needs an account-scoped principal")
     return principal.subject, principal.account_id
+
+
+def _destination(own: UserProvider) -> Destination:
+    return classify_own(own.model, api_base=own.api_base)
 
 
 def _aad(user_id: UUID, account_id: UUID, what: str) -> str:

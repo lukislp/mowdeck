@@ -5,7 +5,9 @@
 
 **Opt-in.** Every user decides for themselves (``user_preferences.auto_analysis``, default off,
 ``GET``/``PUT /vision/me/preferences``) on the AI provider page; enabling needs the plan feature
-``ai_recover``. The installation can switch the feature off
+``ai_recover`` and, when the model is a cloud model, the user's consent (ADR 0081). The consent
+is checked again at sending time: an opted-in user without a covering consent is skipped
+(``Skip.NO_CONSENT``) until they agree. The installation can switch the feature off
 (``VISION_AUTO_ENABLED``).
 
 **Trigger.** The durable consumer ``vision-auto`` (queue group, every state is handled by one
@@ -50,10 +52,12 @@ from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.entitlements import Entitlements, FeatureNotInPlan, require_feature
 
 from vision.application.assist import VisionService
+from vision.application.consent import ConsentService
 from vision.application.ports import Clock, DriveChecker, Store
 from vision.domain.auto import AutoConfig, Skip, recoverable_error
 from vision.domain.errors import (
     ConflictError,
+    ConsentRequired,
     InvalidInput,
     PhotoUnavailable,
     ProviderMissing,
@@ -83,8 +87,15 @@ class AutoSettings:
     """The users' opt-in to automatic analyses."""
 
     def __init__(
-        self, *, store: Store, entitlements: Entitlements, clock: Clock, config: AutoConfig
+        self,
+        *,
+        store: Store,
+        entitlements: Entitlements,
+        clock: Clock,
+        config: AutoConfig,
+        consent: ConsentService,
     ) -> None:
+        self.consent = consent
         self.store = store
         self.entitlements = entitlements
         self.clock = clock
@@ -105,10 +116,12 @@ class AutoSettings:
         return self._view(setting.enabled if setting else False)
 
     async def put(self, principal: Principal, *, enabled: bool) -> AutoView:
-        """Save the caller's opt-in; enabling needs the plan feature ``ai_recover``."""
+        """Save the caller's opt-in; enabling needs the plan feature ``ai_recover`` and, for a
+        cloud model, the caller's consent (``ConsentRequired``, nothing is saved)."""
         user, account = _person(principal)
         if enabled:
             await require_feature(self.entitlements, account, FEATURE_AI_RECOVER)
+            await self.consent.require_current(principal)
         await self.store.put_auto_setting(
             AutoSetting(
                 user_id=user,
@@ -217,6 +230,7 @@ class AutoAnalysis:
             await require_feature(self.entitlements, account_id, FEATURE_AI_RECOVER)
         except FeatureNotInPlan:
             return Skip.NOT_IN_PLAN
+        consent_missing = False
         for setting in await self.store.auto_subscribers(account_id):
             if setting.kind not in _PEOPLE:
                 continue
@@ -226,6 +240,16 @@ class AutoAnalysis:
             principal = Principal(subject=setting.user_id, account_id=account_id, kind=setting.kind)
             try:
                 proposal = await self.service.request_auto(principal, mower_id, code)
+            except ConsentRequired:
+                # Opted in before the consent existed, or the provider or model changed since:
+                # nothing is sent until the user agrees again.
+                consent_missing = True
+                _log.info(
+                    "opted-in user has not agreed to the AI provider",
+                    user_id=str(setting.user_id),
+                    reason="consent_required",
+                )
+                continue
             except (ProviderMissing, QuotaExceeded, FeatureNotInPlan) as exc:
                 _log.info(
                     "opted-in user cannot run an analysis",
@@ -252,7 +276,7 @@ class AutoAnalysis:
                 user_id=str(setting.user_id),
             )
             return proposal
-        return Skip.NO_SUBSCRIBER
+        return Skip.NO_CONSENT if consent_missing else Skip.NO_SUBSCRIBER
 
 
 def _person(principal: Principal) -> tuple[UUID, UUID]:

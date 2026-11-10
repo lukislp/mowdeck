@@ -11,6 +11,7 @@ from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit import current_principal
 from mowdeck_service_kit.errors import (
     Conflict,
+    Forbidden,
     NotFound,
     ServiceError,
     ServiceUnavailable,
@@ -22,6 +23,7 @@ from mowdeck_service_kit.errors import (
 from assistant.application.proposals import AssistantService
 from assistant.domain.errors import (
     AssistantError,
+    ConsentRequired,
     InvalidInput,
     NotFoundError,
     ProviderFailed,
@@ -62,6 +64,13 @@ class ProviderMissingProblem(Conflict):
     title: ClassVar[str] = "No AI provider"
 
 
+class ConsentRequiredProblem(Forbidden):
+    """403: the AI provider is a cloud model the caller has not agreed to (Vision decides)."""
+
+    problem_type: ClassVar[str] = "assistant-consent-required"
+    title: ClassVar[str] = "Consent to the AI provider required"
+
+
 class TooManyProblem(ServiceError):  # noqa: N818 - a problem type, like the kit
     """429: the caller's or the provider's limit is reached."""
 
@@ -85,6 +94,8 @@ def to_service_error(exc: AssistantError) -> ServiceError:
             return NotFound(exc.message)
         case InvalidInput():
             return ValidationFailed(exc.message)
+        case ConsentRequired():
+            return ConsentRequiredProblem(exc.message)
         case ProviderMissing():
             return ProviderMissingProblem(exc.message)
         case ProviderQuota() | TooManyRequests():

@@ -47,6 +47,13 @@ class Settings(ServiceSettings):
     vision_default_api_base: str | None = None
     """Base URL of the installation default (Ollama, an OpenAI-compatible endpoint, a proxy)."""
 
+    vision_default_local: bool = False
+    """The installation default runs on the operator's own hardware (Ollama, vLLM, an
+    OpenAI-compatible endpoint on the LAN), so no picture or text leaves the installation. Only
+    then are users not asked for consent before a request (ADR 0081). A model string alone cannot
+    tell a local from a cloud endpoint (``openai/...`` is both), so the default is False: unknown
+    means cloud. Ignored for ``fake/...``, which is always simulated."""
+
     vision_default_api_key: SecretStr | None = None
     """Key of the installation default. Empty: LiteLLM reads the family's usual variable."""
 

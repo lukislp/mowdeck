@@ -55,6 +55,7 @@ from vision.adapters.providers.factory import DefaultProviderFactory
 from vision.adapters.providers.llm import load_litellm
 from vision.application.assist import AssistConfig, VisionService
 from vision.application.auto import AutoAnalysis, AutoSettings
+from vision.application.consent import ConsentGate, ConsentService
 from vision.application.demo import DemoPurge
 from vision.application.executor import DriveConfig, Executor
 from vision.application.ports import (
@@ -66,6 +67,7 @@ from vision.application.ports import (
 )
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
 from vision.domain.auto import AutoConfig, parse_codes
+from vision.domain.consent import classify_installation
 from vision.domain.context import Motion
 from vision.domain.families import check_model
 from vision.module import DESCRIPTOR
@@ -94,6 +96,7 @@ def hosted_default(settings: Settings) -> HostedDefault:
         enabled=settings.vision_default_enabled,
         model=model,
         api_base=settings.vision_default_api_base or None,
+        local=settings.vision_default_local,
         api_key=key.get_secret_value() if key and key.get_secret_value() else None,
     )
 
@@ -157,6 +160,7 @@ def build_app(
         if warm_litellm:  # users may configure a LiteLLM provider at any time
             _import_litellm()
         active_bus: EventBus | None = app.state.bus
+        gate = ConsentGate(store=store_ref, clock=now)
         providers = ProviderService(
             store=store_ref,
             box=box,
@@ -170,8 +174,10 @@ def build_app(
                 structured_per_hour=settings.vision_structured_per_hour,
             ),
             clock=now,
+            consent=gate,
             structured_factory=structured_factory,
         )
+        consent = ConsentService(gate=gate, destinations=providers)
         publisher = BusPublisher(active_bus, producer=settings.service_name)
         fleet = BusFleetGateway(active_bus, timeout_seconds=settings.vision_fleet_timeout_seconds)
         executor = Executor(
@@ -243,11 +249,17 @@ def build_app(
         app.state.auto_analysis = auto
         app.state.vision_demo = DemoPurge(store_ref, mower_view, auto.forget_mowers)
         app.state.auto_settings = AutoSettings(
-            store=store_ref, entitlements=plans, clock=now, config=auto_limits
+            store=store_ref, entitlements=plans, clock=now, config=auto_limits, consent=consent
         )
+        app.state.consent_service = consent
         app.state.vision_status = {
             "hosted_default_enabled": hosted.enabled,
             "hosted_default_model": hosted.model if hosted.enabled else None,
+            "hosted_default_kind": classify_installation(
+                hosted.model, api_base=hosted.api_base, declared_local=hosted.local
+            ).kind
+            if hosted.enabled
+            else None,
             "secrets_available": box is not None,
             "allow_fake_provider": settings.vision_allow_fake_provider,
             "user_api_base_policy": settings.vision_user_api_base_policy,

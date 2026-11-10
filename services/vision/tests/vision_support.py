@@ -15,7 +15,7 @@ import asyncio
 import base64
 import contextlib
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -75,7 +75,7 @@ from mowdeck_service_kit.testing import FakeEntitlements, lifespan_client
 
 from vision.adapters.memory import MemoryStore
 from vision.application.assist import VisionService
-from vision.application.ports import VisionProvider
+from vision.application.ports import StructuredFactory, VisionProvider
 from vision.domain.context import SceneContext
 from vision.domain.errors import ProviderFailed
 from vision.domain.models import (
@@ -88,6 +88,7 @@ from vision.domain.models import (
     ProviderConfig,
     RiskFlag,
     Situation,
+    StructuredAnswer,
     Usage,
 )
 from vision.main import build_app
@@ -160,6 +161,31 @@ class StaticFactory:
 
     def create(self, config: ProviderConfig) -> VisionProvider:
         return StaticProvider(config, self)
+
+
+class StaticStructuredFactory:
+    """``StructuredFactory`` of the tests: every model answers with an empty JSON object."""
+
+    def __init__(self) -> None:
+        self.calls: list[ProviderConfig] = []
+
+    def create_structured(self, config: ProviderConfig) -> "StaticStructuredProvider":
+        self.calls.append(config)
+        return StaticStructuredProvider(config)
+
+
+class StaticStructuredProvider:
+    """A structured provider answering ``{}``."""
+
+    def __init__(self, config: ProviderConfig) -> None:
+        self.config = config
+
+    async def structured(
+        self, system: str, text: str, schema: Mapping[str, Any], name: str
+    ) -> StructuredAnswer:
+        return StructuredAnswer(
+            {}, self.config.model, self.config.family, Usage(latency_ms=5, input_tokens=10)
+        )
 
 
 def make_settings(**overrides: Any) -> Settings:
@@ -526,6 +552,7 @@ async def wait_for(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
 async def harness(
     *,
     factory: StaticFactory | None = None,
+    structured: StructuredFactory | None = None,
     entitlements: FakeEntitlements | None = None,
     store: MemoryStore | None = None,
     bus: EventBus | None = None,
@@ -546,6 +573,7 @@ async def harness(
         bus=bus,
         store=memory,
         factory=provider_factory,
+        structured=structured,
         authorizer=authz,
         principal_resolver=keys.resolver(),
         entitlements=plans,
