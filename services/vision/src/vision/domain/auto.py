@@ -71,6 +71,7 @@ class Skip(StrEnum):
     NOT_IN_PLAN = "not_in_plan"
     NO_SUBSCRIBER = "no_subscriber"
     NO_PHOTO = "no_photo"
+    NO_CONSENT = "no_consent"
 
 
 __all__ = [

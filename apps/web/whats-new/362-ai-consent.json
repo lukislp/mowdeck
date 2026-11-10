@@ -1,0 +1,6 @@
+{
+  "pr": 362,
+  "de": "Neu: Vor der ersten Nutzung einer KI-Funktion fragt MowDeck, ob Bilder oder Text an einen Cloud-Anbieter gehen dürfen. Die automatische Analyse pausiert, bis du zustimmst. Widerruf unter Einstellungen, KI-Anbieter.",
+  "en": "New: before you first use an AI feature, MowDeck asks whether pictures or text may go to a cloud provider. Automatic analysis pauses until you agree. Withdraw under Settings, AI provider.",
+  "href": "/settings#ai-provider"
+}

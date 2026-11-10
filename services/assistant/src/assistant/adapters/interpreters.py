@@ -19,6 +19,7 @@ from assistant.application.ports import (
     InterpreterStatus,
 )
 from assistant.domain.errors import (
+    ConsentRequired,
     ProviderFailed,
     ProviderMissing,
     ProviderQuota,
@@ -80,6 +81,11 @@ class ProviderInterpreter:
             case 200:
                 body: dict[str, Any] = response.json()
                 return InterpreterAnswer(body.get("output"), _str(body.get("model")))
+            case 403 if _problem_type(response).endswith("vision-consent-required"):
+                raise ConsentRequired(
+                    "agree to the AI provider first (Settings, AI provider): "
+                    "the request would send your text to a cloud model"
+                )
             case 409:
                 raise ProviderMissing(
                     "no AI provider is available: configure one under Settings, AI provider"
@@ -106,6 +112,15 @@ class PhraseInterpreter:
 
     async def interpret(self, token: str, catalog: Catalog, text: str) -> InterpreterAnswer:
         return InterpreterAnswer(parse(text, catalog))
+
+
+def _problem_type(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    value = body.get("type") if isinstance(body, dict) else None
+    return value if isinstance(value, str) else ""
 
 
 def _auth(token: str) -> dict[str, str]:

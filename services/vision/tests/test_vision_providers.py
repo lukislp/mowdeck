@@ -66,6 +66,7 @@ async def test_vision_providers_put_get_test_delete_with_write_only_key() -> Non
             ME, json={"model": "openai/gpt-5-mini", "enabled": True}, headers=owner.headers
         )
         assert kept.json()["api_key_set"] is True
+        assert (await h.client.put(f"{API}/me/consent", headers=owner.headers)).status_code == 200
         config = await h.service.providers.resolve(owner.principal)
         assert (config.model, config.api_key, config.hosted) == (
             "openai/gpt-5-mini",
@@ -190,6 +191,7 @@ async def test_vision_providers_status_and_undecryptable_key() -> None:
         assert status == {
             "hosted_default_enabled": True,
             "hosted_default_model": "fake/recover",
+            "hosted_default_kind": "simulated",
             "secrets_available": True,
             "allow_fake_provider": False,
             "user_api_base_policy": "any",

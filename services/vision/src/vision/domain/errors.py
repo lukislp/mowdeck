@@ -3,6 +3,11 @@
 
 """Errors of the vision use cases (mapped to problem details in the API adapter)."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from vision.domain.consent import Destination
+
 
 class VisionError(Exception):
     """Base class; ``message`` is safe to show to the caller (never a key or an image)."""
@@ -53,3 +58,13 @@ class PhotoUnavailable(VisionError):  # noqa: N818 - reads as a state
     def __init__(self, message: str, proposal: object | None = None) -> None:
         super().__init__(message)
         self.proposal = proposal
+
+
+class ConsentRequired(VisionError):  # noqa: N818 - reads as a state
+    """The request would send the caller's data to a cloud model and the caller has not agreed
+    to that destination (403, ``vision-consent-required``). ``destination`` is where it would
+    go; nothing was captured or sent."""
+
+    def __init__(self, message: str, destination: "Destination") -> None:
+        super().__init__(message)
+        self.destination = destination

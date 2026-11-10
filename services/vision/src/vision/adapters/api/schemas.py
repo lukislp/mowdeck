@@ -14,6 +14,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from vision.application.assist import ProposalDetails
 from vision.application.auto import AutoView
+from vision.application.consent import ConsentStatus
 from vision.application.providers import (
     STRUCTURED_SYSTEM_MAX,
     STRUCTURED_TEXT_MAX,
@@ -21,6 +22,7 @@ from vision.application.providers import (
     StructuredResult,
     TestResult,
 )
+from vision.domain.consent import Destination, DestinationKind
 from vision.domain.errors import InvalidInput
 from vision.domain.families import Family
 from vision.domain.job import JobContext
@@ -536,12 +538,68 @@ class FamilyOut(BaseModel):
         )
 
 
+class DestinationOut(BaseModel):
+    """Where the data of a request goes (ADR 0081): the kind decides whether consent is needed."""
+
+    kind: DestinationKind = Field(
+        description=(
+            "`cloud`: a third party outside this installation (consent required); `local`: own "
+            "hardware; `simulated`: the rule based fake model."
+        )
+    )
+    provider: str = Field(description="Human readable provider name, e.g. `Anthropic`.")
+    family: str
+    model: str
+    endpoint: str = Field(
+        description="`default` (the provider's own endpoint) or the host of the base URL."
+    )
+
+    @classmethod
+    def of(cls, destination: Destination) -> "DestinationOut":
+        """From the domain value object."""
+        return cls(
+            kind=destination.kind,
+            provider=destination.provider,
+            family=destination.family,
+            model=destination.model,
+            endpoint=destination.endpoint,
+        )
+
+
+class ConsentOut(BaseModel):
+    """``GET/PUT/DELETE /me/consent``: the caller's consent to send data to a cloud model."""
+
+    required: bool = Field(description="The provider in effect now is a cloud model.")
+    destination: DestinationOut | None = Field(
+        description="Where a request would go now; null without a provider."
+    )
+    granted_at: AwareDatetime | None = Field(description="Null without a recorded consent.")
+    granted_for: DestinationOut | None = Field(
+        description="The destination the recorded consent was given for."
+    )
+    covers: bool = Field(description="The recorded consent covers the destination in effect now.")
+
+    @classmethod
+    def of(cls, status: ConsentStatus) -> "ConsentOut":
+        """From the use case status."""
+        return cls(
+            required=status.required,
+            destination=DestinationOut.of(status.destination) if status.destination else None,
+            granted_at=status.granted_at,
+            granted_for=DestinationOut.of(status.granted_for) if status.granted_for else None,
+            covers=status.covers,
+        )
+
+
 class ProvidersOut(BaseModel):
     """``GET /providers``: families, and whether the installation's model may be used."""
 
     families: list[FamilyOut]
     hosted_available: bool
     hosted_model: str | None
+    hosted_destination: DestinationOut | None = Field(
+        description="Where requests to the installation's model go (kind: cloud, local)."
+    )
     secrets_available: bool = Field(description="Whether API keys can be stored here.")
 
 
@@ -574,6 +632,9 @@ class ProviderOut(BaseModel):
     effective: Literal["own", "hosted", "none"] = Field(
         description="Which provider a request would use now."
     )
+    destination: DestinationOut | None = Field(
+        description="Where a request would go now, with its kind; null without a provider."
+    )
     secrets_available: bool
 
     @classmethod
@@ -592,6 +653,7 @@ class ProviderOut(BaseModel):
             hosted_available=view.hosted_available,
             hosted_model=view.hosted_model,
             effective=view.effective,
+            destination=DestinationOut.of(view.destination) if view.destination else None,
             secrets_available=secrets_available,
         )
 
@@ -686,6 +748,12 @@ class StatusOut(BaseModel):
 
     hosted_default_enabled: bool
     hosted_default_model: str | None = Field(description="Only when the default is enabled.")
+    hosted_default_kind: DestinationKind | None = Field(
+        description=(
+            "Where the default's data goes (`cloud` unless the operator set "
+            "`MOWDECK_VISION_DEFAULT_LOCAL`, `simulated` for the fake); only when it is enabled."
+        )
+    )
     secrets_available: bool
     allow_fake_provider: bool
     user_api_base_policy: str

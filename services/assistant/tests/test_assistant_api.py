@@ -147,6 +147,13 @@ async def test_assistant_api_maps_provider_errors_and_validates_input() -> None:
     assert empty.status_code == 422 and long.status_code == 422 and zone.status_code == 422
 
 
+async def test_assistant_api_passes_vision_consent_refusal_on() -> None:
+    async with harness(provider=FakeProvider(consent=True)) as h:
+        refused = await h.ask("send it home")
+    assert refused.status_code == 403
+    assert refused.json()["type"].endswith("assistant-consent-required")
+
+
 async def test_assistant_api_limits_requests_per_minute() -> None:
     async with harness(assistant_requests_per_minute=2) as h:
         statuses = [(await h.ask("send it home")).status_code for _ in range(3)]

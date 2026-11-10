@@ -13,6 +13,7 @@
 
   import { schedulerApi, unwrap } from '#lib/api/client.js';
   import { asProblem } from '#lib/api/problem.js';
+  import { DECLINED, consent } from '#lib/consent/consent.svelte.js';
   import {
     TEXT_MAX,
     actionLabel,
@@ -86,7 +87,11 @@
     error = null;
     proposal = null;
     try {
-      proposal = await propose(mowerId, value.slice(0, TEXT_MAX), browserTimeZone());
+      // The text goes to the AI model: a cloud model needs the user's consent first.
+      const answer = await consent.guard('chat', () =>
+        propose(mowerId, value.slice(0, TEXT_MAX), browserTimeZone()),
+      );
+      if (answer !== DECLINED) proposal = answer;
     } catch (failure) {
       error = m.chat_error({ message: problemMessage(asProblem(failure)) });
     } finally {
