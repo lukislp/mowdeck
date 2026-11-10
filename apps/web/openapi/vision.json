@@ -166,6 +166,11 @@
       "DestinationOut": {
         "description": "Where the data of a request goes (ADR 0081): the kind decides whether consent is needed.",
         "properties": {
+          "endpoint": {
+            "description": "`default` (the provider's own endpoint) or the host of the base URL.",
+            "title": "Endpoint",
+            "type": "string"
+          },
           "family": {
             "title": "Family",
             "type": "string"
@@ -188,7 +193,8 @@
           "kind",
           "provider",
           "family",
-          "model"
+          "model",
+          "endpoint"
         ],
         "title": "DestinationOut",
         "type": "object"

@@ -39,7 +39,7 @@ from vision.application.ports import (
     Store,
     StructuredFactory,
 )
-from vision.domain.consent import Destination, classify
+from vision.domain.consent import Destination, classify_installation, classify_own
 from vision.domain.context import Motion, SceneContext
 from vision.domain.errors import (
     ConflictError,
@@ -351,6 +351,11 @@ class ProviderService:
         await self.consent.check(principal, self._destination_of(config))
         return config
 
+    async def recheck_consent(self, principal: Principal, config: ProviderConfig) -> None:
+        """Check the consent again for an already resolved ``config``, right before the model is
+        asked (a consent withdrawn since the request started stops it)."""
+        await self.consent.check(principal, self._destination_of(config))
+
     async def destination(self, principal: Principal) -> Destination | None:
         """Where the caller's next request would go, None without a provider."""
         user, account = _ids(principal)
@@ -362,14 +367,18 @@ class ProviderService:
     def hosted_destination(self, available: bool) -> Destination | None:
         if not available:
             return None
-        return classify(
-            self.hosted.model, api_base=self.hosted.api_base, assume_local=self.hosted.local
-        )
+        return self._installation_destination()
 
     def _destination_of(self, config: ProviderConfig) -> Destination:
         if config.hosted:
-            return classify(config.model, api_base=config.api_base, assume_local=self.hosted.local)
-        return classify(config.model, api_base=config.api_base)
+            return self._installation_destination()
+        return classify_own(config.model, api_base=config.api_base)
+
+    def _installation_destination(self) -> Destination:
+        """Local only by the operator's declaration, never by guessing (ADR 0081)."""
+        return classify_installation(
+            self.hosted.model, api_base=self.hosted.api_base, declared_local=self.hosted.local
+        )
 
     def _config(self, own: UserProvider) -> ProviderConfig:
         aad_key = _aad(own.user_id, own.account_id, "api_key")
@@ -565,7 +574,7 @@ def _ids(principal: Principal) -> tuple[UUID, UUID]:
 
 
 def _destination(own: UserProvider) -> Destination:
-    return classify(own.model, api_base=own.api_base)
+    return classify_own(own.model, api_base=own.api_base)
 
 
 def _aad(user_id: UUID, account_id: UUID, what: str) -> str:

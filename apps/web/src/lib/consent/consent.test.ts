@@ -28,6 +28,7 @@ const CLOUD = {
   provider: 'Anthropic',
   family: 'anthropic',
   model: 'anthropic/claude-sonnet-5-5',
+  endpoint: 'default',
 } as const;
 
 function status(over: Partial<ConsentStatus> = {}): ConsentStatus {
@@ -250,6 +251,23 @@ describe('ConsentSheet', () => {
     ]) {
       expect(body).toHaveTextContent(text);
     }
+    state.decline();
+    await asked;
+  });
+
+  it('names the host only when the data goes to a configured address', async () => {
+    const plain = await opened('any');
+    expect(screen.queryByTestId('consent-endpoint')).toBeNull();
+    plain.state.decline();
+    await plain.asked;
+    const { api: calls } = api(
+      status({ destination: { ...CLOUD, endpoint: 'llm.other.example' } }),
+    );
+    const state = new ConsentState(calls);
+    const asked = state.ensure('any');
+    await waitFor(() => expect(state.open).toBe(true));
+    render(ConsentSheet, { props: { consent: state } });
+    expect(await screen.findByTestId('consent-endpoint')).toHaveTextContent('llm.other.example');
     state.decline();
     await asked;
   });

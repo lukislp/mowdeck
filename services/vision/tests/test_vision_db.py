@@ -314,7 +314,9 @@ async def consent_contract(store: Store) -> None:
     """The consent shares the ``user_preferences`` row with the other preferences."""
     user_id, account_id = uuid4(), uuid4()
     sonnet = Destination(DestinationKind.CLOUD, "Anthropic", "anthropic", "anthropic/sonnet")
-    haiku = Destination(DestinationKind.CLOUD, "Anthropic", "anthropic", "anthropic/haiku")
+    haiku = Destination(
+        DestinationKind.CLOUD, "Anthropic", "anthropic", "anthropic/haiku", "llm.example:8443"
+    )
     assert await store.get_consent(user_id, account_id) is None
     assert not await store.delete_consent(user_id, account_id)
     await store.put_consent(user_id, account_id, Consent(T0, sonnet))  # creates the row

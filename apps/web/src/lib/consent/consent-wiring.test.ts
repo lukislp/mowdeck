@@ -18,6 +18,7 @@ const fake = vi.hoisted(() => ({
       provider: 'Anthropic',
       family: 'anthropic',
       model: 'anthropic/claude-sonnet-5-5',
+      endpoint: 'default',
     },
     granted_at: null as string | null,
     granted_for: null as unknown,

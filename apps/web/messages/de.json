@@ -1687,6 +1687,7 @@
   "ai_auto_notify_link": "Benachrichtigungen einstellen",
   "consent_title": "Daten an eine Cloud-KI senden?",
   "consent_intro": "Diese Funktion fragt das KI-Modell {model} von {provider}. Das ist ein Cloud-Dienst außerhalb dieser Installation.",
+  "consent_endpoint": "Die Daten gehen an die Adresse {host}, nicht an den eigenen Endpunkt des Anbieters.",
   "consent_sends_title": "Was gesendet wird",
   "consent_sends_pictures": "Bis zu vier Kamerabilder. Darauf können Personen, Tiere und Nachbargrundstücke zu sehen sein.",
   "consent_sends_map": "Eine Kartenskizze mit den Namen deiner Flächen.",

@@ -85,6 +85,7 @@ async def test_vision_consent_status_grant_and_withdraw() -> None:
             "provider": "Anthropic",
             "family": "anthropic",
             "model": CLOUD_MODEL,
+            "endpoint": "default",
         }
         granted = await _agree(h, owner)
         assert granted["covers"] is True and granted["granted_at"] is not None
@@ -102,8 +103,17 @@ async def test_vision_consent_is_not_required_for_simulated_or_local_models() ->
         assert status["required"] is False and status["destination"]["kind"] == "simulated"
         granted = await _agree(h, owner)  # nothing to record
         assert granted["granted_at"] is None
-    async with harness(vision_default_model="ollama/llava") as h:
+    async with harness(vision_default_model="ollama/llava", vision_default_local=True) as h:
         status = (await h.client.get(CONSENT, headers=h.owner().headers)).json()
+        assert status["required"] is False and status["destination"]["kind"] == "local"
+    async with harness(vision_default_model="ollama/llava") as h:
+        # no declaration: the installation's model is cloud whatever its prefix says
+        status = (await h.client.get(CONSENT, headers=h.owner().headers)).json()
+        assert status["required"] is True and status["destination"]["kind"] == "cloud"
+    async with harness(vision_default_enabled=False) as h:
+        owner = h.owner()  # a user's own local provider is classified by the heuristic
+        await h.client.put(PROVIDER, json={"model": "ollama/llava"}, headers=owner.headers)
+        status = (await h.client.get(CONSENT, headers=owner.headers)).json()
         assert status["required"] is False and status["destination"]["kind"] == "local"
 
 
@@ -195,7 +205,11 @@ async def test_vision_consent_manual_request_is_refused_before_any_photo() -> No
         problem = refused.json()
         assert problem["type"] == PROBLEM
         assert problem["errors"] == [
-            {"parameter": "destination", "code": "cloud", "detail": f"Anthropic / {CLOUD_MODEL}"}
+            {
+                "parameter": "destination",
+                "code": "cloud",
+                "detail": f"Anthropic / {CLOUD_MODEL} / default",
+            }
         ]
         assert h.factory.calls == []
         assert h.store.proposals == {}, "no proposal, nothing recorded"
@@ -330,3 +344,80 @@ async def test_vision_consent_automatic_analysis_skips_users_without_a_covering_
         started = await _auto(h).trigger(state, "1201")
         assert not isinstance(started, Skip)
         assert started.trigger.value == "error"
+
+
+# --- the recipient, the installation default, withdrawal in flight ------------------------------
+
+
+async def test_vision_consent_installation_default_is_never_local_by_guessing() -> None:
+    gateway: dict[str, Any] = {
+        "vision_default_model": "openai/gpt-5-mini",
+        "vision_default_api_base": "http://litellm:4000",
+    }
+    async with harness(structured=StaticStructuredFactory(), **gateway) as h:
+        owner = h.owner()
+        status = (await h.client.get(f"{API}/status", headers=owner.headers)).json()
+        assert status["hosted_default_kind"] == "cloud"
+        consent = (await h.client.get(CONSENT, headers=owner.headers)).json()
+        assert consent["required"] is True and consent["destination"]["endpoint"] == "litellm:4000"
+        refused = await h.client.post(STRUCTURED, json=_structured(), headers=owner.headers)
+        assert refused.status_code == 403
+    async with harness(
+        structured=StaticStructuredFactory(), vision_default_local=True, **gateway
+    ) as h:
+        owner = h.owner()
+        assert (await h.client.get(CONSENT, headers=owner.headers)).json()["required"] is False
+    async with harness(vision_default_model="ollama/llava") as h:
+        status = (await h.client.get(f"{API}/status", headers=h.owner().headers)).json()
+        assert status["hosted_default_kind"] == "cloud", "an Ollama prefix alone is not a promise"
+
+
+async def test_vision_consent_is_bound_to_the_endpoint_of_an_own_provider() -> None:
+    async with harness(structured=StaticStructuredFactory(), **CLOUD) as h:
+        owner = h.owner()
+        model = "openai/gpt-5-mini"
+        await h.client.put(PROVIDER, json={"model": model}, headers=owner.headers)
+        agreed = await _agree(h, owner)
+        assert agreed["granted_for"]["endpoint"] == "default"
+        assert (
+            await h.client.post(STRUCTURED, json=_structured(), headers=owner.headers)
+        ).is_success
+        other = "https://llm.other.example/v1"
+        await h.client.put(
+            PROVIDER, json={"model": model, "api_base": other}, headers=owner.headers
+        )
+        status = (await h.client.get(CONSENT, headers=owner.headers)).json()
+        assert (
+            status["covers"] is False and status["destination"]["endpoint"] == "llm.other.example"
+        )
+        refused = await h.client.post(STRUCTURED, json=_structured(), headers=owner.headers)
+        assert refused.status_code == 403
+        assert refused.json()["errors"][0]["detail"].endswith("/ llm.other.example")
+        await _agree(h, owner)
+        await h.client.put(
+            PROVIDER, json={"model": model, "api_base": other + "/x"}, headers=owner.headers
+        )
+        assert (await h.client.get(CONSENT, headers=owner.headers)).json()["covers"] is True
+        await h.client.put(PROVIDER, json={"model": model}, headers=owner.headers)
+        assert (await h.client.get(CONSENT, headers=owner.headers)).json()["covers"] is False
+
+
+async def test_vision_consent_withdrawn_in_flight_stops_the_analysis_before_anything_is_sent() -> (
+    None
+):
+    async with harness(**CLOUD) as h:
+        owner = h.owner()
+        rig = await _stuck(h, owner)
+        await _agree(h, owner)
+        original = h.service._stereo
+
+        async def withdraw_then_continue(*args: Any, **kwargs: Any) -> Any:
+            await h.client.delete(CONSENT, headers=owner.headers)
+            return await original(*args, **kwargs)
+
+        h.service._stereo = withdraw_then_continue  # type: ignore[method-assign]
+        created = await h.client.post(_recover(rig), json={}, headers=owner.headers)
+        assert created.status_code == 202, created.text
+        failed = await h.until(created.json()["id"], owner, ProposalState.FAILED)
+        assert "withdrawn" in failed["detail"]
+        assert h.factory.calls == [], "no picture reached the model"

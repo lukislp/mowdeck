@@ -33,18 +33,21 @@ The domain (`vision.domain.consent`, pure, no I/O) derives a `Destination` (kind
 - `local`: the user's or the operator's own hardware.
 - `cloud`: everything else, **including every model nobody knows**. Unknown means cloud.
 
-Classification of a provider (`classify`): `fake/...` is simulated. A family flagged `local` ([`domain/families.py`](https://github.com/lukislp/mowdeck/blob/main/services/vision/src/vision/domain/families.py): Ollama, and the "OpenAI-compatible endpoint") is local when its base URL points into a private network (loopback, LAN, a single-label host such as `http://ollama:11434`); Ollama without a base URL is local too (its default base is on the LAN). Because the prefix `openai/` is shared by OpenAI's cloud and by any OpenAI-compatible endpoint, `openai/<model>` is local only with a private base URL. A "local" family whose base URL is public (a hosted Ollama, a public proxy) is cloud.
+Who decides where a request goes differs, so there are two classifications, and the domain exposes them as two functions that cannot be mixed up:
 
-The installation default cannot be told apart by its model string, and its base URL is the operator's business. A new operator setting says it: **`MOWDECK_VISION_DEFAULT_LOCAL`** (`VISION_DEFAULT_LOCAL` in Compose and Helm), default `false`. When true, the installation default is `local`; `fake/...` stays `simulated` either way. The classification is exposed, never guessed by the client: `GET /vision/status` (`hosted_default_kind`), `GET /vision/providers` (`hosted_destination`) and `GET /vision/me/provider` (`destination`, the one in effect now).
+- **A user's own provider (`classify_own`)** is classified by a heuristic, because the person whose data it is chose the endpoint. `fake/...` is simulated. A family flagged `local` ([`domain/families.py`](https://github.com/lukislp/mowdeck/blob/main/services/vision/src/vision/domain/families.py): Ollama, and the "OpenAI-compatible endpoint") is local when its base URL points into a private network (loopback, LAN, a single-label host such as `http://ollama:11434`); Ollama without a base URL is local too (its default base is on the LAN). Because the prefix `openai/` is shared by OpenAI's cloud and by any OpenAI-compatible endpoint, `openai/<model>` is local only with a private base URL. A "local" family whose base URL is public (a hosted Ollama, a public proxy) is cloud.
+- **The installation's model (`classify_installation`)** is never classified by guessing. The user did not choose it and cannot see where the operator's gateway forwards to: `openai/...` with `http://litellm:4000` may be a private address in front of a cloud provider. The only thing that makes it local is the operator's explicit setting **`MOWDECK_VISION_DEFAULT_LOCAL=true`** (`VISION_DEFAULT_LOCAL` in Compose and Helm, default `false`); without it the installation's model is cloud whatever its prefix or base URL. `fake/...` stays simulated either way.
+
+The classification is exposed, never guessed by the client: `GET /vision/status` (`hosted_default_kind`), `GET /vision/providers` (`hosted_destination`) and `GET /vision/me/provider` (`destination`, the one in effect now).
 
 ### The rule: `Consent`
 
-A `Consent` is the time a user agreed and the destination it was given for. Two pure functions decide:
+A `Consent` is the time a user agreed and the destination it was given for. A destination is identified by provider family, model and **endpoint**: the normalised host (and the port when it is not the scheme's default) of the effective base URL, or `default` for the provider's own endpoint; for the installation's model it is the host of the operator's configured base URL. The endpoint is part of the recipient: the same model string at another address is another third party. Two pure functions decide:
 
 - `consent_required(destination)`: only `cloud` requires consent.
-- `covers(consent, destination)`: yes when **provider family and model both match**. A changed provider or model needs a new consent, because the third party or the model it runs changed.
+- `covers(consent, destination)`: yes when **provider family, model and endpoint all match**. A changed provider, model or endpoint needs a new consent, because the third party or the model it runs changed. The dialog names the host when it is not the provider's default endpoint.
 
-Consent is per user and account (a sub-user has their own), stored in `user_preferences` (revision 0008: `consent_at`, `consent_kind`, `consent_provider`, `consent_family`, `consent_model`, all null without consent) behind the existing `Store` port. A user who withdraws loses it entirely.
+Consent is keyed by user **and** account (a sub-user has their own; `_ids(principal)` takes both from the verified token, so a request can only read, grant or withdraw its own), stored in `user_preferences` (revision 0008: `consent_at`, `consent_kind`, `consent_provider`, `consent_family`, `consent_model`, `consent_endpoint`, all null without consent) behind the existing `Store` port. A user who withdraws loses it entirely.
 
 ### One enforcement point
 
@@ -63,7 +66,7 @@ The **provider test** is exempt: it sends a synthetic image the service generate
 
 ### Automatic analysis
 
-Enabling it (`PUT /vision/me/preferences`, `auto_analysis: true`) needs a covering consent when the destination is cloud (`ConsentService.require_current`; nothing is saved otherwise). At sending time `AutoAnalysis.trigger` reaches the gate through `request_auto`; an opted-in user without a covering consent is skipped, and the skip is recorded like the others (`Skip.NO_CONSENT`, logged with the user), never silent. Withdrawing a consent switches the user's automatic analysis off.
+Enabling it (`PUT /vision/me/preferences`, `auto_analysis: true`) needs a covering consent when the destination is cloud (`ConsentService.require_current`; nothing is saved otherwise). At sending time `AutoAnalysis.trigger` reaches the gate through `request_auto`, with the principal of the opted-in user whose provider and quota the analysis uses, so it is that user's consent that counts; an opted-in user without a covering consent is skipped, and the skip is recorded like the others (`Skip.NO_CONSENT`, logged with the user), never silent. Withdrawing a consent switches the user's automatic analysis off. The gate runs at the start of the request (`request_auto`, `_start_round`) and once more right before the model is asked (`VisionService._analyse`): a consent withdrawn while the photo is taken or the light is switched on ends the proposal as `failed` ("consent ... withdrawn") with nothing sent. The only remaining window is a request already on its way to the provider (milliseconds to the model's answer), which cannot be recalled.
 
 ### Existing users
 
@@ -89,6 +92,8 @@ Saving a provider asks for consent right after it is saved, because the classifi
 - **Check in each of the four callers:** rejected. A fifth caller would forget it. The provider resolution is the one place all of them share.
 - **One consent for "AI" regardless of provider:** rejected. The third party is what the user agreed to; switching from a provider to another one, or to a different model, changes who gets the pictures.
 - **Classify by the model string alone:** rejected for `openai/`: it is both OpenAI's cloud and every local OpenAI-compatible server.
+- **Guess the installation's model as local from a private base URL or the `ollama/` prefix:** rejected. The user cannot check it and the operator's gateway may forward to a cloud provider; only the operator's explicit `VISION_DEFAULT_LOCAL` counts.
+- **Bind the consent to family and model only:** rejected. The same model string at another endpoint is another recipient.
 - **Grandfather automatic analysis opt-ins:** rejected, see above.
 
 ## Consequences
@@ -98,4 +103,5 @@ Saving a provider asks for consent right after it is saved, because the classifi
 - A consent for a provider the user later replaces stays on record until withdrawn; it simply does not cover the new destination.
 - Existing automatic analyses pause until the user agrees; the settings page says so. The cost is a quiet period after the upgrade for users who relied on it.
 - The privacy policy template ([`apps/web/static/legal/privacy.md`](https://github.com/lukislp/mowdeck/blob/main/apps/web/static/legal/privacy.md)) gets an "AI features" section describing the data flow and the consent; operators fill in their provider.
-- The classification of own providers by base URL treats a private-network host as local. A public DNS name that resolves to a private address counts as cloud (the safe side), and a private address that forwards to a cloud model counts as local, which only the operator can know.
+- The classification of a user's *own* provider by base URL treats a private-network host as local: the user chose that endpoint and knows what is behind it. A public DNS name that resolves to a private address counts as cloud (the safe side). The installation's model gets no such guess.
+- A user who points the same model string at another host is asked again, and the dialog shows the host.

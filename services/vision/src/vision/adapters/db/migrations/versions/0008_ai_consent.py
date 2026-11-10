@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 """Explicit consent before data goes to a cloud AI provider (ADR 0081): when a user agreed and
-for which destination (provider family and model), in ``user_preferences``. Nobody has a
+for which destination (provider family, model and endpoint), in ``user_preferences``. Nobody has a
 consent after this revision, so everyone is asked on first use.
 
 Revision ID: 0008
@@ -30,10 +30,12 @@ def upgrade() -> None:
     op.add_column("user_preferences", sa.Column("consent_provider", sa.String(100), nullable=True))
     op.add_column("user_preferences", sa.Column("consent_family", sa.String(64), nullable=True))
     op.add_column("user_preferences", sa.Column("consent_model", sa.String(200), nullable=True))
+    op.add_column("user_preferences", sa.Column("consent_endpoint", sa.String(300), nullable=True))
 
 
 def downgrade() -> None:
     """Drop what :func:`upgrade` added."""
+    op.drop_column("user_preferences", "consent_endpoint")
     op.drop_column("user_preferences", "consent_model")
     op.drop_column("user_preferences", "consent_family")
     op.drop_column("user_preferences", "consent_provider")

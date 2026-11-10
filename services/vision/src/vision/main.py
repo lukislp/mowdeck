@@ -67,7 +67,7 @@ from vision.application.ports import (
 )
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
 from vision.domain.auto import AutoConfig, parse_codes
-from vision.domain.consent import classify
+from vision.domain.consent import classify_installation
 from vision.domain.context import Motion
 from vision.domain.families import check_model
 from vision.module import DESCRIPTOR
@@ -255,8 +255,8 @@ def build_app(
         app.state.vision_status = {
             "hosted_default_enabled": hosted.enabled,
             "hosted_default_model": hosted.model if hosted.enabled else None,
-            "hosted_default_kind": classify(
-                hosted.model, api_base=hosted.api_base, assume_local=hosted.local
+            "hosted_default_kind": classify_installation(
+                hosted.model, api_base=hosted.api_base, declared_local=hosted.local
             ).kind
             if hosted.enabled
             else None,

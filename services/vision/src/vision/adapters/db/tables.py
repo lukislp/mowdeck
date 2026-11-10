@@ -192,6 +192,7 @@ user_preferences = Table(
     Column("consent_provider", String(100)),
     Column("consent_family", String(64)),
     Column("consent_model", String(200)),
+    Column("consent_endpoint", String(300)),
     Column("updated_at", TS, nullable=False),
     Index("ix_user_preferences_account", "account_id"),
 )

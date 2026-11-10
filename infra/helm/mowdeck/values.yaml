@@ -243,8 +243,9 @@ config:
   VISION_DEFAULT_API_BASE: ""
   # "true" only when the installation model runs on your own hardware (Ollama, vLLM, an
   # OpenAI-compatible endpoint on your network): nothing leaves the installation, so users are
-  # not asked for consent (ADR 0081). "false" (unknown means cloud): every user agrees once in
-  # the app before an AI feature sends data to it.
+  # not asked for consent (ADR 0081). The only thing that makes it local: never guessed from the
+  # prefix or a private base URL (a gateway may forward to a cloud provider). "false": every
+  # user agrees once in the app before an AI feature sends data to it.
   VISION_DEFAULT_LOCAL: "false"
   # Development only: users may pick the fake provider.
   VISION_ALLOW_FAKE_PROVIDER: "false"

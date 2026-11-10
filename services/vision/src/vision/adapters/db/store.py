@@ -508,6 +508,7 @@ class SqlStore:
                 provider=v["consent_provider"],
                 family=v["consent_family"],
                 model=v["consent_model"],
+                endpoint=v["consent_endpoint"] or "default",
             ),
         )
 
@@ -520,6 +521,7 @@ class SqlStore:
             "consent_provider": given.provider[:100],
             "consent_family": given.family,
             "consent_model": given.model,
+            "consent_endpoint": given.endpoint[:300],
         }
         values = {
             "user_id": user_id,
@@ -544,6 +546,7 @@ class SqlStore:
             "consent_provider": None,
             "consent_family": None,
             "consent_model": None,
+            "consent_endpoint": None,
         }
         statement = (
             sa.update(prefs)

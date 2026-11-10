@@ -147,6 +147,7 @@ function settings(overrides: Partial<ProviderSettings> = {}): ProviderSettings {
       provider: 'Fake (development)',
       family: 'fake',
       model: 'fake/recover',
+      endpoint: 'default',
     },
     secrets_available: true,
     ...overrides,

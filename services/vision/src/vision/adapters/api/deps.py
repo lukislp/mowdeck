@@ -145,7 +145,7 @@ class ConsentRequiredProblem(Forbidden):
                 ProblemFieldError(
                     parameter="destination",
                     code=destination.kind.value,
-                    detail=f"{destination.provider} / {destination.model}",
+                    detail=f"{destination.provider} / {destination.model} / {destination.endpoint}",
                 )
             ],
         )

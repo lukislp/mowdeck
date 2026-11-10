@@ -550,6 +550,9 @@ class DestinationOut(BaseModel):
     provider: str = Field(description="Human readable provider name, e.g. `Anthropic`.")
     family: str
     model: str
+    endpoint: str = Field(
+        description="`default` (the provider's own endpoint) or the host of the base URL."
+    )
 
     @classmethod
     def of(cls, destination: Destination) -> "DestinationOut":
@@ -559,6 +562,7 @@ class DestinationOut(BaseModel):
             provider=destination.provider,
             family=destination.family,
             model=destination.model,
+            endpoint=destination.endpoint,
         )
 
 

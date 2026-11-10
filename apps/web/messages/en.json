@@ -1687,6 +1687,7 @@
   "ai_auto_notify_link": "Notification settings",
   "consent_title": "Send data to a cloud AI?",
   "consent_intro": "This feature asks the AI model {model} of {provider}. That is a cloud service outside this installation.",
+  "consent_endpoint": "The data goes to the address {host}, not to the provider's own endpoint.",
   "consent_sends_title": "What is sent",
   "consent_sends_pictures": "Up to four camera pictures. They can show people, animals and neighbouring property.",
   "consent_sends_map": "A map sketch with the names of your areas.",

@@ -449,6 +449,11 @@ export type components = {
          * @description Where the data of a request goes (ADR 0081): the kind decides whether consent is needed.
          */
         DestinationOut: {
+            /**
+             * Endpoint
+             * @description `default` (the provider's own endpoint) or the host of the base URL.
+             */
+            endpoint: string;
             /** Family */
             family: string;
             /** @description `cloud`: a third party outside this installation (consent required); `local`: own hardware; `simulated`: the rule based fake model. */

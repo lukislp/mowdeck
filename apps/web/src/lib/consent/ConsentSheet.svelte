@@ -50,6 +50,10 @@
         {m.consent_intro({ provider: destination.provider, model: destination.model })}
       </p>
 
+      {#if destination.endpoint !== 'default'}
+        <p data-testid="consent-endpoint">{m.consent_endpoint({ host: destination.endpoint })}</p>
+      {/if}
+
       <h3>{m.consent_sends_title()}</h3>
       <ul>
         {#if consent.scope !== 'chat'}
