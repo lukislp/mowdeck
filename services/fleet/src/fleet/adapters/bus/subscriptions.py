@@ -26,6 +26,8 @@
 * ``fleet.drive.start`` and ``fleet.drive.stop`` (core NATS requests, queue ``fleet``,
   internal): Realtime opens and closes a manual drive session on behalf of a subject
   (ADR 0026); counted per outcome (``mowdeck_fleet_drive_sessions_total``).
+* ``account.erase.fleet`` (core NATS request, queue ``fleet-erasure``, internal): Identity has
+  an account deleted (ADR 0082, :mod:`fleet.adapters.bus.erasure`).
 
 Core NATS is internal (clients reach services only through Traefik), so only services can send
 these requests; the issue request still performs every authorization check for the subject.
@@ -75,6 +77,7 @@ from mowdeck_service_kit.bus import (
 from prometheus_client import CollectorRegistry, Counter
 from pydantic import ValidationError
 
+from fleet.adapters.bus.erasure import subscribe_erasure
 from fleet.application.services import Services
 
 _log = get_logger("fleet.bus")
@@ -342,6 +345,7 @@ async def subscribe_all(
             durable=CAMERA_RELAY_CONSUMER,
             queue=CAMERA_RELAY_CONSUMER,
         ),
+        await subscribe_erasure(bus, services.erasure),
     ]
     if cache is not None:
         subscriptions.append(await subscribe_cache_invalidation(bus, cache))

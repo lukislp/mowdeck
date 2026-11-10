@@ -239,6 +239,7 @@ Permissions `mower.view`, `mower.control`, `mower.drive`, `fleet.manage`, `fleet
 | reply | `fleet.drive.start` | core NATS, queue `fleet` (internal) | `DriveStartRequest` / `DriveStartReply` | opens a manual drive session (Realtime) |
 | reply | `fleet.drive.stop` | core NATS, queue `fleet` (internal) | `DriveStopRequest` / `DriveStopReply` | closes it |
 | reply | `fleet.targets.resolve` | core NATS, queue `fleet` (internal) | `ResolveTargetRequest` / `ResolveTargetReply` | the mowers of a mower or group target of one account with the time zone and coordinates of their sites and their saved mowing defaults (`mow_pattern`); `timezone` is the target's (a cross-site group: the default site) |
+| reply | `account.erase.fleet` | core NATS, queue `fleet-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | request | `gateway.mower.<id>.camera.session` | core NATS (internal) | `CameraSessionRequest` / `CameraSessionReply` | a live camera session from the Device-Gateway that holds the mower (`transport` `direct`, and the fallback of `auto`) |
 | request | `relay.camera.attach`, `relay.camera.renew`, `relay.camera.detach` | core NATS (internal, queue `camera-relay`) | `RelayAttachRequest` / `RelayAttachReply`, `RelayRenewRequest` / `RelayRenewReply`, `RelayDetachRequest` / `RelayDetachReply` | leases on the camera relay (ADR 0045) |
 | request | `gateway.cloud.providers` | core NATS (internal; any gateway instance answers) | `CloudProvidersRequest` / `CloudProvidersReply` | the enabled cloud providers and their credential fields (ADR 0066) |
@@ -254,6 +255,16 @@ Permissions `mower.view`, `mower.control`, `mower.drive`, `fleet.manage`, `fleet
 | consumed | `event.entitlements.plan.changed` | JetStream, every instance | `EventEnvelope[PlanChanged]` | drops the cached plan snapshots of the Entitlements client |
 
 `fleet.drive.start` also serves the Vision service (ADR 0033): it drives an approved AI assist maneuver on behalf of the approving user with `origin: vision`, which the `drive_sessions` row and `GET /mowers/{id}/drive-sessions` show (migration `0005`). `fleet.commands.issue` accepts the origin `vision` (the `return_to_dock` after a successful Find Dock).
+
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.fleet` (core NATS, internal, no principal) and Fleet deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted:** every mower like a normal removal (`mower.removed` each, so the Device-Gateway closes the connection; memberships, links, area names and tuples go with it), then groups and sites (the default site too) with their tuples, base stations, linked vendor accounts with their encrypted credentials, command records, drive sessions and the account's audit rows (`audit_log`, through the one `DELETE` the append-only trigger admits, migration `0014`). One unit of work per mower, so a retry after a failure continues where it stopped.
+- **In memory:** the cached still images of the account's mowers and the login throttle's entries of the account (their key holds the vendor e-mail address). Both live in the replica that answers; another replica keeps its own until the process ends.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again. Fleet is asked first, so the other services see no further states of the account's mowers.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
 
 ## Consistency with OpenFGA
 
@@ -322,7 +333,7 @@ Migration numbering: `0008` follows `0007` (area names); `0009` (additive: nulla
 | `domain/` | entities (including `MowerLink`), rules (relation and plan features per command kind, expiry, status rank, shard rule, connection and link option validation, time zone), the option schemas per connection kind with `supports_links` (`connections.py`), errors (with field problems) |
 | `application/` | use cases (`sites`, `groups`, `mowers`, `commands`, `drive`, `camera`, `linked_accounts` with the `CredentialVault`, `links` for the bridge links and the firmware check), unit of work with the in-transaction tuple write, hierarchy tuples, object checks (`access`), ports |
 | `adapters/api/` | routes, schemas, dependencies (object gates, error mapping) |
-| `adapters/bus/` | event and command publishers, subscriptions, the camera, cloud discovery, bridge scan and firmware check requests |
+| `adapters/bus/` | event and command publishers, subscriptions, the camera, cloud discovery, bridge scan and firmware check requests, the account erasure request (`erasure.py`) |
 | `adapters/crypto.py` | AES-256-GCM of linked account passwords and link secrets |
 | `adapters/db/` | tables, the PostgreSQL store, Alembic migrations |
 | `adapters/memory.py` | the memory store (tests) |

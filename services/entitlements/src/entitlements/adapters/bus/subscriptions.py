@@ -11,6 +11,8 @@
   only, so no principal is checked; an invalid request is answered with ``invalid_request``.
 * ``event.identity.account.created`` (JetStream ``EVENTS``, durable ``entitlements-accounts``):
   gives the new account the default plan (a trial when the plan has trial days).
+* ``account.erase.entitlements`` (core NATS request, queue ``entitlements-erasure``, internal):
+  Identity has an account deleted (ADR 0082, :mod:`entitlements.adapters.bus.erasure`).
 
 Handler rules: return to acknowledge, raise to get a redelivery, raise ``DropMessage`` to
 discard a poison message.
@@ -35,6 +37,7 @@ from mowdeck_service_kit.bus import BusMessage, DropMessage, EventBus, MessageHa
 from prometheus_client import CollectorRegistry, Counter
 from pydantic import ValidationError
 
+from entitlements.adapters.bus.erasure import subscribe_erasure
 from entitlements.application.services import Services
 
 _log = get_logger("entitlements.bus")
@@ -137,4 +140,5 @@ async def subscribe_all(
             durable=ACCOUNTS_CONSUMER,
             queue=ACCOUNTS_CONSUMER,
         ),
+        await subscribe_erasure(bus, services.erasure),
     ]

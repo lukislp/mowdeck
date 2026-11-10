@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
+from mowdeck_service_kit.db import account_row_counts, account_tables
 from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -222,6 +223,10 @@ class SqlTx:
         deleted = await self.audit.delete(account_id=account_id)
         await self.conn.execute(switch, {"name": AUDIT_PURGE_SETTING, "value": ""})
         return deleted
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every table of the schema that has an ``account_id`` column."""
+        return await account_row_counts(self.conn, account_tables(tables.metadata), account_id)
 
 
 class SqlStore:

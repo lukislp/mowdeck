@@ -41,6 +41,7 @@ from scheduler.adapters.api.demo import DEMO_POLICY
 from scheduler.adapters.api.demo_routes import router as demo_router
 from scheduler.adapters.api.deps import install_error_mapping
 from scheduler.adapters.api.routes import router
+from scheduler.adapters.bus.erasure import subscribe_erasure
 from scheduler.adapters.bus.fleet import BusFleetGateway
 from scheduler.adapters.bus.publisher import BusEventPublisher
 from scheduler.adapters.bus.subscriptions import subscribe_all
@@ -146,6 +147,7 @@ def build_app(
             subscriptions = await subscribe_all(
                 active_bus, services.ingest, as_cache(active_authorizer)
             )
+            subscriptions.append(await subscribe_erasure(active_bus, services.erasure))
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             plan_events = await plans.subscribe()

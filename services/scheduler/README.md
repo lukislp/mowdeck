@@ -59,10 +59,21 @@ Creating a schedule needs the plan feature `schedules` (403 `urn:mowdeck:problem
 | produced | `event.scheduler.schedule.disabled` | JetStream `EVENTS` | `EventEnvelope[ScheduleDisabled]` | the owner lost `can_control`, or the target was removed |
 | request | `fleet.targets.resolve` | core NATS (Fleet) | `ResolveTargetRequest` / `ResolveTargetReply` | the target's mowers, time zone and site coordinates |
 | request | `fleet.commands.issue` | core NATS (Fleet) | `IssueCommandRequest` / `IssueCommandReply` | `start_mow` and `return_to_dock` on behalf of the owner (or the caller of a manual run) |
+| reply | `account.erase.scheduler` | core NATS, queue `scheduler-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | consumed | `telemetry.mower.*` | JetStream, durable and queue `scheduler-states` | `MowerState` | latest activity (busy check) and position; an activity change is written at once, an unchanged activity at most every 30 s or after a move of 100 m (the follow-up and the weather need no more; one write per state was most of the Scheduler's work per state, `docs/ops/load-testing.md`) |
 | consumed | `device.mower.>` | JetStream `DEVICE`, durable and queue `scheduler-device` | `MowerMapSnapshot` | map origin (location) and area ids; capability snapshots are ignored here |
 | consumed | `device.mower.*.capabilities` | JetStream `DEVICE`, durable and queue `scheduler-capabilities`, newest message per subject first | `MowerCapabilitiesSnapshot` | what a schedule may set for the mower (check when saved, fit at fire time) |
 | consumed | `event.identity.grants.changed` | JetStream, every instance | `GrantsChanged` | drops cached decisions, so a revoked right stops the next firing |
+
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.scheduler` (core NATS, internal, no principal) and the Scheduler deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted:** schedules and their runs and the per-mower facts (`mower_status` with the last position, `mower_places`, `mower_capabilities`, `mow_angles`, `mower_rotation`), in one transaction.
+- **In memory:** the statuses the ingest last wrote for the account's mowers (they hold a position), in the replica that answers; another replica keeps its own until its bounded table is reset or the process ends.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
 
 ## Execution
 
@@ -104,7 +115,7 @@ Tables (Alembic revision `0004`): `schedules` (recurrence, window, areas, patter
 | `domain/` | recurrence (`zoneinfo`), rain decision, validation and rotation rules, entities, errors |
 | `application/` | schedules (CRUD, preview, skip), runner (ticker, manual runs, follow-up), weather (location and decision), ingest, access checks, ports |
 | `adapters/api/` | routes, schemas, error mapping |
-| `adapters/bus/` | Fleet gateway (core NATS requests), event publisher, subscriptions |
+| `adapters/bus/` | Fleet gateway (core NATS requests), event publisher, subscriptions, the account erasure request (`erasure.py`) |
 | `adapters/db/` | tables, the PostgreSQL store, Alembic migrations |
 | `adapters/weather/` | Open-Meteo and static providers |
 | `adapters/memory.py` | the memory store (tests) |

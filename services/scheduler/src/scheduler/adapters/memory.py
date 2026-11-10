@@ -7,10 +7,11 @@ claimed schedule is never claimed twice."""
 
 import asyncio
 import copy
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import MowerCapabilities
@@ -192,6 +193,26 @@ class MemoryTx:
             deleted += data.capabilities.pop(mower_id, None) is not None
         deleted += _drop(data.angles, lambda a: a.account_id == account_id)
         return deleted + _drop(data.rotation, lambda r: r.account_id == account_id)
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        data = self._data
+        counts = {
+            "schedule_runs": _count(data.runs.values(), account_id),
+            "schedules": _count(data.schedules.values(), account_id),
+            "mower_status": _count(data.status.values(), account_id),
+            "mower_places": _count(data.places.values(), account_id),
+            "mower_capabilities": sum(
+                1 for owner in data.capability_accounts.values() if owner == account_id
+            ),
+            "mow_angles": _count(data.angles.values(), account_id),
+            "mower_rotation": _count(data.rotation.values(), account_id),
+        }
+        return {table: found for table, found in counts.items() if found}
+
+
+def _count(rows: Iterable[Any], account_id: UUID) -> int:
+    """How many of ``rows`` belong to the account."""
+    return sum(1 for row in rows if row.account_id == account_id)
 
 
 def _drop[K, V](rows: dict[K, V], doomed: Callable[[V], bool]) -> int:

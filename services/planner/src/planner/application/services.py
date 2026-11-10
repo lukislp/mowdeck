@@ -7,10 +7,12 @@ from dataclasses import dataclass
 
 from mowdeck_authz import Authorizer
 from mowdeck_patterns import PatternRegistry
+from mowdeck_service_kit.erasure import AccountErasure
 
 from planner.application.access import Access
 from planner.application.context import PlannerConfig
 from planner.application.demo_purge import AccountPurge
+from planner.application.erasure import account_erasure
 from planner.application.ingest import Ingest
 from planner.application.planning import Planning
 from planner.application.ports import Clock, Store, TrackSource
@@ -27,6 +29,8 @@ class Services:
     registry: PatternRegistry
     config: PlannerConfig
     purge: AccountPurge
+    erasure: AccountErasure
+    """Answers ``account.erase.planner`` (ADR 0082)."""
 
 
 def build_services(
@@ -40,11 +44,13 @@ def build_services(
 ) -> Services:
     """Create the use cases."""
     access = Access(authorizer)
+    purge = AccountPurge(store)
     return Services(
         planning=Planning(store, access, registry, config, tracks),
         templates=Templates(store, access, registry, config, clock),
         ingest=Ingest(store),
         registry=registry,
         config=config,
-        purge=AccountPurge(store),
+        purge=purge,
+        erasure=account_erasure(purge, store),
     )

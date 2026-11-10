@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from mowdeck_service_kit.db import account_row_counts
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -20,6 +21,10 @@ from telemetry.domain.tracking import TrackingLink, TrackingPhoto, TrackingSessi
 
 TRACKING_LOCK_KEY = 0x4D44_5445_4C45_0002
 """Key of the session level advisory lock that elects the replica that runs the tick."""
+
+_ACCOUNT_TABLES = (tables.tracking_photos, tables.tracking_links, tables.tracking_sessions)
+"""The tables of :class:`SqlTrackingStore`, in deletion order (all carry ``account_id``): what
+the purge of an account deletes and what the account erasure counts afterwards."""
 
 _S = tables.tracking_sessions.c
 _L = tables.tracking_links.c
@@ -128,12 +133,16 @@ class SqlTrackingStore:
         sessions; one transaction."""
         removed = 0
         async with self.engine.begin() as conn:
-            for table in (tables.tracking_photos, tables.tracking_links, tables.tracking_sessions):
+            for table in _ACCOUNT_TABLES:
                 result = await conn.execute(
                     sa.delete(table).where(table.c.account_id == account_id)
                 )
                 removed += result.rowcount
         return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        async with read_connection(self.engine) as conn:
+            return await account_row_counts(conn, _ACCOUNT_TABLES, account_id)
 
     async def add_link(self, link: TrackingLink) -> None:
         async with self.engine.begin() as conn:
