@@ -44,6 +44,10 @@
 		A0DECC200000000000000633 /* MowerWidgetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0DECC200000000000000691 /* MowerWidgetCore */; };
 		A0DECC200000000000000634 /* MowDeckWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000609 /* MowDeckWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A0DECC200000000000000635 /* WatchRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0DECC200000000000000615 /* WatchRelay.swift */; };
+		A0DECC300000000000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC300000000000000011 /* PrivacyInfo.xcprivacy */; };
+		A0DECC300000000000000002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC300000000000000012 /* PrivacyInfo.xcprivacy */; };
+		A0DECC300000000000000003 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC300000000000000013 /* PrivacyInfo.xcprivacy */; };
+		A0DECC300000000000000004 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A0DECC300000000000000014 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +161,10 @@
 		A0DECC200000000000000613 /* MowDeckWatchWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MowDeckWatchWidgets.entitlements; sourceTree = "<group>"; };
 		A0DECC200000000000000614 /* MowDeckWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MowDeckWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0DECC200000000000000615 /* WatchRelay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRelay.swift; sourceTree = "<group>"; };
+		A0DECC300000000000000011 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A0DECC300000000000000012 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A0DECC300000000000000013 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A0DECC300000000000000014 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -242,6 +250,7 @@
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
+				A0DECC300000000000000011 /* PrivacyInfo.xcprivacy */,
 				A0DECC000000000000000013 /* App.entitlements */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
@@ -269,6 +278,7 @@
 				A0DECC100000000000000105 /* MowingLiveActivity.swift */,
 				A0DECC100000000000000112 /* Localizable.xcstrings */,
 				A0DECC100000000000000110 /* Info.plist */,
+				A0DECC300000000000000012 /* PrivacyInfo.xcprivacy */,
 				A0DECC100000000000000111 /* MowDeckWidgets.entitlements */,
 			);
 			path = ../MowDeckWidgets;
@@ -284,6 +294,7 @@
 				A0DECC200000000000000605 /* Assets.xcassets */,
 				A0DECC200000000000000606 /* Localizable.xcstrings */,
 				A0DECC200000000000000607 /* Info.plist */,
+				A0DECC300000000000000013 /* PrivacyInfo.xcprivacy */,
 				A0DECC200000000000000608 /* MowDeckWatch.entitlements */,
 			);
 			path = ../MowDeckWatch;
@@ -294,6 +305,7 @@
 			children = (
 				A0DECC200000000000000611 /* MowDeckWatchWidgets.swift */,
 				A0DECC200000000000000612 /* Info.plist */,
+				A0DECC300000000000000014 /* PrivacyInfo.xcprivacy */,
 				A0DECC200000000000000613 /* MowDeckWatchWidgets.entitlements */,
 			);
 			path = ../MowDeckWatchWidgets;
@@ -471,6 +483,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0DECC300000000000000001 /* PrivacyInfo.xcprivacy in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
@@ -491,6 +504,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0DECC300000000000000002 /* PrivacyInfo.xcprivacy in Resources */,
 				A0DECC100000000000000220 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -499,6 +513,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0DECC300000000000000003 /* PrivacyInfo.xcprivacy in Resources */,
 				A0DECC200000000000000625 /* Assets.xcassets in Resources */,
 				A0DECC200000000000000626 /* Localizable.xcstrings in Resources */,
 			);
@@ -508,6 +523,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0DECC300000000000000004 /* PrivacyInfo.xcprivacy in Resources */,
 				A0DECC200000000000000632 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

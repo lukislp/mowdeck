@@ -42,6 +42,10 @@ The web app (`apps/web/src/lib/native/handoff.ts`) registers the PKCE challenge,
 
 `@capacitor/app` (deep links), `@capacitor/local-notifications`, `@capacitor/push-notifications` (iOS only, APNs; excluded from Android because it needs Firebase), `@capacitor/splash-screen`, `@capawesome/capacitor-badge`, and the core `SystemBars` (Android insets, light/dark bars).
 
+## Privacy manifest
+
+The iOS bundles that use a required-reason API (the app, the widget extension, the watch app and its complication) each carry a `PrivacyInfo.xcprivacy` next to their `Info.plist`: user defaults with the reasons `CA92.1` (the app's own state, such as the server address) and `1C8F.1` (the App Group shared with the widgets and the watch), no tracking, no collected data. Nothing is sent to the developer, so the App Privacy answer is "Data Not Collected". Adding a required-reason API (file timestamps, boot time, disk space, active keyboards, or a new `UserDefaults` use in another target) means updating the manifest of that bundle; `tools/repo-checks/scripts/ios_release_check.py source` fails otherwise. Details, the caveats of the answer and the plugin inventory: [Privacy manifests](../../docs/ops/mobile-apps.md#privacy-manifests-and-the-app-privacy-answer).
+
 ## License
 
 AGPL-3.0-only, like the web app.
