@@ -1,9 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Lukas Körber
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
-import { LANGUAGE_KEY, readLanguage, resolveLanguage, startLanguage, storeLanguage } from './i18n';
+import {
+  LANGUAGE_KEY,
+  readLanguage,
+  resolveLanguage,
+  startLanguage,
+  storeLanguage,
+  texts,
+} from './i18n';
 
 function memory(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -116,5 +126,21 @@ describe('startLanguage', () => {
     startLanguage(page.root, storage, 'en');
     page.en.click();
     expect(setItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('the texts of the bundled pages', () => {
+  it('have a German and an English text for every key the pages use', () => {
+    const de = texts('de');
+    const en = texts('en');
+    for (const file of ['index.html', 'offline.html']) {
+      const html = readFileSync(resolve(import.meta.dirname, '..', file), 'utf8');
+      const keys = [...html.matchAll(/data-t(?:-placeholder|-label)?="(\w+)"/g)].map((m) => m[1]!);
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) {
+        expect(de, `${file}: ${key} (de)`).toHaveProperty(key);
+        expect(en, `${file}: ${key} (en)`).toHaveProperty(key);
+      }
+    }
   });
 });
