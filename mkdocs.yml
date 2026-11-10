@@ -127,6 +127,7 @@ nav:
       - adr/0078-batched-state-ingestion.md
       - adr/0079-fast-sandbox-lifecycle.md
       - adr/0080-codespaces-dev-container.md
+      - adr/0082-account-deletion-inside-the-app.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md
