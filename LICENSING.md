@@ -26,6 +26,10 @@ The address is the repository at the tag of the release (`https://github.com/luk
 
 **Forks:** whoever runs modified code must offer that code. Publish it, point `SOURCE_URL` (Compose) or `config.SOURCE_URL` (Helm) or the build argument `MOWDECK_SOURCE_URL` to your public repository, and build from a tag or commit that exists there; do not remove the link or the header. Details: [docs/ops/source-code.md](docs/ops/source-code.md).
 
+## The native apps
+
+The iOS and Android apps (`apps/mobile`) contain only: the bundled pages (first-launch screen, offline page and About page, built from `apps/mobile/src`) and the Swift and Java shell, AGPL-3.0-only like the rest of `apps/`; the stylesheets of `libs/mowdeck-ui` (Apache-2.0) with the IBM Plex fonts (SIL OFL 1.1, text included); Capacitor and its plugins (MIT) and `tslib` (0BSD). The web app is not bundled; it is loaded from the user's own server, so its licence and source offer are shown by that server. The app's About page shows the version, the licence and the source link of the app's version, and the notices of the third-party code, generated from the packages by `tools/repo-checks/scripts/app_notices.py`; GPL, AGPL and LGPL code is refused there. Details: [docs/ops/mobile-apps.md](docs/ops/mobile-apps.md#about-licences-and-third-party-notices). This section only describes the bundle. Whether the App Store's terms need an additional permission for distributing AGPL code is a decision of the maintainer; none has been granted.
+
 ## Third-party components
 
 Third-party components (Traefik, NATS, PostgreSQL, OpenFGA and so on) keep their own licenses; they are used as unmodified container images.

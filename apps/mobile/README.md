@@ -6,8 +6,10 @@ The MowDeck apps for iPhone and Android: Capacitor 8 shells that load the web ap
 | --- | --- |
 | `capacitor.config.ts` | App id `app.mowdeck.mobile`, name, plugins; `server.url` is set natively at start from the stored address |
 | `index.html`, `offline.html`, `src/` | The two bundled pages: first-launch server screen and "server not reachable" (built to `www/` by Vite); the first-launch screen also offers "Try the demo" (`src/demo-server.ts`, same connect flow as a typed address), a short explanation and links to the project page and the privacy section of [docs/ops/mobile-apps.md](../../docs/ops/mobile-apps.md) (`src/project-links.ts`); both have a German/English toggle (`src/i18n.ts`, choice kept in the bundled origin's localStorage, else the system language) |
+| `about.html`, `src/about.ts` | The About page, linked from both bundled pages: app version and build (`@capacitor/app` `App.getInfo()`, neutral fallback in a browser), the app's licence (AGPL-3.0-only) with the pointer to the server's own About section, the source code of exactly this version (`src/source-link.ts`, the web app's `v<version>` convention, kept equal to `apps/web/src/lib/legal/source.ts` by a test), the manufacturer disclaimer and the third-party notices. Pure logic is separate from the page: `src/app-info.ts`, `src/source-link.ts`, `src/notices.ts` |
+| `public/third-party-notices.json`, `third-party-policy.toml` | The generated third-party notices of the app bundle (copied into `www/` by Vite, shown by the About page) and the licence policy that guards them (`tools/repo-checks/scripts/app_notices.py`, [docs/ops/mobile-apps.md](../../docs/ops/mobile-apps.md#about-licences-and-third-party-notices)) |
 | `src/shell.ts` | JavaScript side of the shell's own plugin `MowDeckShell` (server address; on iOS the installation id for APNs, kept in the Keychain) |
-| `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift` (also `openAuthSession`), `App.entitlements` (push) |
+| `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift` (also `openAuthSession`), `App.entitlements` (push), `App/{en,de}.lproj/InfoPlist.strings` (the local network prompt in English and German) |
 | `ios/MowDeckWidgets/`, `ios/MowerWidgetKit/` | The iPhone widgets and the Live Activity ([ADR 0059](../../docs/adr/0059-ios-widgets-and-live-activity.md)) and their shared Swift package (models, presentation, API client, watch protocol; `swift test --package-path apps/mobile/ios/MowerWidgetKit` on a Mac) |
 | `ios/MowDeckWatch/`, `ios/MowDeckWatchWidgets/` | The Apple Watch app and its complication ([ADR 0060](../../docs/adr/0060-apple-watch-app.md)), SwiftUI; the iPhone side is `ios/App/App/WatchRelay.swift` (WatchConnectivity relay with the widget credential) |
 | `android/` | Gradle project. `MainActivity.java`, `ShellSettings.java`, `MowDeckShellPlugin.java` (also `openAuthSession`), `AuthSessionUrls.java`, release signing from the environment |
@@ -23,7 +25,8 @@ The web app's side of the bridge (detection, deep links, notifications, badge, A
 pnpm --filter mobile build    # bundled pages -> www/
 pnpm --filter mobile sync     # build + cap sync (copies www/ and the plugin list into ios/ and android/)
 pnpm --filter mobile check    # tsc
-pnpm --filter mobile test     # vitest (server address, first-launch check)
+pnpm --filter mobile test     # vitest (server address, first-launch check, About page logic)
+python3 tools/repo-checks/scripts/app_notices.py generate   # after changing dependencies: rewrite public/third-party-notices.json (needs pnpm install)
 pnpm --filter mobile assets   # icons and splash screens from resources/
 ```
 
@@ -48,4 +51,4 @@ The iOS bundles that use a required-reason API (the app, the widget extension, t
 
 ## License
 
-AGPL-3.0-only, like the web app.
+AGPL-3.0-only, like the web app. The bundle also contains third-party code (Capacitor, the plugins, the IBM Plex fonts under the SIL OFL 1.1); its licences and copyright notices are in `public/third-party-notices.json` and on the app's About page.

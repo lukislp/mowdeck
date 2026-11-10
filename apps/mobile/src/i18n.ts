@@ -35,6 +35,26 @@ const de = {
   retry: 'Erneut versuchen',
   change: 'Anderen Server wählen',
   language: 'Sprache',
+  aboutApp: 'Über die App und Lizenzen',
+  aboutTitle: 'Über die App',
+  back: 'Zurück',
+  aboutVersion: 'Version',
+  aboutBuild: 'Build',
+  aboutVersionUnknown: 'nur in der installierten App',
+  aboutLicenceTitle: 'Lizenz',
+  aboutLicence:
+    'Der Code dieser App steht unter der GNU AGPL-3.0 (nur Version 3), die gemeinsamen Gestaltungs-Stile (@mowdeck/ui) unter Apache-2.0. Lizenz und Quellcode-Angebot deines MowDeck-Servers findest du im Bereich „Über“ der Server-Oberfläche.',
+  aboutSourceTitle: 'Quellcode',
+  aboutSourceVersion: 'Der Quellcode genau dieser Version:',
+  aboutSourceProject: 'Der Quellcode des Projekts:',
+  aboutAffiliation:
+    'MowDeck ist ein unabhängiges Projekt und steht in keiner Verbindung zu den Herstellern der unterstützten Mähroboter.',
+  aboutNoticesTitle: 'Software Dritter',
+  aboutNoticesLead:
+    'Diese App enthält die folgenden Open-Source-Komponenten. Hier stehen ihre Urheberrechtshinweise und Lizenztexte.',
+  aboutNoticesLoading: 'Hinweise werden geladen …',
+  aboutNoticesError: 'Die Hinweise konnten nicht geladen werden.',
+  aboutLicenceText: 'Lizenztext',
 } as const;
 
 const en: Record<keyof typeof de, string> = {
@@ -64,6 +84,26 @@ const en: Record<keyof typeof de, string> = {
   retry: 'Try again',
   change: 'Choose another server',
   language: 'Language',
+  aboutApp: 'About and licences',
+  aboutTitle: 'About the app',
+  back: 'Back',
+  aboutVersion: 'Version',
+  aboutBuild: 'Build',
+  aboutVersionUnknown: 'shown in the installed app only',
+  aboutLicenceTitle: 'Licence',
+  aboutLicence:
+    'The code of this app is licensed under the GNU AGPL-3.0 (version 3 only), the shared design styles (@mowdeck/ui) under Apache-2.0. The licence and the source offer of your MowDeck server are in the About section of the server’s own interface.',
+  aboutSourceTitle: 'Source code',
+  aboutSourceVersion: 'The source code of exactly this version:',
+  aboutSourceProject: 'The source code of the project:',
+  aboutAffiliation:
+    'MowDeck is an independent project and is not affiliated with the manufacturers of the supported mowers.',
+  aboutNoticesTitle: 'Third-party software',
+  aboutNoticesLead:
+    'This app contains the following open-source components. Their copyright notices and licence texts are listed here.',
+  aboutNoticesLoading: 'Loading notices …',
+  aboutNoticesError: 'The notices could not be loaded.',
+  aboutLicenceText: 'Licence text',
 };
 
 export type TextKey = keyof typeof de;
@@ -132,12 +172,14 @@ export interface PageLanguage {
 
 /**
  * Set a bundled page's language up: apply the stored or system language, and make the
- * `[data-language]` buttons switch it at once and remember the choice.
+ * `[data-language]` buttons switch it at once and remember the choice. `onShow` runs after
+ * every application of the texts, for what a page builds from script (the About page's notices).
  */
 export function startLanguage(
   root: Document,
   storage: LanguageStorage | null,
   system: string | undefined,
+  onShow?: (t: Record<TextKey, string>) => void,
 ): PageLanguage {
   let current = resolveLanguage(readLanguage(storage), system);
   const buttons = [...root.querySelectorAll<HTMLElement>('[data-language]')];
@@ -146,6 +188,7 @@ export function startLanguage(
     for (const button of buttons) {
       button.setAttribute('aria-pressed', String(button.dataset.language === current));
     }
+    onShow?.(texts(current));
   };
   for (const button of buttons) {
     button.addEventListener('click', () => {
