@@ -170,6 +170,7 @@ async def test_a_whole_account_is_erased_on_postgres(monkeypatch: pytest.MonkeyP
     from test_identity_db import store_of
 
     settings: dict[str, Any] = {
+        "identity_erasure_enabled": True,
         "identity_deletion_grace_days": 0,
         "identity_erasure_services": "fleet",
         "identity_erasure_settle_seconds": 0,

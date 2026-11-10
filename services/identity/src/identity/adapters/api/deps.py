@@ -152,23 +152,6 @@ ManageAccount = Annotated[Principal, _on_account(Relation.CAN_MANAGE_ACCOUNT)]
 """``can_manage_account`` (the owner)."""
 
 
-async def account_owner(request: Request, services: ServicesDep) -> Principal:
-    """The owner of the account in the path, checked in the database instead of OpenFGA.
-
-    For scheduling and cancelling the deletion: a locked account has no tuples for anybody
-    (ADR 0082), so the owner could not pass ``can_manage_account`` exactly when the restore is
-    needed. Foreign accounts: 404 (as ``path_account``); members who are not the owner, API
-    tokens and services: 403."""
-    ref = await path_account(request)
-    principal = await current_principal(request)
-    await services.accounts.ensure_owner(principal, UUID(ref.id))
-    return principal
-
-
-AccountOwner = Annotated[Principal, Depends(account_owner)]
-"""The owner of the account in the path, also while the account is locked for deletion."""
-
-
 def to_service_error(exc: IdentityError) -> ServiceError:
     """Map a use case error to the kit's problem types."""
     match exc:

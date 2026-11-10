@@ -542,6 +542,7 @@ async def test_background_tasks_run_and_stop() -> None:
         update={
             "identity_maintenance_seconds": 0.01,
             "identity_reconcile_seconds": 0.01,
+            "identity_erasure_enabled": True,
             "identity_catalogue_refresh_seconds": 0.01,
         }
     )

@@ -128,3 +128,40 @@ def test_a_new_service_with_tables_fails_until_it_is_registered(with_tables: set
     assert _unregistered(with_tables | {"newsvc"}, set(), set(PENDING) | {"newsvc"}) == (
         with_tables - {ORCHESTRATOR} - set(PENDING)
     )
+
+
+def _erasure_default() -> bool:
+    from identity.settings import Settings  # the workspace installs every service
+
+    default = Settings.model_fields["identity_erasure_enabled"].default
+    assert isinstance(default, bool)
+    return default
+
+
+def test_the_purge_is_off_exactly_while_services_are_pending() -> None:
+    """The switch cannot be forgotten: ``MOWDECK_IDENTITY_ERASURE_ENABLED`` stays false by
+    default until every service answers (step 2c empties PENDING), and then it must be true.
+
+    A purge that runs while a service does not answer would lock an account for good without
+    deleting it; a default that stays false afterwards would leave accounts undeleted."""
+    default = _erasure_default()
+    if PENDING:
+        assert default is False, (
+            f"{sorted(PENDING)} do not answer account.erase.<service> yet: the purge must stay "
+            "off by default (identity_erasure_enabled)"
+        )
+    else:
+        assert default is True, (
+            "every service answers account.erase.<service>: switch the purge on by default "
+            "(identity_erasure_enabled=True in identity.settings, .env.example and the values)"
+        )
+
+
+def test_the_deployment_files_carry_the_same_default(repo_root: Path) -> None:
+    expected = "true" if _erasure_default() else "false"
+    env = (repo_root / "infra/compose/.env.example").read_text("utf-8")
+    assert f"IDENTITY_ERASURE_ENABLED={expected}\n" in env
+    compose = (repo_root / "infra/compose/docker-compose.yml").read_text("utf-8")
+    assert f"${{IDENTITY_ERASURE_ENABLED:-{expected}}}" in compose
+    values = (repo_root / "infra/helm/mowdeck/values.yaml").read_text("utf-8")
+    assert f"IDENTITY_ERASURE_ENABLED: {expected}\n" in values

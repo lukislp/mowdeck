@@ -20,6 +20,7 @@ from mowdeck_authz import (
     TupleBackend,
 )
 from mowdeck_contracts.v1 import utc_now
+from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import EventBus
 from mowdeck_service_kit.db import create_engine
 from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient, client_from_settings
@@ -61,6 +62,9 @@ def key_cipher(settings: Settings) -> AesGcmKeyCipher:
         msg = "MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY (or _FILE) is required"
         raise ValueError(msg)
     return AesGcmKeyCipher(parse_kek(settings.identity_key_encryption_key.get_secret_value()))
+
+
+_log = get_logger("identity.runtime")
 
 
 @dataclass
@@ -152,7 +156,13 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
-        if self.settings.erasure_enabled:
+        if not self.settings.erasure_enabled:
+            if not self.settings.demo_mode:
+                _log.info(
+                    "account erasure is switched off: accounts scheduled for deletion stay "
+                    "locked and restorable (MOWDECK_IDENTITY_ERASURE_ENABLED=false)"
+                )
+        else:
             self.services.enable_erasure(
                 self.eraser
                 or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),

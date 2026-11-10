@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 ## Purpose
 
-- **Accounts** (household or business) with an owner. Registration creates the account, the owner, the default roles and the owner's tuples. Deletion is scheduled: the account is locked for a grace period (7 days) during which only the owner can sign in, and only to restore it; after it a purge job tells every service to delete its data (`account.erase.<service>`) and then deletes Identity's own rows, the audit rows staying without their personal fields ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), [Account erasure](#account-erasure-adr-0082)).
+- **Accounts** (household or business) with an owner. Registration creates the account, the owner, the default roles and the owner's tuples. Deletion is scheduled: the account is locked for a grace period (7 days) during which the owner keeps every permission and can restore it; after it a purge job (switched off until every service answers, `MOWDECK_IDENTITY_ERASURE_ENABLED`) tells every service to delete its data (`account.erase.<service>`) and then deletes Identity's own rows, the audit rows staying without their personal fields ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), [Account erasure](#account-erasure-adr-0082)).
 - **Users**: persons register; **sub-users** are created by an account with a username and a password (no e-mail needed) and belong to it. Usernames are unique per installation.
 - **Roles** are named bundles of permission keys per account. Owner and Admin are fixed relations (`account#owner`, `account#admin`); Manager, Operator, Viewer and custom roles are editable. A role is assigned at a level (account, site, group, mower) and Identity writes the expanded `grant_*` tuples (ADR 0014).
 - **Sessions**: password login, 10 minute EdDSA access tokens, opaque refresh tokens with rotation and reuse detection; for browsers a cookie-only refresh transport and a short reuse grace after a lost response ([ADR 0021](../../docs/adr/0021-browser-auth-flow.md)).
@@ -74,8 +74,8 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{request_id}` of the app's request (unknown, used or expired: 403). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) bound to the request's challenge |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
-| DELETE | `/accounts/{account_id}` | the owner (database check, also while locked; tokens 403) | `{password}` or a recent step-up; 202, status `deleting` with `delete_after`; API tokens revoked, nobody keeps a tuple. 409 while the account has other members (remove them first) or is already scheduled |
-| POST | `/accounts/{account_id}/restore` | the owner (database check) | Undo within the grace period; 409 once the purge started |
+| DELETE | `/accounts/{account_id}` | `can_manage_account` (owner) | `{password}` or a recent step-up; 202, status `deleting` with `delete_after`; API tokens revoked, the owner keeps every permission. 409 while the account has other members (remove them first) or is already scheduled |
+| POST | `/accounts/{account_id}/restore` | `can_manage_account` | Undo within the grace period; 409 once the purge started |
 | POST | `/accounts/{account_id}/reconcile` | `can_manage_users` | Make OpenFGA match the database for every subject of the account |
 | GET | `/accounts/{account_id}/permissions` | `member` | Permission catalogue |
 | GET, POST | `/accounts/{account_id}/users` | `can_manage_users` | List; create a sub-user with optional `assignments` |
@@ -157,11 +157,11 @@ The database is the source of truth; OpenFGA is a projection per subject. Every 
 
 `AccountService.request_deletion` schedules a deletion; `ErasureService` (`application/erasure.py`, a background task every `MOWDECK_IDENTITY_ERASURE_SWEEP_SECONDS`) does the rest once `delete_after` has passed:
 
-1. The account becomes `purging` (all sessions end, no tuple for anybody, no way back) and an `account_erasures` row names the services that must confirm (`MOWDECK_IDENTITY_ERASURE_SERVICES`).
+1. The account becomes `purging` (all sessions end, no tuple for anybody, no way back; before this the owner keeps every permission) and an `account_erasures` row names the services that must confirm (`MOWDECK_IDENTITY_ERASURE_SERVICES`).
 2. Every service gets a core NATS request `account.erase.<service>` (`AccountEraseRequest`, answered with `AccountEraseReply`), Fleet first, the others `MOWDECK_IDENTITY_ERASURE_SETTLE_SECONDS` later. A confirmation is stored at once and never asked again; a failure is stored with its reason and retried with a doubling wait (30 s to 10 minutes). Identity keeps its rows while any listed service has not confirmed.
 3. After the last confirmation Identity deletes its own rows and tuples, scrubs the personal fields of the audit rows of the account (`audit_log_scrub`, migration 0011; the rows stay), writes `account.erased` and marks the record erased.
 
-`python -m identity.cli erasures [--all]` shows the open purges (and with `--all` the finished ones): services confirmed, attempts, the last error. A purge older than `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` logs an error on every attempt. Until every service answers `account.erase.<service>` (follow-up steps of the ADR) an account scheduled for deletion stays `purging`. The public demo runs no erasure (its sandboxes have their own purge).
+`python -m identity.cli erasures [--all]` shows the open purges (and with `--all` the finished ones): services confirmed, attempts, the last error. A purge older than `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` logs an error on every attempt. Until every service answers `account.erase.<service>` (follow-up steps of the ADR) the switch stays off and an account scheduled for deletion stays `deleting`; with the switch on and a service missing it stays `purging`. The public demo runs no erasure (its sandboxes have their own purge).
 
 ## Settings
 
@@ -189,6 +189,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_LOGIN_FAILURE_WINDOW_SECONDS` | `900` | Window of the username throttle |
 | `MOWDECK_IDENTITY_TRUST_FORWARDED_FOR` | `false` | Client IP from `X-Forwarded-For` (only behind a trusted proxy; Compose sets it), by the kit's rule with `MOWDECK_CLIENT_IP_DEPTH` (`GATEWAY_CLIENT_IP_DEPTH`; unset: the leftmost entry) |
 | `MOWDECK_IDENTITY_DELETION_GRACE_DAYS` | `7` | Grace period of an account deletion (0: purged at the next sweep) |
+| `MOWDECK_IDENTITY_ERASURE_ENABLED` | `false` | Purge accounts whose grace period is over (ADR 0082). Off until every service answers the erasure request; then the default turns true. While false an account scheduled for deletion stays `deleting` and restorable, also after `delete_after`. Never on in the demo |
 | `MOWDECK_IDENTITY_ERASURE_SERVICES` | `fleet,scheduler,telemetry,notifications,vision,planner,entitlements` | Services that must confirm an account erasure, in order (add `billing` when Billing runs; a listed service that is not deployed holds every purge back) |
 | `MOWDECK_IDENTITY_ERASURE_SWEEP_SECONDS` | `60` | Interval of the sweep that starts and continues purges |
 | `MOWDECK_IDENTITY_ERASURE_TIMEOUT_SECONDS` | `10` | How long one erasure request to a service may take |

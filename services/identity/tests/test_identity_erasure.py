@@ -25,8 +25,9 @@ from identity.domain.erasure import AccountErasure, ErasureState
 from identity.domain.models import AccountStatus
 from identity.runtime import Runtime
 
-DEMO: dict[str, Any] = {"demo_seed_token": "seed"}
+DEMO: dict[str, Any] = {"demo_seed_token": "seed", "identity_erasure_enabled": True}
 NOW_GRACE: dict[str, Any] = {
+    "identity_erasure_enabled": True,
     "identity_deletion_grace_days": 0,
     "identity_erasure_services": "fleet,scheduler,notifications",
     "identity_erasure_settle_seconds": 30,
@@ -201,7 +202,7 @@ async def test_the_purge_cuts_every_access_and_cannot_be_restored() -> None:
         tuples = h.tuples_of(f"user:{lukas.user_id}")
     assert refresh.status_code == 401
     assert login.status_code == 401
-    assert restore.status_code in (401, 409)
+    assert restore.status_code == 404  # no tuple: invisible, and irreversible
     assert tuples == set()
 
 
@@ -360,6 +361,40 @@ async def test_nothing_is_deleted_without_a_configured_service() -> None:
 async def test_the_demo_runs_no_account_erasure() -> None:
     async with harness(demo_mode=True, **DEMO) as h:
         assert h.app.state.identity.erasure is None
+
+
+async def test_the_purge_is_off_by_default_and_nothing_changes() -> None:
+    """While the switch is off no purge starts: an account stays deleting and restorable past
+    delete_after, exactly as before the purge existed."""
+    fake = FakeEraser()
+    off = {k: v for k, v in NOW_GRACE.items() if k != "identity_erasure_enabled"}
+    assert make_settings().identity_erasure_enabled is False
+    async with harness(eraser=fake, **off) as h:
+        assert h.app.state.identity.erasure is None  # not wired, no background task
+        lukas = await h.register("lukas")
+        await _schedule(h, lukas)
+        # delete_after is "now" (the grace is 0 days here): the grace period is over.
+        restored = await h.client.post(lukas.url("/restore"), headers=lukas.headers)
+        async with h.store.transaction() as tx:
+            records = await tx.erasures.find()
+    assert fake.calls == [] and records == []
+    assert restored.status_code == 200 and restored.json()["status"] == "active"
+
+
+async def test_switching_it_off_says_so_at_startup(capsys: pytest.CaptureFixture[str]) -> None:
+    async with harness(identity_erasure_enabled=False):
+        pass
+    off = capsys.readouterr()
+    async with harness(identity_erasure_enabled=True):
+        pass
+    on = capsys.readouterr()
+    assert "account erasure is switched off" in off.out + off.err
+    assert "account erasure is switched off" not in on.out + on.err
+
+
+async def test_the_switch_never_turns_the_purge_on_in_the_demo() -> None:
+    assert make_settings(identity_erasure_enabled=True).erasure_enabled is True
+    assert make_settings(identity_erasure_enabled=True, demo_mode=True).erasure_enabled is False
 
 
 async def test_the_default_services_are_the_core_ones_in_order() -> None:

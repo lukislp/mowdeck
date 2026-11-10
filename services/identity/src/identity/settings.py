@@ -232,6 +232,13 @@ class Settings(ServiceSettings):
     identity_demo_sandbox_sweep_seconds: float = Field(default=60, ge=1)
     """Interval of the sweep that deletes idle and expired sandboxes."""
 
+    identity_erasure_enabled: bool = False
+    """Account erasure (ADR 0082): purge accounts whose deletion grace period is over. **Off by
+    default** until every service answers ``account.erase.<service>`` (the follow-up steps of the
+    ADR; the default turns true with the last one). While off nothing starts a purge: an account
+    scheduled for deletion stays ``deleting`` and restorable, also after ``delete_after``, exactly
+    as before. Never on in the public demo."""
+
     identity_erasure_services: str = (
         "fleet,scheduler,telemetry,notifications,vision,planner,entitlements"
     )
@@ -301,9 +308,9 @@ class Settings(ServiceSettings):
 
     @property
     def erasure_enabled(self) -> bool:
-        """The purge of deleted accounts runs everywhere but in the public demo (nobody deletes
-        accounts there; the sandboxes have their own purge)."""
-        return not self.demo_mode
+        """The purge of deleted accounts is switched on (``identity_erasure_enabled``) and this
+        is no public demo (nobody deletes accounts there; the sandboxes have their own purge)."""
+        return self.identity_erasure_enabled and not self.demo_mode
 
     def erasure_config(self) -> ErasureConfig:
         """The services that must confirm an account erasure and its timings (ADR 0082)."""

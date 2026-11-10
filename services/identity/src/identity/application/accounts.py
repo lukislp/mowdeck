@@ -16,8 +16,6 @@ from mowdeck_contracts.v1 import (
     AccountCreated,
     AccountKind,
     ApiTokenRevoked,
-    Principal,
-    PrincipalKind,
     UserChanged,
 )
 
@@ -266,19 +264,6 @@ class AccountService:
             raise NotFoundError(msg)
         return acct
 
-    async def ensure_owner(self, principal: Principal, account_id: UUID) -> None:
-        """403 unless ``principal`` is a person who owns the account: the check of the actions
-        that must keep working while the account is locked for deletion (no OpenFGA tuples then,
-        ADR 0082). API tokens and services never pass."""
-        if principal.kind not in (PrincipalKind.USER, PrincipalKind.SUBUSER):
-            msg = "only the owner can do this"
-            raise ForbiddenError(msg)
-        async with self.deps.store.transaction() as tx:
-            membership = await tx.memberships.get(account_id=account_id, user_id=principal.subject)
-        if membership is None or membership.status is not Status.ACTIVE or not membership.is_owner:
-            msg = "only the owner can do this"
-            raise ForbiddenError(msg)
-
     async def request_deletion(
         self, account_id: UUID, password: str | None, ctx: RequestContext
     ) -> Account:
@@ -286,8 +271,9 @@ class AccountService:
         step-up confirmation, ADR 0057).
 
         Refused (409) while the account has other members: the owner removes them first. The
-        account is locked for the grace period: API tokens are revoked, the sessions of other
-        members end, only the owner keeps access, to restore it (``restore``). After the grace
+        account is locked for the grace period: API tokens are revoked and the owner, the only
+        member, keeps every permission (the mowers keep running on their schedules and must stay
+        stoppable) and can restore the account (``restore``). After the grace
         period ``ErasureService`` purges it in every service (ADR 0082).
         """
         if ctx.principal is None:

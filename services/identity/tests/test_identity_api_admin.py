@@ -626,13 +626,12 @@ async def test_account_rename_delete_with_grace_and_restore() -> None:
     assert deleted.status_code == 202
     assert deleted.json()["status"] == "deleting" and deleted.json()["delete_after"]
     assert twice.status_code == 409
-    assert owner_tuples == set()  # a locked account gives nobody a tuple, the owner neither
-    assert restored.json()["status"] == "active"
-    assert restore_again.status_code == 409
-    assert h.tuples_of(f"user:{lukas.user_id}") == {
+    assert owner_tuples == {
         f"account:{lukas.account_id}#member",
         f"account:{lukas.account_id}#owner",
     }
+    assert restored.json()["status"] == "active"
+    assert restore_again.status_code == 409
 
 
 async def test_an_owner_with_other_members_cannot_delete_the_account() -> None:
@@ -660,30 +659,49 @@ async def test_an_owner_with_other_members_cannot_delete_the_account() -> None:
     assert deleted.status_code == 202
 
 
-async def test_during_the_grace_period_the_owner_can_sign_in_but_only_restore() -> None:
-    """The cancel mechanism of ADR 0082: no tuples for anybody, the owner check reads the
-    database, so the sign-in can do nothing but restore."""
+async def test_during_the_grace_period_the_owner_keeps_full_access() -> None:
+    """ADR 0082: the mowers keep running on their schedules, so the owner must still be able
+    to stop one: every permission stays, sign-in and normal actions work, restore works."""
     async with harness() as h:
         lukas = await h.register("lukas")
-        await h.client.request(
+        level = {"type": "account", "id": str(lukas.account_id)}
+        token = await h.client.post(
+            lukas.url("/api-tokens"),
+            headers=lukas.headers,
+            json={"name": "ha", "grants": [{"level": level, "permissions": ["mower.view"]}]},
+        )
+        assert token.status_code == 201, token.text
+        deleted = await h.client.request(
             "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
         )
-        login = await h.login("lukas")
+        assert deleted.status_code == 202
+        login = await h.login("lukas")  # a fresh sign-in works
         head = bearer(login["access_token"])
         me = await h.client.get(f"{API}/me", headers=head)
-        account = await h.client.get(lukas.url(), headers=head)
-        rename = await h.client.patch(lukas.url(), headers=head, json={"name": "x"})
-        roles = await h.client.get(lukas.url("/roles"), headers=head)
-        token = await h.client.post(
-            lukas.url("/api-tokens"), headers=head, json={"name": "t", "grants": []}
+        asked = [
+            {"relation": relation, "object": f"account:{lukas.account_id}"}
+            for relation in ("can_control", "can_emergency_stop", "can_manage_mowers", "member")
+        ]
+        permissions = await h.client.post(
+            f"{API}/me/permissions", headers=head, json={"checks": asked}
         )
-        twice = await h.client.request("DELETE", lukas.url(), headers=head, json={})
+        account = await h.client.get(lukas.url(), headers=head)
+        renamed = await h.client.patch(lukas.url(), headers=head, json={"name": "Still mine"})
+        roles = await h.client.get(lukas.url("/roles"), headers=head)
+        tuples = h.tuples_of(f"user:{lukas.user_id}")
+        exchange = await h.client.post(f"{API}/token", json={"token": token.json()["token"]})
+        token_tuples = h.tuples_of(f"api_token:{token.json()['id']}")
         restored = await h.client.post(lukas.url("/restore"), headers=head)
     assert me.status_code == 200
-    # Without a tuple the account is invisible to its own owner: 404 like a foreign account.
-    assert account.status_code == roles.status_code == rename.status_code == 404
-    assert token.status_code == 404
-    assert twice.status_code == 409
+    assert permissions.json() == [True, True, True, True]  # as for an active account
+    assert account.status_code == roles.status_code == renamed.status_code == 200
+    assert account.json()["status"] == "deleting"
+    assert tuples == {
+        f"account:{lukas.account_id}#member",
+        f"account:{lukas.account_id}#owner",
+    }
+    assert exchange.status_code == 401  # the API tokens are revoked
+    assert token_tuples == set()
     assert restored.status_code == 200 and restored.json()["status"] == "active"
 
 
