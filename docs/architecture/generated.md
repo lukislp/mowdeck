@@ -507,7 +507,7 @@ flowchart LR
   end
   subgraph vision["vision"]
     direction TB
-    vision_vision["vision<br/>17 operations"]
+    vision_vision["vision<br/>20 operations"]
   end
 ```
 
@@ -549,7 +549,7 @@ flowchart LR
 | `telemetry` | `tracking` | 13 | 11 |
 | `telemetry` | `zones` | 5 | 3 |
 | `vision` | `operations` | 1 | 1 |
-| `vision` | `vision` | 17 | 14 |
+| `vision` | `vision` | 20 | 15 |
 
 The tag `operations` holds the probe endpoints every service exposes.
 
@@ -579,7 +579,7 @@ flowchart LR
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]
     db_telemetry[("telemetry<br/>13 migrations")]
-    db_vision[("vision<br/>7 migrations")]
+    db_vision[("vision<br/>8 migrations")]
   end
   billing -->|owns| db_billing
   entitlements -->|owns| db_entitlements

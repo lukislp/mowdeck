@@ -11,11 +11,15 @@
   cameras live the assist sends both frames of the same moment.
   Then the opt-in to automatic AI analysis on errors (ADR 0035), saved at once, with the
   installation's limits.
+  The consent to a cloud model (ADR 0081) shows below the form: which provider and model the
+  user agreed to and when, with a withdraw action, also for users of the installation's model.
+  Saving a provider and switching automatic analysis on ask for it through `consent`.
 -->
 <script lang="ts">
   import { Button, Field, Panel, ProblemNotice, Switch } from '@mowdeck/ui';
 
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { DECLINED, consent } from '#lib/consent/consent.svelte.js';
   import DemoLock from '#lib/demo/DemoLock.svelte';
   import { demo } from '#lib/demo/state.svelte.js';
   import { formatDateTime, formatNumber } from '#lib/i18n.js';
@@ -91,6 +95,7 @@
       settings = mine;
       form = initialForm(mine, families.families);
       auto = await api.preferences().catch(() => null);
+      void consent.refresh();
     } catch (error) {
       loadProblem = asProblem(error);
     }
@@ -137,9 +142,13 @@
       toasts.push('ok', m.ai_provider_saved());
     } catch (error) {
       problem = asProblem(error);
+      return;
     } finally {
       busy = null;
     }
+    // A cloud model asks for the user's consent now; declining keeps the provider saved and the
+    // features ask again before they send anything.
+    if (settings.enabled) void consent.ensure('any');
   }
 
   async function remove(): Promise<void> {
@@ -177,8 +186,15 @@
     autoBusy = true;
     autoProblem = null;
     try {
-      auto = await api.savePreferences({ auto_analysis: enabled });
-      toasts.push('ok', enabled ? m.ai_auto_on() : m.ai_auto_off());
+      const saved = enabled
+        ? await consent.guard('assist', () => api.savePreferences({ auto_analysis: true }))
+        : await api.savePreferences({ auto_analysis: false });
+      if (saved === DECLINED) {
+        auto = previous;
+      } else {
+        auto = saved;
+        toasts.push('ok', enabled ? m.ai_auto_on() : m.ai_auto_off());
+      }
     } catch (error) {
       auto = previous;
       autoProblem = asProblem(error);
@@ -186,6 +202,20 @@
       autoBusy = false;
     }
   }
+
+  async function withdrawConsent(): Promise<void> {
+    problem = null;
+    try {
+      await consent.withdraw();
+      auto = await api.preferences().catch(() => auto);
+      toasts.push('ok', m.consent_withdrawn());
+    } catch (error) {
+      problem = asProblem(error);
+    }
+  }
+
+  const agreement = $derived(consent.status);
+  const agreementPaused = $derived(!!agreement && agreement.required && !agreement.covers);
 
   const availability = $derived(auto ? autoAvailability(auto, settings) : null);
   const problemText = $derived(problem ? visionProblemText(problem) : null);
@@ -424,6 +454,9 @@
             {m.ai_auto_needs_provider()}
           </p>
         {/if}
+        {#if auto.auto_analysis && agreementPaused}
+          <p class="note warn" data-testid="ai-auto-paused">{m.consent_auto_paused()}</p>
+        {/if}
         {#if auto.auto_analysis}
           <p class="note">
             {m.ai_auto_notify_hint()}
@@ -439,6 +472,57 @@
           />
         {/if}
       </section>
+    {/if}
+
+    {#if agreement && (agreement.required || agreement.granted_at)}
+      <Panel label={m.consent_panel()} testid="ai-consent">
+        <div class="layout">
+          <p class="note" data-testid="ai-consent-state" data-covers={agreement.covers}>
+            {#if agreement.covers && agreement.granted_for && agreement.granted_at}
+              {m.consent_state_granted({
+                date: formatDateTime(agreement.granted_at),
+                provider: agreement.granted_for.provider,
+                model: agreement.granted_for.model,
+              })}
+            {:else if agreement.required && agreement.granted_for && agreement.destination}
+              {m.consent_state_other({
+                provider: agreement.granted_for.provider,
+                model: agreement.granted_for.model,
+                current: `${agreement.destination.provider} (${agreement.destination.model})`,
+              })}
+            {:else if agreement.required && agreement.destination}
+              {m.consent_state_none({
+                provider: agreement.destination.provider,
+                model: agreement.destination.model,
+              })}
+            {:else}
+              {m.consent_state_idle()}
+            {/if}
+          </p>
+          {#if agreement.required}
+            <p class="note warn" data-testid="ai-provider-cloud-note-effective">
+              {m.ai_provider_cloud_note()}
+            </p>
+          {/if}
+          <div class="row">
+            {#if agreementPaused}
+              <Button
+                icon="check"
+                testid="ai-consent-review"
+                onclick={() => void consent.ensure('any')}>{m.consent_review()}</Button
+              >
+            {/if}
+            {#if agreement.granted_at}
+              <Button
+                variant="danger"
+                icon="trash"
+                testid="ai-consent-withdraw"
+                onclick={() => void withdrawConsent()}>{m.consent_withdraw_action()}</Button
+              >
+            {/if}
+          </div>
+        </div>
+      </Panel>
     {/if}
 
     {#if lastTest}
