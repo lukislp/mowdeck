@@ -16,6 +16,9 @@ import {
   type ProviderSettings,
   type VisionApi,
 } from './api';
+import { SafetyGate } from '#lib/safety/gate.svelte.js';
+import type { SafetyKind } from '#lib/safety/rule.js';
+
 import { AssistStore, POLL_MS, viewOf, type AssistTimers } from './assist.svelte';
 import { autoAvailability, canToggle, limitsText, triggerNote } from './auto';
 import {
@@ -691,7 +694,7 @@ describe('vision assist store', () => {
       proposal: vi.fn(async () => sequence.shift()!),
       approve: vi.fn(async () => ({ ...PROPOSED, state: 'executing' as const })),
     });
-    const store = new AssistStore(api, timers);
+    const store = new AssistStore(api, timers, undefined, allow);
     await store.open(MOWER);
     await store.start('recover', [{ media_type: 'image/jpeg', data: 'QUJD' }]);
     expect(api.recover).toHaveBeenCalledWith(MOWER, 'recover', [
@@ -782,7 +785,7 @@ describe('vision assist store', () => {
       proposal: vi.fn(async () => ({ ...PROPOSED, state: 'expired' as const, final: true })),
       reject: vi.fn(async () => ({ ...PROPOSED, state: 'rejected' as const, final: true })),
     });
-    const store = new AssistStore(api, manualTimers());
+    const store = new AssistStore(api, manualTimers(), undefined, allow);
     await store.open(MOWER);
     await store.approve();
     expect(store.problem?.slug).toBe('vision-proposal-expired');
@@ -992,6 +995,85 @@ describe('assist store: stereo preference', () => {
   });
 });
 
+const allow = async (): Promise<boolean> => true;
+
+describe('vision approval and the safety check', () => {
+  async function opened(
+    shown: Proposal,
+    acknowledge: (kind: SafetyKind) => Promise<boolean>,
+  ): Promise<{ store: AssistStore; api: VisionApi }> {
+    const api = fakeApi({
+      proposals: vi.fn(async () => [shown]),
+      proposal: vi.fn(async () => shown),
+      approve: vi.fn(async () => ({ ...shown, state: 'executing' as const })),
+    });
+    const store = new AssistStore(api, manualTimers(), undefined, acknowledge);
+    await store.open(MOWER);
+    return { store, api };
+  }
+
+  it('asks before a maneuver and sends nothing when declined', async () => {
+    const ask = vi.fn(async () => false);
+    const { store, api } = await opened(PROPOSED, ask);
+    await store.approve();
+    expect(ask).toHaveBeenCalledWith('assist_drive');
+    expect(api.approve).not.toHaveBeenCalled();
+    // The proposal keeps waiting and nothing is stuck busy.
+    expect(store.view).toBe('proposed');
+    expect(store.busy).toBeNull();
+  });
+
+  it('asks before a resume and approves once confirmed', async () => {
+    const ask = vi.fn(async () => true);
+    const { store, api } = await opened(proposal({ ...PROPOSED, action: 'resume' }), ask);
+    await store.approve();
+    expect(ask).toHaveBeenCalledWith('resume_mow');
+    expect(api.approve).toHaveBeenCalledWith('p1');
+  });
+
+  it('never asks before a dock: the real gate answers without opening', async () => {
+    const gate = new SafetyGate();
+    const { store, api } = await opened(
+      proposal({ ...PROPOSED, action: 'return_to_dock' }),
+      (kind) => gate.ask(kind),
+    );
+    await store.approve();
+    expect(gate.open).toBe(false);
+    expect(api.approve).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for the option the user picked, not for the default', async () => {
+    const dockDefault = proposal({
+      ...PROPOSED,
+      action: 'return_to_dock',
+      options: [
+        {
+          option: 'fallback',
+          action: 'return_to_dock',
+          default: true,
+          low_confidence: false,
+          confidence: null,
+          steps: [],
+        },
+        {
+          option: 'model',
+          action: 'resume',
+          default: false,
+          low_confidence: true,
+          confidence: 0.55,
+          steps: STEPS,
+        },
+      ],
+    });
+    const ask = vi.fn(async () => true);
+    const { store } = await opened(dockDefault, ask);
+    await store.approve('model');
+    expect(ask).toHaveBeenLastCalledWith('resume_mow');
+    await store.approve('fallback');
+    expect(ask).toHaveBeenLastCalledWith('return_to_dock');
+  });
+});
+
 describe('vision low-confidence options', () => {
   const CHOICE = proposal({
     ...PROPOSED,
@@ -1063,7 +1145,7 @@ describe('vision low-confidence options', () => {
       proposal: vi.fn(async () => CHOICE),
       approve: vi.fn(async () => ({ ...CHOICE, state: 'executing' as const })),
     });
-    const store = new AssistStore(api, timers);
+    const store = new AssistStore(api, timers, undefined, allow);
     await store.open(MOWER);
     expect(store.view).toBe('proposed');
     await store.approve('model');

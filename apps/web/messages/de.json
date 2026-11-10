@@ -3022,6 +3022,7 @@
   "chat_action_dock": "Zurück zur Station",
   "chat_done": "An {mower} gesendet. Ergebnisse stehen bei den letzten Befehlen und Zeitplänen.",
   "chat_failed": "Abgebrochen: Eine Aktion wurde abgelehnt, die folgenden wurden nicht gesendet.",
+  "chat_cancelled": "Abgebrochen. Es wurde nichts gesendet.",
   "chat_expired": "Dieser Auftrag ist abgelaufen. Frag bitte noch einmal.",
   "chat_nothing": "Nichts auszuführen",
   "chat_reject_not_offered": "Diese Aktion ist bei diesem Mäher gerade nicht möglich.",

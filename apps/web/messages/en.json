@@ -3022,6 +3022,7 @@
   "chat_action_dock": "Back to the station",
   "chat_done": "Sent to {mower}. Results appear under recent commands and schedules.",
   "chat_failed": "Stopped: an action was refused, the ones after it were not sent.",
+  "chat_cancelled": "Cancelled. Nothing was sent.",
   "chat_expired": "This work order has expired. Ask again.",
   "chat_nothing": "Nothing to run",
   "chat_reject_not_offered": "That action is not possible for this mower right now.",

@@ -1,14 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Lukas Körber
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { fireEvent, render, screen } from '@testing-library/svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('$app/state', async () => {
+  const { SvelteURL } = await import('svelte/reactivity');
+  return { page: { url: new SvelteURL('http://localhost/mowers/a') } };
+});
+
+import { page } from '$app/state';
 
 import { safety } from './gate.svelte';
 import SafetyCheck from './SafetyCheck.svelte';
 import SafetySheet from './SafetySheet.svelte';
 
-afterEach(() => safety.cancel());
+afterEach(() => safety.cancelAll());
 
 describe('SafetyCheck', () => {
   it('states the rule and offers an unticked box inside its label', () => {
@@ -69,5 +76,28 @@ describe('SafetySheet', () => {
     expect(box.checked).toBe(false);
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(await second).toBe(false);
+  });
+
+  it('starts the next queued question unticked', async () => {
+    render(SafetySheet);
+    const first = safety.ask('start_mow');
+    const second = safety.ask('schedule_enable');
+    await fireEvent.click(await screen.findByTestId('safety-check-box'));
+    await fireEvent.click(screen.getByTestId('safety-confirm'));
+    expect(await first).toBe(true);
+    const box = (await screen.findByTestId('safety-check-box')) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByTestId('safety-check').dataset.variant).toBe('unattended');
+    safety.cancel();
+    expect(await second).toBe(false);
+  });
+
+  it('cancels a pending question when the user navigates to another page', async () => {
+    render(SafetySheet);
+    const answer = safety.ask('start_mow');
+    await screen.findByTestId('safety-sheet');
+    (page.url as { pathname: string }).pathname = '/schedules';
+    expect(await answer).toBe(false);
+    await waitFor(() => expect(screen.queryByTestId('safety-sheet')).toBeNull());
   });
 });

@@ -54,13 +54,41 @@ describe('SafetyGate', () => {
     gate.cancel();
   });
 
-  it('shares the one sheet between two simultaneous questions', async () => {
+  it('shares the pending answer when the same kind is asked again (a double tap)', async () => {
     const gate = new SafetyGate();
     const a = gate.ask('start_mow');
-    const b = gate.ask('resume_mow');
+    const b = gate.ask('start_mow');
     expect(b).toBe(a);
     gate.confirm();
     expect(await Promise.all([a, b])).toEqual([true, true]);
+    expect(gate.open).toBe(false);
+  });
+
+  it('queues a different kind: own wording, own answer, never the first one answer', async () => {
+    const gate = new SafetyGate();
+    const start = gate.ask('start_mow');
+    const schedule = gate.ask('schedule_enable');
+    expect(schedule).not.toBe(start);
+    expect(gate.variant).toBe('now');
+    const first = gate.shown;
+    gate.confirm();
+    expect(await start).toBe(true);
+    // The unattended question comes up next and is still unanswered.
+    expect(gate.open).toBe(true);
+    expect(gate.variant).toBe('unattended');
+    expect(gate.shown).toBe(first + 1);
+    gate.cancel();
+    expect(await schedule).toBe(false);
+    expect(gate.open).toBe(false);
+  });
+
+  it('cancelAll answers every pending question false and closes', async () => {
+    const gate = new SafetyGate();
+    const a = gate.ask('start_mow');
+    const b = gate.ask('schedule_enable');
+    gate.cancelAll();
+    expect(await Promise.all([a, b])).toEqual([false, false]);
+    expect(gate.open).toBe(false);
   });
 
   it('does not open for a flow already covered by its own confirmation', async () => {

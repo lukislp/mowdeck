@@ -279,7 +279,11 @@ Every user-initiated start of blade movement or remote motion asks once for an a
 
 Where it is asked, once per flow: the start sheet's "Starten" (after the rain confirmation, before any setpoint goes out; `StartSheetFlow.deps.acknowledge`), starting with a plan of the mower (bar, plan choice, zone "Start here"), "Fortsetzen", the spot sheet's start (`SpotSheetFlow`, covered when blades are on), the drive page when a session starts (every session, because that is when the risk begins; the session ends by itself on leaving the page and at `max_seconds`), the drive calibration, "Aus der Station fahren" in Maintenance, creating an enabled schedule or switching one on (not each automatic run, not editing an enabled schedule), "run now", and the chat assistant's confirmed proposal (`execute()` in `src/lib/assistant/assistant.ts`, once per proposal). The blades switch of a drive session keeps its own two steps (arm, then switch on).
 
-Not covered: the Siri intents, widgets and Watch app start a mower with one tap and need native changes; and the approval in the AI assist sheet, a follow-up once the AI consent work that changes that sheet has landed.
+The AI assist approval asks in `AssistStore.approve` (`assist_drive` for a maneuver, `resume_mow` for a resume, nothing for a dock), for the option the user picked; declining sends nothing and leaves the proposal waiting. A chat proposal declined at the check ends as `ExecutionResult.cancelled` and `ChatControl` says "Abgebrochen. Es wurde nichts gesendet.", not that an action was refused.
+
+Questions of different kinds that arrive while the sheet is open (it is non-modal) queue, each with its own wording and answer; only the same kind asked again shares one answer. Leaving the page (`SafetySheet` watches the path) cancels every pending question, so a start cannot fire later on another screen.
+
+Not covered: the Siri intents, widgets and Watch app start a mower with one tap and need native changes.
 
 ## Manual drive
 

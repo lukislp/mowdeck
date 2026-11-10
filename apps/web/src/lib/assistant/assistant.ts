@@ -152,12 +152,12 @@ export interface Executor {
   schedule(body: ScheduleIn): Promise<boolean>;
 }
 
-export interface ExecutionResult {
-  /** Actions sent, in order. */
-  done: number;
-  /** The action that failed (the rest was not sent), or null. */
-  failedAt: number | null;
-}
+/**
+ * How an execution ended: every action sent (`failedAt: null`), stopped at a refused action
+ * (`failedAt`), or cancelled by the user at the safety check, with nothing sent (`cancelled`).
+ */
+export type ExecutionResult =
+  { cancelled?: false; done: number; failedAt: number | null } | { cancelled: true; done: 0 };
 
 /** What an action asks the safety rule: a start, a resume or a schedule start movement later. */
 export function safetyKindOf(action: ProposedAction): SafetyKind {
@@ -180,7 +180,7 @@ export function safetyKindOf(action: ProposedAction): SafetyKind {
  * refused dock never leaves a later start behind. Never runs an expired or not executable
  * proposal. Before the first action that starts movement (a start, a resume, a schedule) the
  * user acknowledges the safety check, once for the whole proposal; declining sends nothing
- * (`failedAt: 0`, like a refusal of the first action). Pause and dock are never asked.
+ * and ends as `cancelled`, which is not a refusal. Pause and dock are never asked.
  */
 export async function execute(
   proposal: Proposal,
@@ -192,7 +192,7 @@ export async function execute(
     return { done: 0, failedAt: 0 };
   }
   const asked = proposal.actions.map(safetyKindOf).find((kind) => needsSafetyAcknowledgement(kind));
-  if (asked && !(await acknowledge(asked))) return { done: 0, failedAt: 0 };
+  if (asked && !(await acknowledge(asked))) return { cancelled: true, done: 0 };
   let done = 0;
   for (const action of proposal.actions) {
     const command = commandOf(action);

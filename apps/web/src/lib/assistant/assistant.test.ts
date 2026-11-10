@@ -173,7 +173,7 @@ describe('execute', () => {
     const run = executor();
     const declined = vi.fn(async () => false);
     const result = await execute(proposal([immediate('start_now')]), run, NOW, declined);
-    expect(result).toEqual({ done: 0, failedAt: 0 });
+    expect(result).toEqual({ cancelled: true, done: 0 });
     expect(run.calls).toEqual([]);
   });
 

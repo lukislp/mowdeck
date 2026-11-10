@@ -9,7 +9,9 @@
 -->
 <script lang="ts">
   import { Button, Sheet } from '@mowdeck/ui';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
+
+  import { page } from '$app/state';
 
   import { m } from '#lib/paraglide/messages.js';
 
@@ -18,12 +20,18 @@
 
   let checked = $state(false);
 
-  // A fresh question starts unticked and puts the keyboard on the box (like the tour's primary).
+  // Leaving the page cancels every pending question: a start cannot fire later on another screen.
   $effect(() => {
-    if (!safety.open) {
-      checked = false;
-      return;
-    }
+    void page.url.pathname;
+    untrack(() => safety.cancelAll());
+  });
+
+  // Each question starts unticked (also when one follows another) and puts the keyboard on the
+  // box (like the tour's primary).
+  $effect(() => {
+    void safety.shown;
+    checked = false;
+    if (!safety.open) return;
     void tick().then(() =>
       document.querySelector<HTMLElement>('[data-testid="safety-check-box"]')?.focus(),
     );

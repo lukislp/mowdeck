@@ -18,6 +18,8 @@ export type SafetyKind =
   | CommandKind
   /** A manual drive session (joystick over the drive link). */
   | 'drive_session'
+  /** An approved AI assist maneuver: the mower drives by itself over the drive link. */
+  | 'assist_drive'
   /** Creating an enabled schedule, or enabling one: the mower will start unattended. */
   | 'schedule_enable'
   /** "Run now" on a schedule: an immediate start. */
@@ -34,6 +36,7 @@ const NEEDS: Record<SafetyKind, boolean> = {
   leave_dock: true,
   drive_calibrate: true,
   drive_session: true,
+  assist_drive: true,
   schedule_enable: true,
   schedule_run_now: true,
   // Stops, parks or does not move the mower; never delayed (the emergency stop above all).
