@@ -548,7 +548,7 @@ Priority 1 keeps `/api/v1/*`, `/.well-known/jwks.json` and future routes ahead o
 
 Scope: workspace and tooling (section 9.4), type generation, `mowdeck-ui` tokens and primitives, auth (section 2) with G1, G1b, G5 (and G2 if accepted), module shell with G4, Realtime client and stores, pages of section 4 except the map and notifications, area picker as a list, map and capabilities backend (7.1, G3 backend), i18n de/en, theme, manifest, icons, service worker (precache app shell, offline page, update prompt), `web` image and Compose block, G8, G9, CI jobs `web`, `docker` and `e2e-web` with gate steps 1 to 10, ADR 0019 and 0020, `apps/web/README.md`, docs pages (user guide stub "Die App", developer guide "Frontend").
 
-Definition of done: CI green including `e2e-web`; Lighthouse PWA installability passes on the Compose stack (manual check documented); no CSP violation in the Playwright run; coverage target met; both locales complete; UI review checklist (12.10) done with screenshots in the PR; docs and ADRs merged; `docs/phases.md` progress line.
+Definition of done: CI green including `e2e-web`; Lighthouse PWA installability passes on the Compose stack (manual check documented); no CSP violation in the Playwright run; coverage target met; both locales complete; UI review checklist (12.10) done (screenshots in the PR are optional); docs and ADRs merged; `docs/phases.md` progress line.
 
 ### Task 11: Map
 
@@ -699,14 +699,14 @@ Map styling (fits the panel):
 
 ### 12.10 UI review
 
-- Every PR that touches `apps/web` or `libs/mowdeck-ui` attaches screenshots: the Playwright job `ui-screens` captures `/dev/gallery` and the changed pages at 390 x 844 and 1280 x 800 in light and dark and uploads them as an artifact; the PR description embeds the relevant ones. Visual regression with `toHaveScreenshot` on the gallery is added once the design settles (Task 11), to avoid churn during Task 10.
+- Every PR that touches `apps/web` or `libs/mowdeck-ui` is checked at 390 x 844 and 1280 x 800 in light and dark. Screenshots are optional (the maintainer reviews UI changes on a deployment): the Playwright job `ui-screens` captures `/dev/gallery` and the changed pages at those sizes and uploads them as an artifact; the PR description may embed the relevant ones. Visual regression with `toHaveScreenshot` on the gallery is added once the design settles (Task 11), to avoid churn during Task 10.
 - PR template checklist (UI section):
   - [ ] Only tokens used; no new colours, radii or fonts outside `tokens.css`
   - [ ] Colour is used only for state; every state also has text or a glyph
   - [ ] Readouts in Plex Mono with units; labels uppercase 12 px
   - [ ] Targets at least 48 px, gaps at least 8 px; checked at 390 px width
   - [ ] Emergency stop visible and reachable on every mower view, including with sheets and keyboard open
-  - [ ] Light and dark screenshots attached; sunlight check (light theme, full brightness) for new status UI
+  - [ ] Checked in light and dark theme (screenshots optional); sunlight check (light theme, full brightness) for new status UI
   - [ ] No hard-coded strings; German and English texts present and fitting (German is longer)
   - [ ] Pending, error, empty, offline and no-permission states designed
   - [ ] Keyboard focus visible, `prefers-reduced-motion` respected
