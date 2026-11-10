@@ -87,6 +87,13 @@ def grace_over(account: Account, now: datetime) -> bool:
     )
 
 
+def deletion_scheduled(account: Account) -> bool:
+    """Whether the account is on its way out (``deleting`` or ``purging``). Such an account takes
+    no new members and no new API tokens: a member added now would be erased without being told,
+    a token could never be exchanged (token sync needs an active account)."""
+    return account.status is not AccountStatus.ACTIVE
+
+
 def retry_delay(attempts: int, maximum: timedelta) -> timedelta:
     """Wait before the next attempt after ``attempts`` failures: 30 s, 60 s, ... capped."""
     return min(maximum, timedelta(seconds=RETRY_BASE_SECONDS * 2 ** min(max(attempts, 1), 10)))

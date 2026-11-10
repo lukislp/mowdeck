@@ -30,7 +30,7 @@ from identity.domain.credentials import (
     validate_password,
     validate_username,
 )
-from identity.domain.erasure import deletion_blocked_by
+from identity.domain.erasure import deletion_blocked_by, deletion_scheduled
 from identity.domain.errors import (
     AuthenticationFailed,
     ConflictError,
@@ -106,6 +106,17 @@ async def account_subjects(tx: Tx, account_id: UUID) -> set[Subject]:
     }
     subjects |= {api_token(t.id) for t in await tx.api_tokens.find(account_id=account_id)}
     return subjects
+
+
+async def ensure_not_scheduled_for_deletion(tx: Tx, account_id: UUID) -> None:
+    """409 while the account is ``deleting`` or ``purging`` (ADR 0082): nobody may be added to
+    it and no API token created for it. The one guard of every use case that does either
+    (sub-users, API tokens, widget credentials, personal access tokens, later invitations);
+    what the owner may still do (stop mowers, rename, restore) is not touched."""
+    account = await tx.accounts.get(id=account_id)
+    if account is not None and deletion_scheduled(account):
+        msg = "the account is scheduled for deletion; cancel the deletion first"
+        raise ConflictError(msg)
 
 
 def validate_name(name: str) -> str:

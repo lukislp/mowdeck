@@ -505,3 +505,73 @@ async def test_the_bus_eraser_raises_on_a_refusal_no_answer_and_no_bus() -> None
         await BusAccountEraser(bus, timeout=0.05).erase("scheduler", UUID(int=5))
     with pytest.raises(RuntimeError, match="no event bus"):
         await BusAccountEraser(None).erase("fleet", UUID(int=5))
+
+
+# --- nobody joins and no token is made while the account is on its way out ---------------
+
+
+async def test_a_deleting_account_takes_no_new_members_and_no_new_tokens() -> None:
+    """ADR 0082: a member added now would be erased without being told, and a token could never
+    be exchanged. Everything else the owner does stays allowed; restore re-opens it."""
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        level = {"type": "account", "id": str(lukas.account_id)}
+        await _schedule(h, lukas)
+        sub = {"username": "anna", "password": PASSWORD, "assignments": []}
+        attempts = {
+            "subuser": await h.client.post(lukas.url("/users"), headers=lukas.headers, json=sub),
+            "token": await h.client.post(
+                lukas.url("/api-tokens"),
+                headers=lukas.headers,
+                json={"name": "t", "grants": [{"level": level, "permissions": ["mower.view"]}]},
+            ),
+            "personal": await h.client.post(
+                f"{API}/me/api-tokens",
+                headers=lukas.headers,
+                json={"name": "p", "scopes": ["mower.view"], "expires_in_days": 30},
+            ),
+            "widget": await h.client.post(
+                f"{API}/me/widget-credentials",
+                headers=lukas.headers,
+                json={"device_name": "iPhone"},
+            ),
+        }
+        stop_allowed = await h.client.patch(lukas.url(), headers=lukas.headers, json={"name": "x"})
+        members = await h.client.get(lukas.url("/users"), headers=lukas.headers)
+        restored = await h.client.post(lukas.url("/restore"), headers=lukas.headers)
+        again = await h.client.post(lukas.url("/users"), headers=lukas.headers, json=sub)
+        async with h.store.transaction() as tx:
+            tokens = await tx.api_tokens.find(account_id=lukas.account_id, revoked_at=None)
+    for name, response in attempts.items():
+        assert response.status_code == 409, (name, response.text)
+        assert "scheduled for deletion" in response.json()["detail"]
+        assert "cancel the deletion first" in response.json()["detail"]
+    assert stop_allowed.status_code == 200  # renaming and the rest stay allowed
+    assert len(members.json()) == 1  # nobody was added
+    assert restored.status_code == 200 and again.status_code == 201
+    assert tokens == []
+
+
+async def test_a_purging_account_is_refused_the_same_way() -> None:
+    from identity.application.accounts import ensure_not_scheduled_for_deletion
+    from identity.domain.errors import ConflictError
+
+    fake = FakeEraser()
+    async with harness(eraser=fake, **NOW_GRACE) as h:
+        lukas = await h.register("lukas")
+        await _schedule(h, lukas)
+        await _erasure(h).begin_due()
+        async with h.store.transaction() as tx:
+            with pytest.raises(ConflictError, match="cancel the deletion first"):
+                await ensure_not_scheduled_for_deletion(tx, lukas.account_id)
+            # An unknown account is not this guard's business (the callers 404 before).
+            await ensure_not_scheduled_for_deletion(tx, UUID(int=7))
+
+
+async def test_an_active_account_passes_the_guard() -> None:
+    from identity.application.accounts import ensure_not_scheduled_for_deletion
+
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        async with h.store.transaction() as tx:
+            await ensure_not_scheduled_for_deletion(tx, lukas.account_id)
