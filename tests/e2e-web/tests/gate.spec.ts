@@ -289,3 +289,16 @@ test('10 logout returns to the login and a reload stays logged out', async () =>
   await page.reload();
   await expect(page).toHaveURL(/\/login/);
 });
+
+test('11 the language can be switched on the login page, before signing in', async () => {
+  const page = ownerPage;
+  // Step 9 chose English; the sign-in page itself offers the switch back.
+  await expect(page.getByTestId('auth-language-switch')).toBeVisible();
+  await page.getByTestId('auth-language-switch').getByRole('radio', { name: 'Deutsch' }).click();
+  await expect(page.getByRole('link', { name: 'Neues Konto erstellen' })).toBeVisible();
+  await expect(
+    page.getByTestId('auth-language-switch').getByRole('radio', { name: 'Deutsch' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  // A browser is not an app: no way to another server here.
+  await expect(page.getByTestId('auth-change-server')).toHaveCount(0);
+});

@@ -98,7 +98,8 @@ bash apps/mobile/scripts/sign-and-install.sh # signature check + devicectl insta
 1. If iOS says "Untrusted Developer": Settings → General → VPN & Device Management → your developer certificate → Trust. (With a paid team and a development profile this usually is not needed; it is needed once per team on a new phone.)
 2. The app asks for the **server address**, for example `mowdeck.home.lan` or `https://mowdeck.example.org`. It checks that a MowDeck server answers there (`/manifest.webmanifest`); "Use anyway" skips the check.
 3. Log in as in the browser. The app asks once for permission to send notifications; allow it.
-4. To switch servers later: Settings → Notifications → "This app" → "Change server". If the server is unreachable at start, the app shows "Server not reachable" with "Try again" and "Choose another server".
+4. To switch servers later: "Change server" on the sign-in and registration pages (under the form), or Settings → Notifications → "Server" when signed in. Both ask for confirmation, then sign out of the old server (push token, widget credential, session; best effort, an unreachable server does not block it) and return to the first-launch screen. The public demo does not lock it. If the server is unreachable at start, the app shows "Server not reachable" with "Try again" and "Choose another server".
+5. The language: the web app has a German/English switch in the footer of the sign-in and registration pages and under Settings → Account. The two bundled pages (first-launch and "Server not reachable") have their own German/English toggle that remembers the choice on the device and otherwise follows the system language; it needs an app build with this change, everything else arrives with a server update.
 
 ### Once a year
 
@@ -224,7 +225,7 @@ Installing from the Mac (`build-ios.sh`) uses automatic signing, which creates t
 2. Open it; Android asks to allow installs from this source (browser or file manager) once. Install.
 3. Updates: install the newer APK over the old one; data and login stay. Every release APK is signed with the same release key, so updates work; a debug-signed APK you built yourself cannot update a release one (uninstall first).
 
-First start, server address and "Change server" work as on the iPhone. On Android 13 and later the app asks for permission to show notifications after login.
+First start, server address, "Change server" and the language toggle work as on the iPhone. On Android 13 and later the app asks for permission to show notifications after login.
 
 ### Notifications without Firebase
 
