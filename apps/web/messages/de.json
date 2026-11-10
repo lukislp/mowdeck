@@ -1380,6 +1380,7 @@
   "billing_upgrade": "Upgrade",
   "billing_portal": "Abonnement verwalten",
   "billing_portal_hint": "Tarif, Zahlungsmittel oder Kündigung beim Zahlungsanbieter ändern.",
+  "billing_managed_on_web": "Der Tarif wird in der Web-App im Browser verwaltet.",
   "billing_status_none": "Noch kein Abonnement.",
   "billing_status_line": "Status: {status}",
   "billing_renews": "Verlängert sich am {date}",

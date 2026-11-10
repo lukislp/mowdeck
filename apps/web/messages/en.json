@@ -1380,6 +1380,7 @@
   "billing_upgrade": "Upgrade",
   "billing_portal": "Manage subscription",
   "billing_portal_hint": "Change the plan, the payment method or cancel at the payment provider.",
+  "billing_managed_on_web": "The plan is managed in the web app, in a browser.",
   "billing_status_none": "No subscription yet.",
   "billing_status_line": "Status: {status}",
   "billing_renews": "Renews on {date}",
