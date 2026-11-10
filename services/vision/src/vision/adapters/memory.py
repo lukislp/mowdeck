@@ -12,6 +12,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import PrincipalRef, VisionTrigger
 
+from vision.domain.consent import Consent
 from vision.domain.errors import ConflictError
 from vision.domain.models import (
     FINAL_STATES,
@@ -40,6 +41,7 @@ class MemoryStore:
         self.providers: dict[tuple[UUID, UUID], UserProvider] = {}
         self.preferences: dict[tuple[UUID, UUID], UserPreferences] = {}
         self.auto: dict[tuple[UUID, UUID], AutoSetting] = {}
+        self.consents: dict[tuple[UUID, UUID], Consent] = {}
         self.watch: dict[UUID, str | None] = {}
         self.watch_accounts: dict[UUID, UUID] = {}
 
@@ -180,6 +182,8 @@ class MemoryStore:
             del self.preferences[key]
         for key in [k for k in self.auto if k[0] == user_id]:
             del self.auto[key]
+        for key in [k for k in self.consents if k[0] == user_id]:
+            del self.consents[key]
         return len(keys)
 
     async def get_preferences(self, user_id: UUID, account_id: UUID) -> UserPreferences | None:
@@ -189,6 +193,15 @@ class MemoryStore:
     async def put_preferences(self, preferences: UserPreferences) -> None:
         key = (preferences.user_id, preferences.account_id)
         self.preferences[key] = copy.deepcopy(preferences)
+
+    async def get_consent(self, user_id: UUID, account_id: UUID) -> Consent | None:
+        return self.consents.get((user_id, account_id))
+
+    async def put_consent(self, user_id: UUID, account_id: UUID, consent: Consent) -> None:
+        self.consents[(user_id, account_id)] = consent
+
+    async def delete_consent(self, user_id: UUID, account_id: UUID) -> bool:
+        return self.consents.pop((user_id, account_id), None) is not None
 
     async def get_auto_setting(self, user_id: UUID, account_id: UUID) -> AutoSetting | None:
         return self.auto.get((user_id, account_id))
@@ -219,6 +232,7 @@ class MemoryStore:
         self.requests = [r for r in self.requests if r.account_id != account_id]
         self.providers = {k: v for k, v in self.providers.items() if k[1] != account_id}
         self.preferences = {k: v for k, v in self.preferences.items() if k[1] != account_id}
+        self.consents = {k: v for k, v in self.consents.items() if k[1] != account_id}
         self.auto = {k: v for k, v in self.auto.items() if k[1] != account_id}
         self.watch = {k: v for k, v in self.watch.items() if k not in watched}
         self.watch_accounts = {k: v for k, v in self.watch_accounts.items() if k not in watched}
@@ -227,7 +241,7 @@ class MemoryStore:
     def _rows(self) -> int:
         """Rows as the SQL store counts them (``user_preferences`` holds both preferences and
         opt-ins: one row per user and account)."""
-        settings = set(self.preferences) | set(self.auto)
+        settings = set(self.preferences) | set(self.auto) | set(self.consents)
         return (
             len(self.proposals)
             + len(self.images)

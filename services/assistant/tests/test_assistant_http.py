@@ -17,6 +17,7 @@ from mowdeck_service_kit.testing import StaticPrincipalResolver, lifespan_client
 from assistant.adapters.interpreters import ProviderInterpreter
 from assistant.adapters.upstream import HttpPlatform
 from assistant.domain.errors import (
+    ConsentRequired,
     ProviderFailed,
     ProviderMissing,
     ProviderQuota,
@@ -164,6 +165,21 @@ async def test_assistant_http_interpreter_maps_vision_errors(
     interpreter = _interpreter(Api(structured=httpx.Response(status, json={})))
     with pytest.raises(error):
         await interpreter.interpret(TOKEN, catalog(), "send it home")
+
+
+async def test_assistant_http_interpreter_maps_only_the_consent_problem_of_a_403() -> None:
+    consent = httpx.Response(
+        403, json={"type": "urn:mowdeck:problem:vision-consent-required", "status": 403}
+    )
+    with pytest.raises(ConsentRequired):
+        await _interpreter(Api(structured=consent)).interpret(TOKEN, catalog(), "send it home")
+    for other in (
+        httpx.Response(403, json={"type": "urn:mowdeck:problem:feature-not-in-plan"}),
+        httpx.Response(403, text="not json"),
+        httpx.Response(403, json=["list"]),
+    ):
+        with pytest.raises(UpstreamUnavailable):
+            await _interpreter(Api(structured=other)).interpret(TOKEN, catalog(), "send it home")
 
 
 async def test_assistant_http_interpreter_status() -> None:

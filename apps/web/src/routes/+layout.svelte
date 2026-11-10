@@ -11,6 +11,7 @@
 
   import { session } from '#lib/auth/session.svelte.js';
   import StepUpSheet from '#lib/components/StepUpSheet.svelte';
+  import ConsentSheet from '#lib/consent/ConsentSheet.svelte';
   import { DEMO_ROOT_CLASS, keepDemoTitle } from '#lib/demo/demo.js';
   import DemoBanner from '#lib/demo/DemoBanner.svelte';
   import { demo } from '#lib/demo/state.svelte.js';
@@ -70,6 +71,7 @@
 {@render children()}
 
 <StepUpSheet />
+<ConsentSheet />
 
 <ToastRegion
   toasts={toasts.items}

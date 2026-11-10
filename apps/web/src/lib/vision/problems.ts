@@ -13,6 +13,8 @@ export function visionProblemText(problem: ApiProblem): { title: string; detail:
   switch (problem.slug) {
     case VISION_PROBLEMS.providerMissing:
       return { title: m.vision_problem_provider_missing(), detail: m.vision_provider_none_hint() };
+    case VISION_PROBLEMS.consentRequired:
+      return { title: m.vision_problem_consent(), detail: problem.detail };
     case VISION_PROBLEMS.quota:
       return { title: m.vision_problem_quota(), detail: problem.detail };
     case VISION_PROBLEMS.secretsUnavailable:

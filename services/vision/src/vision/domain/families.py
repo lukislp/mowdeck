@@ -168,6 +168,12 @@ def _private_host(host: str) -> bool:
     return not address.is_global
 
 
+def private_api_base(api_base: str) -> bool:
+    """Does ``api_base`` point into a private network (loopback, LAN, single-label host)?"""
+    host = urlsplit(api_base.strip()).hostname
+    return host is not None and _private_host(host)
+
+
 def check_api_base(api_base: str | None, policy: ApiBasePolicy) -> str | None:
     """Validate a user's base URL against the installation's policy; returns it normalised.
 
