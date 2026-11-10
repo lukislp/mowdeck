@@ -133,7 +133,7 @@ describe('the texts of the bundled pages', () => {
   it('have a German and an English text for every key the pages use', () => {
     const de = texts('de');
     const en = texts('en');
-    for (const file of ['index.html', 'offline.html']) {
+    for (const file of ['index.html', 'offline.html', 'about.html']) {
       const html = readFileSync(resolve(import.meta.dirname, '..', file), 'utf8');
       const keys = [...html.matchAll(/data-t(?:-placeholder|-label)?="(\w+)"/g)].map((m) => m[1]!);
       expect(keys.length).toBeGreaterThan(0);

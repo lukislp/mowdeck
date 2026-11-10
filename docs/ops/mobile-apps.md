@@ -259,7 +259,7 @@ For an App Store review (guideline 2.1: the reviewer must be able to use the app
 
 ## Privacy
 
-The app has no analytics, advertising or tracking SDK and talks only to the MowDeck server the user entered, plus the system services of the notification channel (APNs on the iPhone). This holds for the App Privacy answer in App Store Connect with one exception: **"Try the demo" connects the app to the public demo, which the developer operates** (`https://mowdeck-demo.lktec.org`). It is the only case where the app talks to a developer-operated server, and only after the user taps the button; the demo holds simulated data and sandbox accounts that are deleted after 30 minutes without a visit. The first-launch screen links the project page (`https://github.com/lukislp/mowdeck`) and this section. A separate privacy policy page of the developer, as App Store Connect asks for (a "Privacy Policy URL"), does not exist yet; until it does, this section is what the screen links to.
+The app has no analytics, advertising or tracking SDK and talks only to the MowDeck server the user entered, plus the system services of the notification channel (APNs on the iPhone). This holds for the App Privacy answer in App Store Connect with one exception: **"Try the demo" connects the app to the public demo, which the developer operates** (`https://mowdeck-demo.lktec.org`). It is the only case where the app talks to a developer-operated server, and only after the user taps the button; the demo holds simulated data and sandbox accounts that are deleted after 30 minutes without a visit. The first-launch screen links the project page (`https://github.com/lukislp/mowdeck`), this section and the app's [About page](#about-licences-and-third-party-notices). A separate privacy policy page of the developer, as App Store Connect asks for (a "Privacy Policy URL"), does not exist yet; until it does, this section is what the screen links to.
 
 ## Privacy manifests and the App Privacy answer
 
@@ -282,6 +282,58 @@ All manifests say `NSPrivacyTracking` false, no tracking domains and no collecte
 
 - The developer-operated demo (`mowdeck-demo.lktec.org`): a user who signs in there sends their sign-in and usage to a server the developer runs. The first-launch screen offers it as "Try the demo" (see [Privacy](#privacy)), so review the answer before a store submission: the sandbox accounts are anonymous and deleted after 30 minutes without a visit and the data is simulated, but what the demo server itself records (for example access logs) counts as a developer-run service.
 - A push relay operated by the developer (for example to deliver APNs pushes for hosted installs without each owner holding an Apple key) would receive device tokens and notification content. That changes the answer (Device ID, possibly Other User Content, for App Functionality) and the manifest's `NSPrivacyCollectedDataTypes`, and needs an ADR.
+
+## About, licences and third-party notices
+
+The app shows its own About page, `about.html`, one of the bundled pages: a quiet link "About and licences" ("Über die App und Lizenzen") sits in the links row of the first-launch screen and of the offline page, so it is reachable before any server is configured. It shows
+
+- the **version and build** the native shell reports (`@capacitor/app` `App.getInfo()`: marketing version and `CFBundleVersion` on iOS, `versionName` and `versionCode` on Android); in a plain browser or a development build, where no shell answers, a neutral "shown in the installed app only";
+- the **licence of the app's own code**, AGPL-3.0-only (the shared design styles `@mowdeck/ui` are Apache-2.0), and the pointer that the licence and the source offer of the *server* are in the About section of the server's own interface (the AGPL section 13 link of the server build, [Source code](source-code.md));
+- the **source code of exactly this version**: `https://github.com/lukislp/mowdeck/tree/v<version>`, the same convention as the web app and the services (`apps/web/src/lib/legal/source.ts`, `X-Source-Code`), the project itself when no release version is known;
+- one neutral sentence that MowDeck is not affiliated with the mower manufacturers;
+- the **third-party notices**: per licence the text once, and under it the packages with their copyright statements.
+
+German and English follow the language toggle of the bundled pages.
+
+### Where the notices come from
+
+`apps/mobile/public/third-party-notices.json` is generated, never written by hand, by `tools/repo-checks/scripts/app_notices.py generate` from the installed packages: the production dependencies of `apps/mobile`, followed through the workspace link to `libs/mowdeck-ui` and through the lock file's snapshots (`pnpm-lock.yaml`), minus the packages the policy excludes. Licence, copyright statements and the content of a `NOTICE` file are read from each package's `package.json` and licence files. Vite copies `public/` into the bundle, the page fetches the file, and `ios_release_check.py app` fails a build whose `public/third-party-notices.json` is missing, malformed or different from the committed file.
+
+What it holds today (names and licences, no versions):
+
+| Package | Licence | Holder | Why it is in the app |
+| --- | --- | --- | --- |
+| `@capacitor/core`, `@capacitor/ios`, `@capacitor/android` | MIT | Drifty Co. | the shell itself (JavaScript bridge, iOS and Android runtime) |
+| `@capacitor/app`, `local-notifications`, `push-notifications`, `splash-screen` | MIT | Ionic | the plugins |
+| `@capawesome/capacitor-badge` | MIT | Robin Genz | icon badge |
+| `tslib` | 0BSD | Microsoft Corporation | runtime helper of `@capacitor/core` |
+| `@fontsource-variable/ibm-plex-sans`, `@fontsource/ibm-plex-mono` | OFL-1.1 | IBM Corp. | the IBM Plex webfonts of the bundled pages (the OFL text is part of the notices) |
+
+`leaflet` is a dependency of `@mowdeck/ui` for the web app's map and is **not** in the app: the bundled pages import only the `@mowdeck/ui` stylesheets, never its component barrel. The policy lists it under `[[exclude]]` with that reason, and the gate fails when a page starts importing it.
+
+The repo's own code is not a third-party dependency and is not listed: the two bundled pages and the About page (AGPL-3.0-only) and the Swift and Java shell (AGPL-3.0-only). The web app is not bundled; it is loaded from the user's server.
+
+### The gate
+
+`app_notices.py check` runs in the CI job `ci-config` on every pull request, with no installed packages: the packages the lock file puts into the bundle must be exactly those of the committed notices file (a new dependency fails until the file is regenerated, a version bump never does, because the file names no versions), every licence must be allowed by `apps/mobile/third-party-policy.toml`, and nothing may be GPL, AGPL, LGPL or another copyleft licence whatever the policy says. `app_notices.py check --installed` also compares the file with the installed packages (licence, holder, `NOTICE`; the years of a copyright line are ignored), in the CI job `web` after `pnpm install`. The tests are `tools/repo-checks/tests/test_app_notices.py` and, for the bundle, `test_ios_release.py`.
+
+An unknown licence, a missing licence file or a missing copyright holder fails too, unless the policy names the package under `[[override]]` with the missing value and a reason. The policy is the single list: allowed SPDX identifiers, excluded packages, overrides; stale entries fail, so it does not rot.
+
+**Committed or generated at build time?** Committed. The file is the compliance record of what ships, so a change of it is visible in review; it makes the page and the tests work without a prior build; and the gate can still prove it is current at build time through `check --installed`. Generating it only at build time would leave nothing to review and nothing to check on a pull request that has no `node_modules` (`ci-config`).
+
+### When a dependency changes
+
+1. A version bump (Dependabot): nothing to do. If the licence or holder of the package changed, the `web` job fails; run the steps below.
+2. A new or removed package of the app or of `@mowdeck/ui`'s production dependencies, or a changed licence: `pnpm install`, then `python3 tools/repo-checks/scripts/app_notices.py generate`, commit `apps/mobile/public/third-party-notices.json`. If a new package is copyleft or has an unlisted licence, the script stops with the reason: replace the package, or (permissive licence only) extend `third-party-policy.toml` with the reasoning in the pull request.
+3. A new bundled page that imports a package: nothing else; the gate derives the set from the lock file.
+
+### Not decided here
+
+LICENSING.md only describes what the bundle contains. The AGPL-3.0 compatibility of distributing the app through the App Store (its terms, and an "additional permission" some projects add for it) is the maintainer's legal decision; no exception has been added.
+
+## The local network prompt in German
+
+iOS asks once, in the language of the device, whether MowDeck may find devices in the local network (`NSLocalNetworkUsageDescription`), because the server is usually at an address like `mowdeck.home.lan`. The English default stays in `Info.plist`; `de.lproj/InfoPlist.strings` and `en.lproj/InfoPlist.strings` in `apps/mobile/ios/App/App` carry the localised texts and are wired into `App.xcodeproj` as the variant group `InfoPlist.strings`, a resource of the app target (`knownRegions` already had `en` and `de`). `ios_release_check.py source` checks that both files exist and are referenced, that the English text equals the `Info.plist` default and that the German one is translated. Another language shows the default.
 
 ## Icons and splash screens
 
@@ -319,4 +371,4 @@ App Store guideline 3.1.1 forbids sending users from the app to an external paym
 
 ## What has been verified where
 
-The configuration, scripts and native code were written against the Capacitor 8.5 sources and are covered by unit tests (the web app's bridge module, the first-launch checks, the APNs channel with a fake Apple endpoint). Building the iOS app, installing it with `devicectl`, APNs delivery to a phone, the passkey sign-in through `ASWebAuthenticationSession` and the Custom Tab, the Android Gradle build and the remote-content bridge on real devices are verified on the owner's Mac and phones, not in CI. The TestFlight workflow's project (including the notification extension target), profile and entitlement checks are unit-tested on every pull request, but no CI job compiles the Swift code of the app, the extensions or the watch app (only the TestFlight run does; the project file's object references and file paths are checked statically; `swift test --package-path apps/mobile/ios/NotificationServiceKit` runs the extension's decision tests on a Mac); the macOS build, the App Store signature and the upload are proven by its runs.
+The configuration, scripts and native code were written against the Capacitor 8.5 sources and are covered by unit tests (the web app's bridge module, the first-launch checks, the APNs channel with a fake Apple endpoint). Building the iOS app, installing it with `devicectl`, APNs delivery to a phone, the passkey sign-in through `ASWebAuthenticationSession` and the Custom Tab, the Android Gradle build and the remote-content bridge on real devices are verified on the owner's Mac and phones, not in CI. The TestFlight workflow's project (including the notification extension target), profile and entitlement checks are unit-tested on every pull request, but no CI job compiles the Swift code of the app, the extensions or the watch app (only the TestFlight run does; the project file's object references and file paths are checked statically; `swift test --package-path apps/mobile/ios/NotificationServiceKit` runs the extension's decision tests on a Mac); the macOS build, the App Store signature and the upload are proven by its runs. Likewise the About page, the localised local network prompt and the `InfoPlist.strings` entries of the project were checked by unit tests, the static project checks, a Vite build and `plistlib`, not on a device or in Xcode: the next TestFlight run is the first build that compiles them, and the prompt text is seen on a device in German only after that build.

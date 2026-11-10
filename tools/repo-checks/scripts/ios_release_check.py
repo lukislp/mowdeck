@@ -14,7 +14,8 @@ the repository tests (``tools/repo-checks/tests/test_ios_release.py``, CI job ``
 
     python ios_release_check.py app <App.app> --version X.Y.Z --build N
         The built bundle: versions, compiled icon catalog, export compliance key, no Agora code,
-        and a privacy manifest in every bundle that needs one.
+        a privacy manifest in every bundle that needs one, and the About page with the
+        third-party notices (apps/mobile/public/third-party-notices.json, app_notices.py).
 
     python ios_release_check.py build-number X.Y.Z [--rebuild N]
         CFBundleVersion of a release: major * 10000 + minor * 100 + patch, the Android versionCode
@@ -36,6 +37,7 @@ from typing import Any, NamedTuple
 
 REPO = Path(__file__).resolve().parents[3]
 IOS = REPO / "apps" / "mobile" / "ios" / "App"
+NOTICES = REPO / "apps" / "mobile" / "public" / "third-party-notices.json"
 BUNDLE_ID = "app.mowdeck.mobile"
 EXTENSION_BUNDLE_ID = f"{BUNDLE_ID}.NotificationService"
 EXTENSION_NAME = "NotificationService"
@@ -279,6 +281,47 @@ def check_widget_entitlements(app: dict[str, Any], widgets: dict[str, Any]) -> l
         groups = entitlements.get("keychain-access-groups") or []
         if not groups or groups[0] != KEYCHAIN_GROUP:
             problems.append(f"{name}: the first keychain access group must be {KEYCHAIN_GROUP}")
+    return problems
+
+
+_STRING_ENTRY = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*=\s*"((?:[^"\\]|\\.)*)"\s*;', re.M)
+LOCALISATIONS = ("en", "de")
+LOCAL_NETWORK_KEY = "NSLocalNetworkUsageDescription"
+
+
+def parse_strings(text: str) -> dict[str, str]:
+    """Key and value of an old-style ``.strings`` file (comments dropped; no escapes beyond the
+    quote and backslash that the localised Info.plist texts could need)."""
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return {
+        key: value.replace('\\"', '"').replace("\\\\", "\\")
+        for key, value in _STRING_ENTRY.findall(text)
+    }
+
+
+def check_localised_info(info: dict[str, Any], app_dir: Path, pbxproj: str) -> list[str]:
+    """The local network prompt text exists in every localisation the project knows (en, de),
+    is wired into the app target as the variant group InfoPlist.strings, and the English text
+    is the Info.plist default, so a device in any other language reads the same as before."""
+    problems = []
+    texts: dict[str, str] = {}
+    for language in LOCALISATIONS:
+        path = app_dir / f"{language}.lproj" / "InfoPlist.strings"
+        if not path.is_file():
+            problems.append(f"App/{language}.lproj/InfoPlist.strings is missing")
+            continue
+        value = parse_strings(path.read_text("utf-8")).get(LOCAL_NETWORK_KEY, "").strip()
+        if not value:
+            problems.append(f"{language}.lproj/InfoPlist.strings has no {LOCAL_NETWORK_KEY}")
+        texts[language] = value
+        if f"path = {language}.lproj/InfoPlist.strings;" not in pbxproj:
+            problems.append(f"App.xcodeproj: {language}.lproj/InfoPlist.strings is not referenced")
+    if "InfoPlist.strings in Resources" not in pbxproj or "isa = PBXVariantGroup" not in pbxproj:
+        problems.append("App.xcodeproj: InfoPlist.strings is not a resource of the app target")
+    if texts.get("en") and texts["en"] != str(info.get(LOCAL_NETWORK_KEY, "")).strip():
+        problems.append("en.lproj/InfoPlist.strings differs from the default in Info.plist")
+    if texts.get("de") and texts.get("de") == texts.get("en"):
+        problems.append("de.lproj/InfoPlist.strings is not translated")
     return problems
 
 
@@ -604,6 +647,7 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
     )
     pbxproj = (ios / "App.xcodeproj" / "project.pbxproj").read_text("utf-8")
     problems += check_project(pbxproj)
+    problems += check_localised_info(_load_plist(ios / "App" / "Info.plist"), ios / "App", pbxproj)
     problems += check_project_integrity(pbxproj)
     problems += check_project_files(pbxproj, ios)
     problems += check_privacy_manifests(ios.parent)
@@ -752,7 +796,38 @@ def check_built_watch(watch: Path, version: str, build: str) -> list[str]:
     return problems
 
 
-def check_app(app: Path, version: str, build: str, ios_root: Path = IOS.parent) -> None:
+def check_built_notices(app: Path, source: Path = NOTICES) -> list[str]:
+    """The About page and the third-party notices (MIT, Apache-2.0 and OFL require the licence
+    text and the copyright notice to ship with the app) are in the bundle, and the notices are
+    the committed file that the licence gate (app_notices.py) checks."""
+    problems = []
+    if not (app / "public" / "about.html").is_file():
+        problems.append("the About page is missing (public/about.html)")
+    built = app / "public" / "third-party-notices.json"
+    if not built.is_file():
+        return [*problems, "the third-party notices are missing (public/third-party-notices.json)"]
+    try:
+        document = json.loads(built.read_text("utf-8"))
+        licences = document["licences"]
+        packages = [p for entry in licences for p in entry["packages"]]
+        texts = [entry["text"] for entry in licences]
+    except (ValueError, KeyError, TypeError) as exc:
+        return [*problems, f"public/third-party-notices.json is not a notices file: {exc!r}"]
+    if not packages or not all(isinstance(t, str) and t.strip() for t in texts):
+        problems.append("public/third-party-notices.json lists no packages or has no licence text")
+    elif not all(p.get("copyright") for p in packages):
+        problems.append("public/third-party-notices.json has a package without a copyright notice")
+    if source.is_file() and built.read_bytes() != source.read_bytes():
+        problems.append(
+            "public/third-party-notices.json differs from apps/mobile/public/"
+            "third-party-notices.json: the build did not bundle the committed file"
+        )
+    return problems
+
+
+def check_app(
+    app: Path, version: str, build: str, ios_root: Path = IOS.parent, notices: Path = NOTICES
+) -> None:
     """The built App.app before it is signed."""
     info = _load_plist(app / "Info.plist")
     problems = []
@@ -777,6 +852,7 @@ def check_app(app: Path, version: str, build: str, ios_root: Path = IOS.parent) 
     problems += check_built_widgets(app / "PlugIns" / f"{WIDGETS_NAME}.appex", version, build)
     problems += check_built_watch(app / "Watch" / f"{WATCH_NAME}.app", version, build)
     problems += check_built_privacy_manifests(app, ios_root)
+    problems += check_built_notices(app, notices)
     if not (app / "public" / "index.html").is_file():
         problems.append("the bundled pages are missing (public/index.html): cap sync did not run")
     for path in app.rglob("*"):
@@ -817,7 +893,7 @@ def main(argv: list[str] | None = None) -> int:
             check_app(args.app, args.version, args.build)
             print(
                 f"{args.app}: {args.version} ({args.build}), icon catalog, privacy manifests, "
-                "no Agora files."
+                "third-party notices, no Agora files."
             )
         else:
             print(build_number(args.version, args.rebuild))

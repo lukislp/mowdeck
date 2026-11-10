@@ -129,6 +129,12 @@ jobs:
       # files without comments (CONTRIBUTING.md, "Licence headers").
       - name: REUSE lint
         run: uv run --no-project --with "reuse[charset-normalizer]==6.2.0" reuse lint
+      # The third-party code inside the native apps: the packages the lock file puts into the
+      # bundle are the packages of the committed notices file, none is copyleft and every licence
+      # is allowed by apps/mobile/third-party-policy.toml (the `web` job compares the file with
+      # the installed packages; docs/ops/mobile-apps.md#third-party-notices).
+      - name: App bundle licence policy and notices
+        run: python3 tools/repo-checks/scripts/app_notices.py check
       - if: env.REPO_CHECKS == 'true'
         run: uv sync
       - if: env.REPO_CHECKS == 'true'
@@ -339,6 +345,10 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The app's committed third-party notices match the licences and copyright holders of the
+      # installed packages (a version bump changes nothing; a new package or holder does).
+      - name: App bundle notices are current
+        run: python3 tools/repo-checks/scripts/app_notices.py check --installed
       - run: pnpm -r lint
       - run: pnpm -r check
       # The Playwright suite (tests/e2e-web) needs the stack: it runs in the e2e-web job.
