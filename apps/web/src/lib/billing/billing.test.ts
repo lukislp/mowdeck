@@ -9,6 +9,7 @@ import { m } from '#lib/paraglide/messages.js';
 import { BillingAccount, type BillingLoaders } from './account.svelte';
 import {
   BILLING_STATUS_URL,
+  canPurchaseHere,
   formatAmount,
   formatPrice,
   hasOpenSubscription,
@@ -216,6 +217,13 @@ describe('billing price formatting', () => {
     expect(planTitle(plan)).toBe('Home');
     expect(planTitle({ ...plan, name: null })).toBe('home');
     expect(planTitle({ ...plan, name: '  ' })).toBe('home');
+  });
+});
+
+describe('canPurchaseHere', () => {
+  it('allows purchases in a browser and refuses them inside a native app shell', () => {
+    expect(canPurchaseHere(false)).toBe(true);
+    expect(canPurchaseHere(true)).toBe(false);
   });
 });
 

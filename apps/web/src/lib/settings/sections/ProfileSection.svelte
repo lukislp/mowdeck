@@ -10,7 +10,7 @@
   import { fleetApi, identityApi, schedulerApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
   import { session } from '#lib/auth/session.svelte.js';
-  import { probeBilling, type BillingStatus } from '#lib/billing/billing.js';
+  import { canPurchaseHere, probeBilling, type BillingStatus } from '#lib/billing/billing.js';
   import BillingPanel from '#lib/components/BillingPanel.svelte';
   import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
   import PlanPanel from '#lib/components/PlanPanel.svelte';
@@ -168,7 +168,11 @@
       <p class="hint" role="status"><SlowLoading /></p>
     {/if}
     {#if canBill && billing}
-      <BillingPanel status={billing} currentPlan={accountPlan.current?.plan ?? null} />
+      <BillingPanel
+        status={billing}
+        currentPlan={accountPlan.current?.plan ?? null}
+        purchasable={canPurchaseHere(nativeShell.active)}
+      />
     {/if}
   </Panel>
 </div>
