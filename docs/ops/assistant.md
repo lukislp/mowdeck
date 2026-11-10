@@ -7,7 +7,7 @@ It is off unless you enable it. Without it nothing changes and no chat box appea
 ## What it needs
 
 - **No secret, no database, no NATS user.** The assistant only calls MowDeck's HTTP API (Identity, Fleet, Telemetry, Vision) with the token of the user who asked.
-- **An AI provider** for the default interpreter `provider`: each user's own provider (Settings, AI provider) or the installation's model (`VISION_DEFAULT_*`, plan feature `ai_recover_hosted`), the same as AI assist ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)). Users without one see a link to the provider settings. Vision limits the requests per user and hour (`VISION_STRUCTURED_PER_HOUR`, default 30) and records them in its cost accounting with kind `structured`.
+- **An AI provider** for the default interpreter `provider`: each user's own provider (Settings, AI provider) or the installation's model (`VISION_DEFAULT_*`, plan feature `ai_recover_hosted`), the same as AI assist ([ADR 0033](../adr/0033-vision-assisted-recovery-with-approval.md)). Users without one see a link to the provider settings. With a cloud model the typed text, the mower name and the area names go to that provider, so the user agrees once before the first request ([ADR 0081](../adr/0081-explicit-consent-before-cloud-ai.md)); Vision enforces it and the assistant only passes its refusal on (`403 assistant-consent-required`). Vision limits the requests per user and hour (`VISION_STRUCTURED_PER_HOUR`, default 30) and records them in its cost accounting with kind `structured`.
 - Or the interpreter **`phrases`**: a built-in phrase parser for a few German and English requests, without any AI. Demo mode always uses it.
 
 ## Docker Compose

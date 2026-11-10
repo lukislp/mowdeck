@@ -16,10 +16,11 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from mowdeck_authz import Relation, mower
 from mowdeck_authz.fastapi import authorize, path_object, require_or_not_found
-from mowdeck_contracts.v1 import Principal
+from mowdeck_contracts.v1 import Principal, ProblemFieldError
 from mowdeck_service_kit import current_principal
 from mowdeck_service_kit.errors import (
     Conflict,
+    Forbidden,
     NotFound,
     ServiceError,
     ServiceUnavailable,
@@ -29,9 +30,11 @@ from mowdeck_service_kit.errors import (
 
 from vision.application.assist import VisionService
 from vision.application.auto import AutoSettings
+from vision.application.consent import ConsentService
 from vision.application.providers import ProviderService
 from vision.domain.errors import (
     ConflictError,
+    ConsentRequired,
     InvalidInput,
     NotFoundError,
     ProposalExpired,
@@ -68,6 +71,15 @@ def get_auto_settings(request: Request) -> AutoSettings:
     return auto
 
 
+def get_consent(request: Request) -> ConsentService:
+    """The consent use cases."""
+    consent: ConsentService | None = getattr(request.app.state, "consent_service", None)
+    if consent is None:
+        raise ServiceUnavailable("vision is starting")
+    return consent
+
+
+ConsentDep = Annotated[ConsentService, Depends(get_consent)]
 AutoSettingsDep = Annotated[AutoSettings, Depends(get_auto_settings)]
 ServiceDep = Annotated[VisionService, Depends(get_service)]
 ProvidersDep = Annotated[ProviderService, Depends(get_providers)]
@@ -117,6 +129,28 @@ class ProviderMissingProblem(Conflict):
     title: ClassVar[str] = "No vision provider"
 
 
+class ConsentRequiredProblem(Forbidden):
+    """403: the request would send data to a cloud AI model the caller has not agreed to. The
+    destination travels in ``errors`` (``parameter`` ``destination``, ``code`` its kind, ``detail``
+    provider and model), like the plan feature of ``feature-not-in-plan``."""
+
+    problem_type: ClassVar[str] = "vision-consent-required"
+    title: ClassVar[str] = "Consent to the AI provider required"
+
+    def __init__(self, exc: ConsentRequired) -> None:
+        destination = exc.destination
+        super().__init__(
+            exc.message,
+            errors=[
+                ProblemFieldError(
+                    parameter="destination",
+                    code=destination.kind.value,
+                    detail=f"{destination.provider} / {destination.model}",
+                )
+            ],
+        )
+
+
 class ProposalExpiredProblem(Conflict):
     """409: the proposal can no longer be approved."""
 
@@ -154,6 +188,8 @@ def to_service_error(exc: VisionError) -> ServiceError:
             return NotFound(exc.message)
         case InvalidInput():
             return ValidationFailed(exc.message)
+        case ConsentRequired():
+            return ConsentRequiredProblem(exc)
         case ProviderMissing():
             return ProviderMissingProblem(exc.message)
         case ProposalExpired():

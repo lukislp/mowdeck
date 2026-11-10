@@ -84,3 +84,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0078](0078-batched-state-ingestion.md) | Batched state ingestion | Accepted |
 | [0079](0079-fast-sandbox-lifecycle.md) | Fast demo sandbox claim and release | Accepted |
 | [0080](0080-codespaces-dev-container.md) | GitHub Codespaces dev container with the full Compose stack | Accepted |
+| [0081](0081-explicit-consent-before-cloud-ai.md) | Explicit consent before camera pictures or text go to a cloud AI provider | Accepted |

@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from vision.adapters.db import tables
+from vision.domain.consent import Consent, Destination, DestinationKind
 from vision.domain.errors import ConflictError
 from vision.domain.models import (
     FINAL_STATES,
@@ -488,6 +489,74 @@ class SqlStore:
             await conn.execute(statement)
 
     # --- automatic analyses ---------------------------------------------------------------
+
+    # --- consent to a cloud model -----------------------------------------------------------
+
+    async def get_consent(self, user_id: UUID, account_id: UUID) -> Consent | None:
+        """A user's consent (from ``user_preferences``; None while ``consent_at`` is null)."""
+        prefs = tables.user_preferences
+        query = sa.select(prefs).where(prefs.c.user_id == user_id, prefs.c.account_id == account_id)
+        async with self.engine.connect() as conn:
+            row = (await conn.execute(query)).first()
+        if row is None or row._mapping["consent_at"] is None:
+            return None
+        v = row._mapping
+        return Consent(
+            granted_at=v["consent_at"],
+            destination=Destination(
+                kind=DestinationKind(v["consent_kind"]),
+                provider=v["consent_provider"],
+                family=v["consent_family"],
+                model=v["consent_model"],
+            ),
+        )
+
+    async def put_consent(self, user_id: UUID, account_id: UUID, consent: Consent) -> None:
+        """Upsert a user's consent; the other preferences of the row stay as they are."""
+        given = consent.destination
+        columns = {
+            "consent_at": consent.granted_at,
+            "consent_kind": given.kind.value,
+            "consent_provider": given.provider[:100],
+            "consent_family": given.family,
+            "consent_model": given.model,
+        }
+        values = {
+            "user_id": user_id,
+            "account_id": account_id,
+            "updated_at": consent.granted_at,
+            **columns,
+        }
+        statement = pg_insert(tables.user_preferences).values(**values)
+        statement = statement.on_conflict_do_update(
+            index_elements=["user_id", "account_id"],
+            set_={k: statement.excluded[k] for k in columns},
+        )
+        async with self.engine.begin() as conn:
+            await conn.execute(statement)
+
+    async def delete_consent(self, user_id: UUID, account_id: UUID) -> bool:
+        """Clear a user's consent columns; True when a consent was recorded."""
+        prefs = tables.user_preferences
+        cleared = {
+            "consent_at": None,
+            "consent_kind": None,
+            "consent_provider": None,
+            "consent_family": None,
+            "consent_model": None,
+        }
+        statement = (
+            sa.update(prefs)
+            .where(
+                prefs.c.user_id == user_id,
+                prefs.c.account_id == account_id,
+                prefs.c.consent_at.is_not(None),
+            )
+            .values(**cleared)
+        )
+        async with self.engine.begin() as conn:
+            result = await conn.execute(statement)
+        return bool(result.rowcount)
 
     async def get_auto_setting(self, user_id: UUID, account_id: UUID) -> AutoSetting | None:
         """A user's opt-in (from ``user_preferences``)."""

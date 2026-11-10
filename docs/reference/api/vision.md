@@ -10,6 +10,36 @@ Base path `/api/v1/vision` behind the gateway. Authentication, rate limits and t
 
 ### vision
 
+#### GET /api/v1/vision/me/consent
+
+**My Consent**
+
+Whether the provider in effect for the caller is a cloud model (consent `required`), where requests would go (`destination`) and whether the recorded consent covers it.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ConsentOut](#consentout) |
+
+#### PUT /api/v1/vision/me/consent
+
+**Grant My Consent**
+
+Agree that pictures, map sketches and texts go to the provider in effect now (a new consent replaces an earlier one). 409 `vision-provider-missing` without a provider.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ConsentOut](#consentout) |
+
+#### DELETE /api/v1/vision/me/consent
+
+**Withdraw My Consent**
+
+Withdraw the consent and switch the caller's automatic analysis off.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ConsentOut](#consentout) |
+
 #### GET /api/v1/vision/me/preferences
 
 **My Preferences**
@@ -26,7 +56,7 @@ The caller's AI assist preferences (the defaults until saved): `stereo_frames` a
 
 Change the caller's AI assist preferences; a field left out keeps its value.
 
-`auto_analysis`: when a mower of the account enters a recoverable error (stuck, blocked, outside the work area, wheel slip), the service takes a photo, analyses it with the caller's provider (or the installation's) and asks for approval like a manual request; nothing is executed automatically. Enabling needs the plan feature `ai_recover` (403 `feature-not-in-plan`; nothing is saved then).
+`auto_analysis`: when a mower of the account enters a recoverable error (stuck, blocked, outside the work area, wheel slip), the service takes a photo, analyses it with the caller's provider (or the installation's) and asks for approval like a manual request; nothing is executed automatically. Enabling needs the plan feature `ai_recover` (403 `feature-not-in-plan`; nothing is saved then) and, for a cloud model, the caller's consent (403 `vision-consent-required`, nothing saved).
 
 **Request body** (required): `application/json` [PreferencesIn](#preferencesin)
 
@@ -79,6 +109,7 @@ A text-only question to the caller's effective provider (own, else the installat
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [StructuredOut](#structuredout) |
+| 403 | `vision-consent-required`: a cloud model the caller has not agreed to. | no body |
 | 409 | `vision-provider-missing`: no own provider, no hosted default. | no body |
 | 422 | A field is out of its limits or the schema is not an object. | no body |
 | 429 | `vision-quota`: the hourly limit of structured answers. | no body |
@@ -115,7 +146,7 @@ Proposals of the mower, newest first.
 
 **Recover**
 
-Start AI assist for the mower: `task` `recover` or `find_dock`, optional camera snapshots (base64, each optionally with `camera`, `side` and `captured_at`; a `left` and a `right` frame of the same moment are analysed as a stereo pair when the caller's preference `stereo_frames` is on, else only the left one). The analysis runs in the background; poll `GET /proposals/{id}`. Without images the mower's gateway is asked for one. 403 `feature-not-in-plan` without `ai_recover`, 409 `vision-provider-missing` without a usable provider, 409 when a proposal for the mower is open, 429 `vision-quota` beyond the daily cap.
+Start AI assist for the mower: `task` `recover` or `find_dock`, optional camera snapshots (base64, each optionally with `camera`, `side` and `captured_at`; a `left` and a `right` frame of the same moment are analysed as a stereo pair when the caller's preference `stereo_frames` is on, else only the left one). The analysis runs in the background; poll `GET /proposals/{id}`. Without images the mower's gateway is asked for one. 403 `feature-not-in-plan` without `ai_recover`, 409 `vision-provider-missing` without a usable provider, 409 when a proposal for the mower is open, 429 `vision-quota` beyond the daily cap, 403 `vision-consent-required` when the provider is a cloud model the caller has not agreed to (before any picture is taken).
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
@@ -274,6 +305,35 @@ What the model thinks (without the steps, which are listed separately).
 | --- | --- | --- | --- |
 | `images` | array of string or null | no |  |
 | `task` | [VisionTask](#visiontask) | no | default `"recover"` |
+
+### ConsentOut
+
+`GET/PUT/DELETE /me/consent`: the caller's consent to send data to a cloud model.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `covers` | boolean | yes | The recorded consent covers the destination in effect now. |
+| `destination` | [DestinationOut](#destinationout) or null | yes | Where a request would go now; null without a provider. |
+| `granted_at` | string (date-time) or null | yes | Null without a recorded consent. |
+| `granted_for` | [DestinationOut](#destinationout) or null | yes | The destination the recorded consent was given for. |
+| `required` | boolean | yes | The provider in effect now is a cloud model. |
+
+### DestinationKind
+
+Where a request goes.
+
+Type: `"cloud"` \| `"local"` \| `"simulated"`
+
+### DestinationOut
+
+Where the data of a request goes (ADR 0081): the kind decides whether consent is needed.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `family` | string | yes |  |
+| `kind` | [DestinationKind](#destinationkind) | yes | `cloud`: a third party outside this installation (consent required); `local`: own hardware; `simulated`: the rule based fake model. |
+| `model` | string | yes |  |
+| `provider` | string | yes | Human readable provider name, e.g. `Anthropic`. |
 
 ### FamilyOut
 
@@ -505,6 +565,7 @@ Type: `"analysing"` \| `"proposed"` \| `"rejected_by_ai"` \| `"failed"` \| `"rej
 | `api_base` | string or null | yes |  |
 | `api_key_set` | boolean | yes |  |
 | `configured` | boolean | yes |  |
+| `destination` | [DestinationOut](#destinationout) or null | yes | Where a request would go now, with its kind; null without a provider. |
 | `effective` | `"own"` \| `"hosted"` \| `"none"` | yes | Which provider a request would use now. |
 | `enabled` | boolean | yes |  |
 | `family` | string or null | yes |  |
@@ -524,6 +585,7 @@ Type: `"analysing"` \| `"proposed"` \| `"rejected_by_ai"` \| `"failed"` \| `"rej
 | --- | --- | --- | --- |
 | `families` | array of [FamilyOut](#familyout) | yes |  |
 | `hosted_available` | boolean | yes |  |
+| `hosted_destination` | [DestinationOut](#destinationout) or null | yes | Where requests to the installation's model go (kind: cloud, local). |
 | `hosted_model` | string or null | yes |  |
 | `secrets_available` | boolean | yes | Whether API keys can be stored here. |
 
@@ -573,6 +635,7 @@ Type: `"people_visible"` \| `"animals_visible"` \| `"drop_off"` \| `"water"` \| 
 | --- | --- | --- | --- |
 | `allow_fake_provider` | boolean | yes |  |
 | `hosted_default_enabled` | boolean | yes |  |
+| `hosted_default_kind` | [DestinationKind](#destinationkind) or null | yes | Where the default's data goes (`cloud` unless the operator set `MOWDECK_VISION_DEFAULT_LOCAL`, `simulated` for the fake); only when it is enabled. |
 | `hosted_default_model` | string or null | yes | Only when the default is enabled. |
 | `secrets_available` | boolean | yes |  |
 | `user_api_base_policy` | string | yes |  |

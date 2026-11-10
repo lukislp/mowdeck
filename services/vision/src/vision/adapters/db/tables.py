@@ -174,9 +174,9 @@ user_providers = Table(
 )
 
 # A user's AI assist preferences (absent: the defaults): the stereo frame preference (revision
-# 0004) and the opt-in to automatic analyses with the principal kind the analysis acts as
-# (revision 0005, ADR 0035). Each store method writes only its own columns, so the other
-# preferences keep their values.
+# 0004), the opt-in to automatic analyses with the principal kind the analysis acts as (revision
+# 0005, ADR 0035) and the consent to a cloud model (revision 0008, ADR 0081). Each store method
+# writes only its own columns, so the other preferences keep their values.
 user_preferences = Table(
     "user_preferences",
     metadata,
@@ -185,6 +185,13 @@ user_preferences = Table(
     Column("stereo_frames", Boolean, nullable=False, server_default=text("true")),
     Column("auto_analysis", Boolean, nullable=False, server_default=text("false")),
     Column("principal_kind", String(16), nullable=False, server_default=text("'user'")),
+    # The consent to send data to a cloud model (revision 0008, ADR 0081): when, and for which
+    # destination. All null: no consent.
+    Column("consent_at", TS),
+    Column("consent_kind", String(16)),
+    Column("consent_provider", String(100)),
+    Column("consent_family", String(64)),
+    Column("consent_model", String(200)),
     Column("updated_at", TS, nullable=False),
     Index("ix_user_preferences_account", "account_id"),
 )

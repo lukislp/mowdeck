@@ -142,6 +142,12 @@ function settings(overrides: Partial<ProviderSettings> = {}): ProviderSettings {
     hosted_available: false,
     hosted_model: null,
     effective: 'own',
+    destination: {
+      kind: 'simulated',
+      provider: 'Fake (development)',
+      family: 'fake',
+      model: 'fake/recover',
+    },
     secrets_available: true,
     ...overrides,
   };

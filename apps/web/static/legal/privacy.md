@@ -30,18 +30,28 @@ Information pursuant to Articles 13 and 14 of the General Data Protection Regula
 - **Map tiles:** **TODO:** if this installation shows map tiles of a third party, name the provider; it learns the location of the shown map area.
 - **TODO:** any other recipient (e-mail delivery, push services of the browser vendors, support tools).
 
-## 5. Retention
+## 5. AI features (cloud AI providers)
+
+MowDeck has three optional features that ask an AI model: AI assist for a stuck mower, the automatic analysis when a mower reports an error, and the chat assistant. They are off for you until you agree. **TODO:** delete this section if this installation does not offer AI features, and say which model it offers.
+
+- **What is sent when the model is a cloud model:** for AI assist and the automatic analysis up to four camera pictures of the mower (they can show people, animals and neighbouring property), a map sketch with the names of your areas, and the mower's status (position, activity, error code, signal); for the chat assistant the text you type and the mower and area names. **TODO:** confirm or adjust.
+- **To whom:** **TODO:** name, address and location of the AI provider of this installation's model (for example the provider and model shown in the app), the link to its privacy policy, and the transfer to third countries. If you configure your own provider under Settings, AI provider, the data goes to that provider and you are the one who chose it.
+- **Consent:** before the first use of an AI feature the app asks for your explicit consent (Art. 6 (1) (a) GDPR), naming the provider and model. Consent is optional, covers that provider and model only (you are asked again after a change), and you can withdraw it at any time under Settings, AI provider; withdrawing also switches the automatic analysis off. Without it the AI features stay off and everything else works.
+- **No consent is asked** when the model runs on the operator's own hardware (nothing leaves the installation) or in the public demo, which uses a built-in simulation. **TODO:** state whether this installation uses a local model.
+- **Retention:** the pictures and the sketch are deleted with the proposal after a few minutes unless the operator configured otherwise, and are not logged. The chat text and the answer are neither logged nor stored. **TODO:** state the retention at the provider.
+
+## 6. Retention
 
 **TODO:** how long each category is stored, for example account data until the account is deleted, invoices for the period required by tax law, logs for a few days.
 
-## 6. Your rights
+## 7. Your rights
 
 You have the right of access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20) and objection (Art. 21 GDPR), and you can withdraw a consent at any time with effect for the future. **TODO:** how to exercise these rights (contact address).
 
-## 7. Supervisory authority
+## 8. Supervisory authority
 
 You can lodge a complaint with a data protection supervisory authority. **TODO:** name and address of the authority responsible for the controller.
 
-## 8. Changes
+## 9. Changes
 
 **TODO:** the date of this policy and how changes are announced.

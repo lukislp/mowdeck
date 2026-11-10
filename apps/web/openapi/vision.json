@@ -94,6 +94,105 @@
         "title": "Body_recover_upload_api_v1_vision_mowers__mower_id__recover_upload_post",
         "type": "object"
       },
+      "ConsentOut": {
+        "description": "``GET/PUT/DELETE /me/consent``: the caller's consent to send data to a cloud model.",
+        "properties": {
+          "covers": {
+            "description": "The recorded consent covers the destination in effect now.",
+            "title": "Covers",
+            "type": "boolean"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where a request would go now; null without a provider."
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null without a recorded consent.",
+            "title": "Granted At"
+          },
+          "granted_for": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The destination the recorded consent was given for."
+          },
+          "required": {
+            "description": "The provider in effect now is a cloud model.",
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "required",
+          "destination",
+          "granted_at",
+          "granted_for",
+          "covers"
+        ],
+        "title": "ConsentOut",
+        "type": "object"
+      },
+      "DestinationKind": {
+        "description": "Where a request goes.",
+        "enum": [
+          "cloud",
+          "local",
+          "simulated"
+        ],
+        "title": "DestinationKind",
+        "type": "string"
+      },
+      "DestinationOut": {
+        "description": "Where the data of a request goes (ADR 0081): the kind decides whether consent is needed.",
+        "properties": {
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DestinationKind",
+            "description": "`cloud`: a third party outside this installation (consent required); `local`: own hardware; `simulated`: the rule based fake model."
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Human readable provider name, e.g. `Anthropic`.",
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "provider",
+          "family",
+          "model"
+        ],
+        "title": "DestinationOut",
+        "type": "object"
+      },
       "EventDef": {
         "description": "An event type a module publishes.",
         "properties": {
@@ -1385,6 +1484,17 @@
             "title": "Configured",
             "type": "boolean"
           },
+          "destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where a request would go now, with its kind; null without a provider."
+          },
           "effective": {
             "description": "Which provider a request would use now.",
             "enum": [
@@ -1483,6 +1593,7 @@
           "hosted_available",
           "hosted_model",
           "effective",
+          "destination",
           "secrets_available"
         ],
         "title": "ProviderOut",
@@ -1580,6 +1691,17 @@
             "title": "Hosted Available",
             "type": "boolean"
           },
+          "hosted_destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where requests to the installation's model go (kind: cloud, local)."
+          },
           "hosted_model": {
             "anyOf": [
               {
@@ -1601,6 +1723,7 @@
           "families",
           "hosted_available",
           "hosted_model",
+          "hosted_destination",
           "secrets_available"
         ],
         "title": "ProvidersOut",
@@ -1663,6 +1786,17 @@
             "title": "Hosted Default Enabled",
             "type": "boolean"
           },
+          "hosted_default_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DestinationKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the default's data goes (`cloud` unless the operator set `MOWDECK_VISION_DEFAULT_LOCAL`, `simulated` for the fake); only when it is enabled."
+          },
           "hosted_default_model": {
             "anyOf": [
               {
@@ -1687,6 +1821,7 @@
         "required": [
           "hosted_default_enabled",
           "hosted_default_model",
+          "hosted_default_kind",
           "secrets_available",
           "allow_fake_provider",
           "user_api_base_policy"
@@ -2040,6 +2175,68 @@
         ]
       }
     },
+    "/api/v1/vision/me/consent": {
+      "delete": {
+        "description": "Withdraw the consent and switch the caller's automatic analysis off.",
+        "operationId": "withdraw_my_consent_api_v1_vision_me_consent_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Withdraw My Consent",
+        "tags": [
+          "vision"
+        ]
+      },
+      "get": {
+        "description": "Whether the provider in effect for the caller is a cloud model (consent `required`),\nwhere requests would go (`destination`) and whether the recorded consent covers it.",
+        "operationId": "my_consent_api_v1_vision_me_consent_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Consent",
+        "tags": [
+          "vision"
+        ]
+      },
+      "put": {
+        "description": "Agree that pictures, map sketches and texts go to the provider in effect now (a new\nconsent replaces an earlier one). 409 `vision-provider-missing` without a provider.",
+        "operationId": "grant_my_consent_api_v1_vision_me_consent_put",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Grant My Consent",
+        "tags": [
+          "vision"
+        ]
+      }
+    },
     "/api/v1/vision/me/preferences": {
       "get": {
         "description": "The caller's AI assist preferences (the defaults until saved): ``stereo_frames`` and the\nopt-in to automatic AI analyses on errors (off until saved) with the installation's limits\n(cooldown per mower, analyses per mower and day).",
@@ -2062,7 +2259,7 @@
         ]
       },
       "put": {
-        "description": "Change the caller's AI assist preferences; a field left out keeps its value.\n\n``auto_analysis``: when a mower of the account enters a recoverable error (stuck, blocked,\noutside the work area, wheel slip), the service takes a photo, analyses it with the caller's\nprovider (or the installation's) and asks for approval like a manual request; nothing is\nexecuted automatically. Enabling needs the plan feature ``ai_recover`` (403\n``feature-not-in-plan``; nothing is saved then).",
+        "description": "Change the caller's AI assist preferences; a field left out keeps its value.\n\n``auto_analysis``: when a mower of the account enters a recoverable error (stuck, blocked,\noutside the work area, wheel slip), the service takes a photo, analyses it with the caller's\nprovider (or the installation's) and asks for approval like a manual request; nothing is\nexecuted automatically. Enabling needs the plan feature ``ai_recover`` (403\n``feature-not-in-plan``; nothing is saved then) and, for a cloud model, the caller's consent\n(403 ``vision-consent-required``, nothing saved).",
         "operationId": "put_my_preferences_api_v1_vision_me_preferences_put",
         "requestBody": {
           "content": {
@@ -2202,6 +2399,9 @@
             },
             "description": "Successful Response"
           },
+          "403": {
+            "description": "`vision-consent-required`: a cloud model the caller has not agreed to."
+          },
           "409": {
             "description": "`vision-provider-missing`: no own provider, no hosted default."
           },
@@ -2318,7 +2518,7 @@
     },
     "/api/v1/vision/mowers/{mower_id}/recover": {
       "post": {
-        "description": "Start AI assist for the mower: ``task`` ``recover`` or ``find_dock``, optional camera\nsnapshots (base64, each optionally with ``camera``, ``side`` and ``captured_at``; a\n``left`` and a ``right`` frame of the same moment are analysed as a stereo pair when the\ncaller's preference ``stereo_frames`` is on, else only the left one). The analysis runs in\nthe background; poll ``GET /proposals/{id}``. Without images the mower's gateway is asked\nfor one. 403 ``feature-not-in-plan`` without ``ai_recover``, 409 ``vision-provider-missing``\nwithout a usable provider, 409 when a proposal for the mower is open, 429 ``vision-quota``\nbeyond the daily cap.",
+        "description": "Start AI assist for the mower: ``task`` ``recover`` or ``find_dock``, optional camera\nsnapshots (base64, each optionally with ``camera``, ``side`` and ``captured_at``; a\n``left`` and a ``right`` frame of the same moment are analysed as a stereo pair when the\ncaller's preference ``stereo_frames`` is on, else only the left one). The analysis runs in\nthe background; poll ``GET /proposals/{id}``. Without images the mower's gateway is asked\nfor one. 403 ``feature-not-in-plan`` without ``ai_recover``, 409 ``vision-provider-missing``\nwithout a usable provider, 409 when a proposal for the mower is open, 429 ``vision-quota``\nbeyond the daily cap, 403 ``vision-consent-required`` when the provider is a cloud model the\ncaller has not agreed to (before any picture is taken).",
         "operationId": "recover_api_v1_vision_mowers__mower_id__recover_post",
         "parameters": [
           {

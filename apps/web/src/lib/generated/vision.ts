@@ -18,6 +18,36 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vision/me/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Consent
+         * @description Whether the provider in effect for the caller is a cloud model (consent `required`),
+         *     where requests would go (`destination`) and whether the recorded consent covers it.
+         */
+        get: operations["my_consent_api_v1_vision_me_consent_get"];
+        /**
+         * Grant My Consent
+         * @description Agree that pictures, map sketches and texts go to the provider in effect now (a new
+         *     consent replaces an earlier one). 409 `vision-provider-missing` without a provider.
+         */
+        put: operations["grant_my_consent_api_v1_vision_me_consent_put"];
+        post?: never;
+        /**
+         * Withdraw My Consent
+         * @description Withdraw the consent and switch the caller's automatic analysis off.
+         */
+        delete: operations["withdraw_my_consent_api_v1_vision_me_consent_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vision/me/preferences": {
         parameters: {
             query?: never;
@@ -40,7 +70,8 @@ export type paths = {
          *     outside the work area, wheel slip), the service takes a photo, analyses it with the caller's
          *     provider (or the installation's) and asks for approval like a manual request; nothing is
          *     executed automatically. Enabling needs the plan feature ``ai_recover`` (403
-         *     ``feature-not-in-plan``; nothing is saved then).
+         *     ``feature-not-in-plan``; nothing is saved then) and, for a cloud model, the caller's consent
+         *     (403 ``vision-consent-required``, nothing saved).
          */
         put: operations["put_my_preferences_api_v1_vision_me_preferences_put"];
         post?: never;
@@ -164,7 +195,8 @@ export type paths = {
          *     the background; poll ``GET /proposals/{id}``. Without images the mower's gateway is asked
          *     for one. 403 ``feature-not-in-plan`` without ``ai_recover``, 409 ``vision-provider-missing``
          *     without a usable provider, 409 when a proposal for the mower is open, 429 ``vision-quota``
-         *     beyond the daily cap.
+         *     beyond the daily cap, 403 ``vision-consent-required`` when the provider is a cloud model the
+         *     caller has not agreed to (before any picture is taken).
          */
         post: operations["recover_api_v1_vision_mowers__mower_id__recover_post"];
         delete?: never;
@@ -380,6 +412,54 @@ export type components = {
             images?: string[] | null;
             /** @default recover */
             task: components["schemas"]["VisionTask"];
+        };
+        /**
+         * ConsentOut
+         * @description ``GET/PUT/DELETE /me/consent``: the caller's consent to send data to a cloud model.
+         */
+        ConsentOut: {
+            /**
+             * Covers
+             * @description The recorded consent covers the destination in effect now.
+             */
+            covers: boolean;
+            /** @description Where a request would go now; null without a provider. */
+            destination: components["schemas"]["DestinationOut"] | null;
+            /**
+             * Granted At
+             * @description Null without a recorded consent.
+             */
+            granted_at: string | null;
+            /** @description The destination the recorded consent was given for. */
+            granted_for: components["schemas"]["DestinationOut"] | null;
+            /**
+             * Required
+             * @description The provider in effect now is a cloud model.
+             */
+            required: boolean;
+        };
+        /**
+         * DestinationKind
+         * @description Where a request goes.
+         * @enum {string}
+         */
+        DestinationKind: "cloud" | "local" | "simulated";
+        /**
+         * DestinationOut
+         * @description Where the data of a request goes (ADR 0081): the kind decides whether consent is needed.
+         */
+        DestinationOut: {
+            /** Family */
+            family: string;
+            /** @description `cloud`: a third party outside this installation (consent required); `local`: own hardware; `simulated`: the rule based fake model. */
+            kind: components["schemas"]["DestinationKind"];
+            /** Model */
+            model: string;
+            /**
+             * Provider
+             * @description Human readable provider name, e.g. `Anthropic`.
+             */
+            provider: string;
         };
         /**
          * EventDef
@@ -934,6 +1014,8 @@ export type components = {
             api_key_set: boolean;
             /** Configured */
             configured: boolean;
+            /** @description Where a request would go now, with its kind; null without a provider. */
+            destination: components["schemas"]["DestinationOut"] | null;
             /**
              * Effective
              * @description Which provider a request would use now.
@@ -967,6 +1049,8 @@ export type components = {
             families: components["schemas"]["FamilyOut"][];
             /** Hosted Available */
             hosted_available: boolean;
+            /** @description Where requests to the installation's model go (kind: cloud, local). */
+            hosted_destination: components["schemas"]["DestinationOut"] | null;
             /** Hosted Model */
             hosted_model: string | null;
             /**
@@ -1034,6 +1118,8 @@ export type components = {
             allow_fake_provider: boolean;
             /** Hosted Default Enabled */
             hosted_default_enabled: boolean;
+            /** @description Where the default's data goes (`cloud` unless the operator set `MOWDECK_VISION_DEFAULT_LOCAL`, `simulated` for the fake); only when it is enabled. */
+            hosted_default_kind: components["schemas"]["DestinationKind"] | null;
             /**
              * Hosted Default Model
              * @description Only when the default is enabled.
@@ -1219,6 +1305,66 @@ export interface operations {
             };
         };
     };
+    my_consent_api_v1_vision_me_consent_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentOut"];
+                };
+            };
+        };
+    };
+    grant_my_consent_api_v1_vision_me_consent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentOut"];
+                };
+            };
+        };
+    };
+    withdraw_my_consent_api_v1_vision_me_consent_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentOut"];
+                };
+            };
+        };
+    };
     my_preferences_api_v1_vision_me_preferences_get: {
         parameters: {
             query?: never;
@@ -1364,6 +1510,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StructuredOut"];
                 };
+            };
+            /** @description `vision-consent-required`: a cloud model the caller has not agreed to. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description `vision-provider-missing`: no own provider, no hosted default. */
             409: {
