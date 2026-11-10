@@ -102,7 +102,7 @@ The phone bar holds five targets; with more modules the first four stay and the 
 
 ## i18n
 
-Paraglide JS 2: `messages/de.json` is the base locale, `messages/en.json` the second one; `project.inlang/settings.json` loads the message format plugin from jsDelivr when the messages are compiled (the compiled output in `src/lib/paraglide/` is generated, never edited). Locale strategy: `localStorage`, then the browser languages, then German.
+Paraglide JS 2: `messages/de.json` is the base locale, `messages/en.json` the second one; `project.inlang/settings.json` loads the message format plugin from jsDelivr when the messages are compiled (the compiled output in `src/lib/paraglide/` is generated, never edited). Locale strategy: `localStorage`, then the browser languages, then German. The switch is `LanguageSwitch.svelte`, used in the profile settings and in the footer of `AuthFrame` (sign-in and registration pages), so the language can be changed before signing in. "Change server" inside the app shell is `native/ChangeServer.svelte` (the footer of `AuthFrame`, and the settings page outside the demo lock); both entries call `NativeShell.changeServer()`, the one hand-over (push token and widget credential, demo visitor flag, session, then `resetServerUrl`).
 
 - No literal text in markup: the ESLint rule `mowdeck/no-literal-text` (in `libs/mowdeck-ui/lint/`) reports text nodes and `aria-label`, `title`, `placeholder` and `alt` values with letters in `apps/web/src/**/*.svelte` (units such as `mm`, `m/s`, `%` are allowed). Use `m.some_key()`.
 - Keys are `snake_case` with a prefix for the screen or concern: `nav_`, `cmd_`, `activity_`, `rtk_`, `problem_`, `detail_`, `mower_`, `users_`, `tokens_`, `account_`, ...

@@ -173,3 +173,36 @@ button {
   background: transparent;
   color: var(--md-color-ink);
 }
+
+/* The de/en toggle: two segments like the language switch of the web app. */
+.language {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-self: flex-end;
+  border: var(--md-border-control) solid var(--md-color-line-strong);
+  border-radius: var(--md-radius-2);
+  overflow: hidden;
+}
+
+.language button {
+  min-height: var(--md-target);
+  padding: 0 var(--md-space-4);
+  border: 0;
+  border-radius: 0;
+  background: var(--md-color-surface);
+  color: var(--md-color-ink);
+  font-weight: var(--md-weight-medium);
+}
+
+.language button + button {
+  border-inline-start: var(--md-hairline) solid var(--md-color-line);
+}
+
+.language button[aria-pressed='true'] {
+  background: var(--md-color-ink);
+  color: var(--md-color-ink-inverse);
+}
+
+.language button:focus-visible {
+  outline-offset: -3px;
+}

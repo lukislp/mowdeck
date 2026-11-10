@@ -12,6 +12,7 @@
   import { session } from '#lib/auth/session.svelte.js';
   import { probeBilling, type BillingStatus } from '#lib/billing/billing.js';
   import BillingPanel from '#lib/components/BillingPanel.svelte';
+  import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
   import PlanPanel from '#lib/components/PlanPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import DemoLock from '#lib/demo/DemoLock.svelte';
@@ -19,7 +20,6 @@
   import { problemMessage, roleLabel } from '#lib/i18n.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
-  import { getLocale, setLocale } from '#lib/paraglide/runtime.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
   import type { LimitKey } from '#lib/plan/types.js';
   import { install, theme, toasts, type ThemeChoice } from '#lib/stores/ui.svelte.js';
@@ -188,16 +188,7 @@
 </Panel>
 
 <Panel label={m.account_language()}>
-  <SegmentedControl
-    label={m.account_language()}
-    testid="language-switch"
-    value={getLocale()}
-    options={[
-      { value: 'de', label: m.lang_de() },
-      { value: 'en', label: m.lang_en() },
-    ]}
-    onchange={(value) => setLocale(value as 'de' | 'en')}
-  />
+  <LanguageSwitch />
 </Panel>
 
 <!-- Not inside the iOS/Android app: it is installed natively, the panel has nothing to say. -->

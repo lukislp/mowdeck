@@ -3,7 +3,7 @@
 
 <!--
   Notifications of the iOS/Android app shell on the settings page (replaces the Web Push panel
-  inside the app): the server the app loads, Apple Push on iOS, local notifications, and on
+  inside the app): Apple Push on iOS, local notifications, and on
   Android the way to ntfy for the background.
 -->
 <script lang="ts">
@@ -110,13 +110,6 @@
 <Panel label={m.native_title()} testid="native-panel">
   <div class="stack">
     <div class="readouts">
-      <Readout
-        label={m.native_server()}
-        value={nativeShell.server}
-        size="inline"
-        emptyText={m.no_data()}
-        testid="native-server"
-      />
       {#if nativeShell.apnsAvailable}
         <Readout
           label={m.native_apns()}
@@ -211,15 +204,6 @@
         >
       </div>
     {/if}
-
-    <div>
-      <Button
-        variant="secondary"
-        icon="link"
-        testid="native-change-server"
-        onclick={() => void nativeShell.changeServer()}>{m.native_change_server()}</Button
-      >
-    </div>
   </div>
 </Panel>
 

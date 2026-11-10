@@ -41,7 +41,15 @@ export interface NativeShellDeps {
   user?: () => string | null;
   /** The app's login session (family id); a widget credential ends with it. */
   session?: () => string | null;
+  /**
+   * Leave the app's own session on the way out (a demo visitor's flag, the login session); the
+   * wiring in `runtime.ts` owns the session and demo knowledge, the shell only orders the steps.
+   */
+  leaveSession?: () => Promise<void>;
 }
+
+/** Longest the hand-over to a server we are leaving may take before the switch goes on. */
+export const HAND_OVER_LIMIT_MS = 5000;
 
 type Display = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
 
@@ -264,9 +272,30 @@ export class NativeShell {
     return signInThroughBrowser({ bridge, origin, start: startAppLogin, redeem }, signal);
   }
 
-  /** Forget the server: the shell shows its first-launch screen again. */
+  /**
+   * Leave the server: hand over (APNs token and widget credential, the demo visitor flag, the
+   * login session), then forget the server so the shell shows its first-launch screen again.
+   * Every step is best effort and bounded: an unreachable server never blocks the switch.
+   */
   async changeServer(): Promise<void> {
+    if (!this.active) return;
+    await this.#bounded(() => this.signingOut());
+    await this.#bounded(async () => this.#deps.leaveSession?.());
     await this.#plugin('MowDeckShell')?.call('resetServerUrl');
+  }
+
+  async #bounded(step: () => Promise<void>): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, HAND_OVER_LIMIT_MS);
+    });
+    try {
+      await Promise.race([step(), limit]);
+    } catch {
+      // the server may be unreachable or the session already gone
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Every inbox refresh: badge, and local notifications for new items when wanted. */

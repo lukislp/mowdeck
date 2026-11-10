@@ -644,6 +644,8 @@
   "native_title": "Diese App",
   "native_server": "Server",
   "native_change_server": "Server wechseln",
+  "native_change_server_confirm": "Du wirst von diesem Server abgemeldet und wählst danach einen anderen.",
+  "native_change_server_confirm_action": "Abmelden und wechseln",
   "native_apns": "Apple Push",
   "native_apns_on": "an",
   "native_apns_pending": "verbinde …",
