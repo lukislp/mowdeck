@@ -1704,7 +1704,7 @@
   "consent_state_granted": "Du hast am {date} zugestimmt, dass Daten an {provider} ({model}) gehen.",
   "consent_state_other": "Deine Zustimmung galt für {provider} ({model}). Aktuell wird {current} verwendet, du wirst deshalb vor der nächsten Nutzung erneut gefragt.",
   "consent_state_none": "Du hast noch nicht zugestimmt. Du wirst gefragt, bevor eine KI-Funktion zum ersten Mal Daten an {provider} ({model}) sendet.",
-  "consent_state_idle": "Der aktuelle Anbieter behält deine Daten auf deiner eigenen Hardware, eine Zustimmung ist daher nicht nötig. Eine frühere Zustimmung bleibt bis zum Widerruf bestehen.",
+  "consent_state_idle": "Der aktuelle Anbieter verarbeitet deine Daten auf der Hardware dieser Installation oder auf einem Endpunkt, den du selbst eingerichtet hast. Eine Zustimmung ist daher nicht nötig. Eine frühere Zustimmung bleibt bis zum Widerruf bestehen.",
   "consent_review": "Prüfen und zustimmen",
   "consent_withdraw_action": "Zustimmung widerrufen",
   "consent_withdrawn": "Zustimmung widerrufen; die automatische Analyse ist aus",

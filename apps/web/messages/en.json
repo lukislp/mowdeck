@@ -1704,7 +1704,7 @@
   "consent_state_granted": "You agreed on {date} that data goes to {provider} ({model}).",
   "consent_state_other": "Your agreement was for {provider} ({model}). The provider in use now is {current}, so you will be asked again before the next use.",
   "consent_state_none": "You have not agreed yet. You will be asked before an AI feature first sends data to {provider} ({model}).",
-  "consent_state_idle": "The provider in use now keeps your data on your own hardware, so no agreement is needed. An earlier agreement stays until you withdraw it.",
+  "consent_state_idle": "The provider in use now processes your data on this installation's own hardware or on an endpoint you set up yourself, so no agreement is needed. An earlier agreement stays until you withdraw it.",
   "consent_review": "Review and agree",
   "consent_withdraw_action": "Withdraw agreement",
   "consent_withdrawn": "Agreement withdrawn; automatic analysis is off",
