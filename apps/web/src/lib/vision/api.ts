@@ -41,6 +41,7 @@ export const VISION_PROBLEMS = {
   providerMissing: 'vision-provider-missing',
   secretsUnavailable: 'vision-secrets-unavailable',
   quota: 'vision-quota',
+  consentRequired: 'vision-consent-required',
   expired: 'vision-proposal-expired',
   providerFailed: 'vision-provider-failed',
   notInPlan: 'feature-not-in-plan',

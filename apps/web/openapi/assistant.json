@@ -624,6 +624,9 @@
             },
             "description": "Successful Response"
           },
+          "403": {
+            "description": "`assistant-consent-required`: no consent to a cloud AI."
+          },
           "404": {
             "description": "The mower does not exist or the caller cannot see it."
           },

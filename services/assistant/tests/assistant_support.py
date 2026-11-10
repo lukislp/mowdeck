@@ -27,7 +27,7 @@ from assistant.application.ports import (
     MowerFacts,
 )
 from assistant.domain.catalog import build_catalog
-from assistant.domain.errors import ProviderMissing
+from assistant.domain.errors import ConsentRequired, ProviderMissing
 from assistant.domain.model import Area, Catalog
 from assistant.main import build_app
 from assistant.settings import Settings
@@ -127,6 +127,7 @@ class FakeProvider:
     answers: list[Any] = field(default_factory=lambda: [answer(action("dock"))])
     ready: bool = True
     missing: bool = False
+    consent: bool = False
     seen: list[tuple[str, Catalog, str]] = field(default_factory=list)
 
     @property
@@ -141,6 +142,8 @@ class FakeProvider:
     async def interpret(self, token: str, catalog: Catalog, text: str) -> InterpreterAnswer:
         if self.missing:
             raise ProviderMissing("no AI provider is available")
+        if self.consent:
+            raise ConsentRequired("agree to the AI provider first")
         self.seen.append((token, catalog, text))
         output = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
         return InterpreterAnswer(output, "fake/assistant")

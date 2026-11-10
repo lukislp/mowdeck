@@ -383,6 +383,13 @@ export interface operations {
                     "application/json": components["schemas"]["ProposalOut"];
                 };
             };
+            /** @description `assistant-consent-required`: no consent to a cloud AI. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description The mower does not exist or the caller cannot see it. */
             404: {
                 headers: {

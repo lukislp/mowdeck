@@ -37,6 +37,7 @@ from vision.adapters.db.store import SqlStore
 from vision.adapters.db.tables import metadata
 from vision.adapters.memory import MemoryStore
 from vision.application.ports import Store
+from vision.domain.consent import Consent, Destination, DestinationKind
 from vision.domain.errors import ConflictError
 from vision.domain.models import (
     AutoSetting,
@@ -306,6 +307,36 @@ async def store_contract(store: Store) -> None:
     assert await store.get_preferences(user_id, account_id) is None
     assert await store.get_auto_setting(user_id, account_id) is None
     await auto_contract(store)
+    await consent_contract(store)
+
+
+async def consent_contract(store: Store) -> None:
+    """The consent shares the ``user_preferences`` row with the other preferences."""
+    user_id, account_id = uuid4(), uuid4()
+    sonnet = Destination(DestinationKind.CLOUD, "Anthropic", "anthropic", "anthropic/sonnet")
+    haiku = Destination(
+        DestinationKind.CLOUD, "Anthropic", "anthropic", "anthropic/haiku", "llm.example:8443"
+    )
+    assert await store.get_consent(user_id, account_id) is None
+    assert not await store.delete_consent(user_id, account_id)
+    await store.put_consent(user_id, account_id, Consent(T0, sonnet))  # creates the row
+    assert await store.get_consent(user_id, account_id) == Consent(T0, sonnet)
+    assert await store.get_consent(user_id, uuid4()) is None, "per account"
+    assert await store.get_consent(uuid4(), account_id) is None, "per user"
+    # Each writer keeps the other's columns.
+    await store.put_preferences(UserPreferences(user_id, account_id, False, T0))
+    await store.put_auto_setting(AutoSetting(user_id, account_id, True, T0))
+    assert await store.get_consent(user_id, account_id) == Consent(T0, sonnet)
+    later = T0 + timedelta(minutes=1)
+    await store.put_consent(user_id, account_id, Consent(later, haiku))
+    assert await store.get_consent(user_id, account_id) == Consent(later, haiku)
+    prefs = await store.get_preferences(user_id, account_id)
+    assert prefs is not None and prefs.stereo_frames is False
+    assert await store.delete_consent(user_id, account_id)
+    assert await store.get_consent(user_id, account_id) is None
+    assert not await store.delete_consent(user_id, account_id)
+    opt_in = await store.get_auto_setting(user_id, account_id)
+    assert opt_in is not None and opt_in.enabled is True, "withdrawing keeps the other columns"
 
 
 async def auto_contract(store: Store) -> None:

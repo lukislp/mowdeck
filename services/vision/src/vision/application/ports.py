@@ -28,6 +28,7 @@ from mowdeck_contracts.v1 import (
     VisionTrigger,
 )
 
+from vision.domain.consent import Consent
 from vision.domain.context import SceneContext
 from vision.domain.models import (
     Assessment,
@@ -215,6 +216,18 @@ class Store(Protocol):
         """Insert or replace a user's preferences."""
         ...
 
+    async def get_consent(self, user_id: UUID, account_id: UUID) -> Consent | None:
+        """A user's consent to send data to a cloud model (None: never given or withdrawn)."""
+        ...
+
+    async def put_consent(self, user_id: UUID, account_id: UUID, consent: Consent) -> None:
+        """Record (replace) a user's consent; the other preferences of the user stay as they are."""
+        ...
+
+    async def delete_consent(self, user_id: UUID, account_id: UUID) -> bool:
+        """Remove a user's consent; True when one existed."""
+        ...
+
     async def get_auto_setting(self, user_id: UUID, account_id: UUID) -> AutoSetting | None:
         """A user's opt-in to automatic analyses."""
         ...
@@ -241,7 +254,7 @@ class Store(Protocol):
         ...
 
     async def purge_account(self, account_id: UUID) -> int:
-        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0076):
+        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0081):
         proposals with their images and drive steps, provider requests, own providers,
         preferences and opt-ins, and the error watch of its mowers. Returns the number of rows
         removed."""
