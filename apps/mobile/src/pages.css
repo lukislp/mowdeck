@@ -227,3 +227,109 @@ button {
 .language button:focus-visible {
   outline-offset: -3px;
 }
+
+/* The About page: facts, blocks and the third-party notices. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--md-space-4);
+  margin: 0;
+}
+
+.facts dd {
+  margin: var(--md-space-1) 0 0;
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-16);
+  overflow-wrap: anywhere;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-2);
+  padding-top: var(--md-space-4);
+  border-top: var(--md-hairline) solid var(--md-color-line);
+}
+
+.block h2 {
+  margin: 0;
+  font-weight: var(--md-weight-medium);
+}
+
+.lead a {
+  color: var(--md-color-ink);
+  text-underline-offset: 3px;
+}
+
+.source-link {
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-14);
+  overflow-wrap: anywhere;
+}
+
+.lead a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--md-color-focus);
+  outline-offset: 2px;
+}
+
+.licence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-2);
+  margin-top: var(--md-space-4);
+}
+
+.licence-id {
+  margin: 0;
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-14);
+  font-weight: var(--md-weight-semibold);
+}
+
+.packages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.packages li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-1);
+}
+
+.package {
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-13);
+  overflow-wrap: anywhere;
+}
+
+.copyright {
+  font-size: var(--md-font-size-13);
+  color: var(--md-color-ink-muted);
+}
+
+summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--md-target);
+  font-size: var(--md-font-size-14);
+  cursor: pointer;
+}
+
+details pre,
+.notice-text {
+  margin: 0;
+  padding: var(--md-space-3);
+  border: var(--md-hairline) solid var(--md-color-line);
+  background: var(--md-color-surface);
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size-12);
+  line-height: var(--md-line-20);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

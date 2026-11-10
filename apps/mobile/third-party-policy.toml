@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Licence policy of the third-party code inside the native app bundle (iOS and Android).
+# Checked by tools/repo-checks/scripts/app_notices.py (CI jobs ci-config and web); the notices
+# the app shows are generated from it and from the installed packages
+# (apps/mobile/public/third-party-notices.json, docs/ops/mobile-apps.md#third-party-notices).
+#
+# The app's own code (the bundled pages, the Swift and Java shell) is AGPL-3.0-only and is not
+# a dependency, so it is not listed here. GPL, AGPL, LGPL and other copyleft code can never be
+# allowed in the app: the gate fails on it whatever this file says.
+
+# SPDX identifiers (as in the packages' package.json) the app may contain. A package with another
+# or no licence fails the gate until it is replaced or named under [[override]] with a reason.
+allowed = [
+  "0BSD",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "MIT",
+  "OFL-1.1",
+]
+
+# Packages that are in the production dependencies of apps/mobile or of a workspace package it
+# links to, but do not end up in the app. The gate fails when a bundled page imports one of them
+# (and when the barrel "@mowdeck/ui" is imported: the pages import its stylesheets by sub-path).
+[[exclude]]
+package = "leaflet"
+reason = """Dependency of @mowdeck/ui for the web app's map. The bundled pages import only the \
+stylesheets of @mowdeck/ui (tokens, base, fonts), never the component barrel that pulls in \
+Leaflet, so no Leaflet code or CSS is in the app."""
+
+# A package whose package.json names no licence, or whose licence file names no holder, is
+# listed here with the missing value and the reason it is acceptable. (None needed today.)
+# [[override]]
+# package = "example"
+# licence = "MIT"
+# holder = "Example Authors"
+# reason = "Licence file missing in the tarball; the repository's LICENSE (checked on <date>) is MIT, (c) Example Authors."
