@@ -39,7 +39,7 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-bu
 
 agora-bridge (profile `agora`) is never published: it keeps its local image `mowdeck-local/agora-bridge:local`; build it once with `docker compose --profile agora build agora-bridge` before an `up --no-build`.
 
-**Rollback.** Check out the earlier tag, run `./verify-release.sh <earlier>` (it rewrites the override), set `MOWDECK_VERSION=<earlier>` and run the same `pull` and `up` commands. Migrations are backward compatible, so the older images start against the newer schema ([Rolling back](release.md#rolling-back)); a rollback across a migration that is not needs the backup (`docker compose exec -T postgres psql -U postgres -d postgres < ~/mowdeck-before-<x>.sql` into an empty `postgres-data` volume).
+**Rollback.** Check out the earlier tag, run `./verify-release.sh <earlier>` (it rewrites the override), set `MOWDECK_VERSION=<earlier>` and run the same `pull` and `up` commands. Migrations are backward compatible, so the older images start against the newer schema ([Rolling back](release.md#rolling-back)); a rollback across a migration that is not needs the backup ([the pre-deploy dump](#the-pre-deploy-dump) into an empty `postgres-data` volume).
 
 ## Deploying with the maintenance window
 
@@ -50,7 +50,7 @@ cd infra/compose                 # of the checkout on the server
 ./deploy.sh <x>                  # e.g. ./deploy.sh 0.9.0; --dry-run only prints the steps
 ```
 
-It runs, and stops at the first failure: `git fetch --tags`; a backup into `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}` (a copy of `.env` and a gzip'd `pg_dumpall`, refused unless the dump ends with "PostgreSQL database cluster dump complete"); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails) and `./nats-passwords.sh --check .env` (the NATS passwords of that release, see [NATS users](#nats-users-and-permissions)); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
+It runs, and stops at the first failure: `git fetch --tags`; the [pre-deploy dump](#the-pre-deploy-dump) (a gzip'd `pg_dumpall` in `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}`, refused unless it ends with "PostgreSQL database cluster dump complete", and a copy of `.env` in a separate directory; only the newest three of each are kept); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails) and `./nats-passwords.sh --check .env` (the NATS passwords of that release, see [NATS users](#nats-users-and-permissions)); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
 
 ```bash
 docker compose exec -T notifications python -m notifications.cli maintenance open --minutes 15
@@ -60,6 +60,46 @@ docker compose exec -T notifications python -m notifications.cli maintenance sta
 ```
 
 While the window is open, `mower_offline` / `mower_online` are held back for a mower whose link broke inside it; a mower still offline two minutes after the close is reported then. Theft alarms and errors are never held. The first deploy of the release that introduces the window runs the old notifications image, which has no such command: the script warns and goes on, so that one deploy can still send the pair. Helm: no hook yet; the same CLI can run from a pre/post-upgrade Job later.
+
+## The pre-deploy dump
+
+Step 2 of `deploy.sh` exists for one purpose: **rolling back a failed update**. It is not a backup strategy, and the few dumps it keeps are no substitute for one.
+
+What it writes, on every deploy (`infra/compose/backup-lib.sh`, shared by the script's steps; there is no other script that dumps or restores):
+
+| What | Where | Mode |
+| --- | --- | --- |
+| `mowdeck-before-<version>-<UTC stamp>.sql.gz`: a `pg_dumpall` of every database, written to a `.partial` file first, then checked (valid gzip, not empty, ends with "cluster dump complete") and moved into place | `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}`, directory `0700` | `0600` |
+| `env-before-<version>-<UTC stamp>.env`: a copy of the stack's `.env` as it was before the update | `${MOWDECK_ENV_BACKUP_DIR:-~/.mowdeck-env-backups}`, directory `0700`, **a different directory tree** | `0600` |
+
+A failed or empty dump stops the deploy before anything changes and deletes nothing. Only after the new dump and the new `.env` copy are complete, `deploy.sh` deletes the older ones: it keeps the newest `MOWDECK_BACKUP_KEEP` (default **3**) of each, ordered by the stamp in the name. Only files named exactly like the two patterns above are ever deleted; other files and directories in those directories stay. The script sets `umask 077` itself, tightens an existing directory to `0700`, prints file names and counts and never a value of `.env`. `MOWDECK_ENV_BACKUP_DIR` must not be inside `MOWDECK_BACKUP_DIR` or the other way round; the script refuses to start otherwise.
+
+**Why 3.** The dump is for the rollback after a failed update, so the newest one is the one that matters. The two before it cover an update that was started again after a failure (the second dump already holds the state of the failed one) and one release deliberately skipped back. Anything older is a backup, and that is not what this file is for. Change it per run or permanently, e.g. `MOWDECK_BACKUP_KEEP=1 ./deploy.sh <x>` (1 to 100). Every kept dump holds the data of the day it was written, including accounts and mowers that were deleted afterwards, until the rotation removes it; a lower number shortens that.
+
+**Why the `.env` copy is apart.** The database holds the passwords of linked mower accounts and provider keys encrypted with keys from `.env` (`IDENTITY_KEY_ENCRYPTION_KEY`, `FLEET_CREDENTIAL_ENCRYPTION_KEY` and the like). A dump next to its keys gives whoever gets the directory both. The copy is kept at all because an older dump is only restorable together with the keys of its time: after a key rotation, or a lost or edited `.env`, the live file may no longer match. The rollback otherwise uses the live `.env` and only needs the copy for that case, and for `MOWDECK_VERSION` as it was. Keep `MOWDECK_ENV_BACKUP_DIR` out of anything you copy off the host together with the dumps.
+
+**Rollback with the dump.** Only when the older images cannot run against the newer schema ([Rolling back](release.md#rolling-back)): stop the stack, bring up an empty `postgres-data` volume and restore into it, with the `.env` copy of the same stamp in place of the live one if the keys changed:
+
+```bash
+gzip -dc ~/mowdeck-backups/mowdeck-before-<x>-<stamp>.sql.gz | docker compose exec -T postgres psql -U postgres -d postgres
+```
+
+**A dump is only restorable together with the matching keys.** Store `IDENTITY_KEY_ENCRYPTION_KEY`, `FLEET_CREDENTIAL_ENCRYPTION_KEY` and the other keys and passwords of `.env` in a place of your own that is not the host and not next to the dumps, for example a password manager or the secret store you already use, and update that entry whenever a key changes. Without the keys, the encrypted columns of a restored database are unreadable.
+
+**Long-term backups are yours for now.** MowDeck does not create nightly or off-host backups, does not set a retention for them and does not delete anything you copy elsewhere. If you need them, schedule your own dump, decide how long you keep it and where it is stored, and remember that deleted data survives in every backup until that backup is deleted. A retention recommendation for the project is still being decided.
+
+**After updating an existing installation.** The first `deploy.sh` run after the update still runs the script of the release you are on; the new behaviour starts with the deploy after that. From then on `deploy.sh` moves earlier `env-before-*.env` files out of the dump directory into the `.env` directory and deletes dumps and copies beyond the newest `MOWDECK_BACKUP_KEEP`. To do the same at once, or to keep a dump first, copy the ones you want out of the directory and run:
+
+```bash
+cd ~/mowdeck-backups
+mkdir -p -m 700 ~/.mowdeck-env-backups && chmod 700 ~/.mowdeck-env-backups
+mv -n env-before-*.env ~/.mowdeck-env-backups/ && chmod 600 ~/.mowdeck-env-backups/*.env
+chmod 700 . && chmod 600 mowdeck-before-*.sql.gz
+ls -1 mowdeck-before-*.sql.gz | sed -E 's/.*-([0-9]{8}T[0-9]{6}Z)\..*/\1 &/' | sort -r |
+  tail -n +4 | cut -d' ' -f2 | xargs -r rm --      # all but the newest three
+```
+
+A manual `~/mowdeck-before-<x>.sql` from the procedure above is not touched by the script; delete it when the update succeeded.
 
 ## Services and ports
 

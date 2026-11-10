@@ -9,8 +9,11 @@
 #
 # Steps (each failure stops the script before anything later runs):
 #   1. git fetch --tags
-#   2. backup into ${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}: a copy of .env and a gzip'd
-#      pg_dumpall, whose last lines must say "PostgreSQL database cluster dump complete"
+#   2. rollback dump (backup-lib.sh): a gzip'd pg_dumpall in ${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}
+#      (directory 0700, file 0600), whose last lines must say "PostgreSQL database cluster dump
+#      complete", and a copy of .env in ${MOWDECK_ENV_BACKUP_DIR:-~/.mowdeck-env-backups}, a
+#      different directory; then only the newest ${MOWDECK_BACKUP_KEEP:-3} of each are kept. Nothing
+#      is deleted when the new dump failed.
 #   3. git checkout --detach v<version>  (refuses a checkout with local changes)
 #   4. ./verify-release.sh <version>      (fails closed: nothing is pulled when it fails), then
 #      ./nats-passwords.sh --check .env   (the release's NATS passwords, ADR 0074)
@@ -28,7 +31,9 @@
 # (default 15; it expires by itself, so a forgotten window cannot silence alerts). --no-maintenance
 # skips steps 7 and 9. A stack under another project name: COMPOSE_PROJECT_NAME=<name> ./deploy.sh.
 #
-# Secrets: the script never prints .env or any value of it; it only prints the file names.
+# Secrets: the script never prints .env or any value of it; it only prints the file names. The
+# .env copy lives apart from the dumps, so a dump copied off the host does not bring the keys that
+# decrypt it along (docs/ops/compose.md, "The pre-deploy dump").
 set -euo pipefail
 
 # The whole script is one function that runs after bash has read it completely: the checkout in
@@ -39,6 +44,9 @@ main() {
   local here dry_run=0 maintenance=1 minutes=15 version=""
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   cd "$here"
+  # Sourced before step 3, like the rest of this script: the checkout replaces the file on disk.
+  # shellcheck source=backup-lib.sh
+  . "$here/backup-lib.sh"
 
   usage() {
     echo "usage: $0 [--dry-run] [--window-minutes N] [--no-maintenance] <version>" >&2
@@ -77,10 +85,10 @@ main() {
   fi
 
   local files=(-f docker-compose.yml -f docker-compose.release.yml)
-  local backup_dir="${MOWDECK_BACKUP_DIR:-$HOME/mowdeck-backups}"
   local stamp
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  local env_copy="$backup_dir/env-before-$version-$stamp.env"
+  backup_settings || die "invalid backup settings (see above)"
+  local env_copy="$env_backup_dir/env-before-$version-$stamp.env"
   local dump="$backup_dir/mowdeck-before-$version-$stamp.sql.gz"
 
   run() {
@@ -96,19 +104,21 @@ main() {
   step "1/9 fetch tags"
   run git fetch --tags
 
-  step "2/9 backup to $backup_dir"
+  step "2/9 rollback dump to $backup_dir (the .env copy to $env_backup_dir)"
   if [ "$dry_run" -eq 1 ]; then
-    echo "deploy: [dry-run] cp .env $env_copy; pg_dumpall | gzip > $dump; check the dump"
+    echo "deploy: [dry-run] pg_dumpall | gzip > $dump; check the dump; cp .env $env_copy"
+    echo "deploy: [dry-run] keep the newest $backup_keep dumps and .env copies"
   else
     [ -n "$(docker compose ps --status running --quiet postgres)" ] ||
       die "postgres is not running in this project (set COMPOSE_PROJECT_NAME for another one)"
-    (umask 077 && mkdir -p "$backup_dir")
-    (umask 077 && cp .env "$env_copy")
-    (umask 077 && docker compose exec -T postgres pg_dumpall -U postgres | gzip >"$dump") ||
-      die "the database backup failed"
-    gzip -dc "$dump" | tail -n 5 | grep -q 'PostgreSQL database cluster dump complete' ||
-      die "the backup $dump is incomplete (no \"cluster dump complete\" at its end)"
-    step "backup ok: $env_copy, $dump"
+    backup_write_dump "$dump" docker compose exec -T postgres pg_dumpall -U postgres ||
+      die "the database backup failed; no older backup was deleted"
+    backup_protect_env .env "$env_copy" || die "the .env copy failed"
+    # Only now, with the new pair complete, older ones may go.
+    backup_move_legacy_env "$backup_dir" "$env_backup_dir" || die "cannot move the old .env copies"
+    backup_rotate "$backup_dir" mowdeck-before- .sql.gz "$backup_keep" || die "rotation failed"
+    backup_rotate "$env_backup_dir" env-before- .env "$backup_keep" || die "rotation failed"
+    step "backup ok: $dump, $env_copy"
   fi
 
   step "3/9 checkout v$version"
@@ -182,7 +192,7 @@ main() {
       bad=1
     fi
   done < <(docker compose "${files[@]}" ps -a --format '{{.Service}}|{{.State}}|{{.Health}}|{{.ExitCode}}')
-  [ "$bad" -eq 0 ] || die "a service is not running and healthy (see above); the backup is in $backup_dir"
+  [ "$bad" -eq 0 ] || die "a service is not running and healthy (see above); the dump is in $backup_dir"
   step "done: MowDeck v$version is running"
 }
 

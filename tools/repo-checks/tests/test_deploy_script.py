@@ -36,6 +36,8 @@ echo "docker $*" >> "$FAKE_LOG"
 case "$*" in
   *"ps --status running --quiet postgres"*) echo abc123 ;;
   *pg_dumpall*)
+    [ "${FAKE_DUMP:-ok}" = fail ] && exit 1
+    [ "${FAKE_DUMP:-ok}" = empty ] && exit 0
     echo "-- dump"
     [ "${FAKE_DUMP:-ok}" = ok ] && echo "-- PostgreSQL database cluster dump complete"
     exit 0
@@ -82,6 +84,10 @@ class Stack:
     def backups(self) -> Path:
         return self.root / "backups"
 
+    @property
+    def env_backups(self) -> Path:
+        return self.root / "env-backups"
+
     def run(self, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
         assert BASH is not None
         merged = {
@@ -90,6 +96,7 @@ class Stack:
             "BASH_ENV": (self.root / "env.sh").as_posix(),
             "FAKE_LOG": (self.root / "calls.log").as_posix(),
             "MOWDECK_BACKUP_DIR": self.backups.as_posix(),
+            "MOWDECK_ENV_BACKUP_DIR": self.env_backups.as_posix(),
             "HOME": (self.root / "home").as_posix(),
             **self.env,
             **env,
@@ -121,7 +128,8 @@ def stack(repo_root: Path, tmp_path: Path) -> Stack:
         encoding="utf-8",
         newline="\n",
     )
-    shutil.copy(repo_root / "infra" / "compose" / "deploy.sh", stack_dir / "deploy.sh")
+    for script in ("deploy.sh", "backup-lib.sh"):
+        shutil.copy(repo_root / "infra" / "compose" / script, stack_dir / script)
     (stack_dir / ".env").write_text(
         f"POSTGRES_PASSWORD={SECRET}\nMOWDECK_VERSION=0.1.0\n", encoding="utf-8", newline="\n"
     )
@@ -161,11 +169,12 @@ def test_deploy_keeps_a_complete_backup_and_never_prints_secrets(stack: Stack) -
     result = stack.run("v0.2.0")  # a leading v is accepted
     assert result.returncode == 0, result.stderr
     dumps = list(stack.backups.glob("mowdeck-before-0.2.0-*.sql.gz"))
-    envs = list(stack.backups.glob("env-before-0.2.0-*.env"))
+    envs = list(stack.env_backups.glob("env-before-0.2.0-*.env"))
     assert len(dumps) == 1
     assert len(envs) == 1
     assert "cluster dump complete" in gzip.decompress(dumps[0].read_bytes()).decode()
     assert SECRET in envs[0].read_text("utf-8")  # the copy is the point of the backup ...
+    assert not list(stack.backups.glob("*.env"))  # ... but never beside the dump
     assert SECRET not in result.stdout + result.stderr  # ... but nothing prints it
     assert SECRET not in "\n".join(stack.log)
 
@@ -258,6 +267,7 @@ def test_deploy_dry_run_changes_nothing(stack: Stack) -> None:
     assert "[dry-run]" in result.stdout
     assert stack.log == []
     assert not stack.backups.exists()
+    assert not stack.env_backups.exists()
     assert "MOWDECK_VERSION=0.1.0" in (stack.root / "stack" / ".env").read_text("utf-8")
 
 
@@ -278,12 +288,129 @@ def test_deploy_rejects_bad_arguments(stack: Stack, args: tuple[str, ...]) -> No
     assert stack.log == []
 
 
-def test_deploy_script_is_lf_executable_and_shellcheck_clean(repo_root: Path) -> None:
-    path = repo_root / "infra" / "compose" / "deploy.sh"
+def _seed(directory: Path, names: list[str], text: str = "old") -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (directory / name).write_text(text, encoding="utf-8")
+
+
+def _dumps(count: int) -> list[str]:
+    return [f"mowdeck-before-0.1.{i}-20260101T0000{i:02d}Z.sql.gz" for i in range(count)]
+
+
+def _envs(count: int) -> list[str]:
+    return [f"env-before-0.1.{i}-20260101T0000{i:02d}Z.env" for i in range(count)]
+
+
+def _names(directory: Path) -> list[str]:
+    return sorted(path.name for path in directory.iterdir())
+
+
+def test_rotation_keeps_the_newest_three_by_default_and_the_new_dump(stack: Stack) -> None:
+    _seed(stack.backups, _dumps(5))
+    _seed(stack.env_backups, _envs(5))
+    result = stack.run("0.2.0")
+    assert result.returncode == 0, result.stderr
+    kept = _names(stack.backups)
+    assert kept[:2] == _dumps(5)[3:]  # the two newest old ones; the new one sorts last
+    assert len(kept) == 3
+    assert "0.2.0" in kept[2]
+    assert len(_names(stack.env_backups)) == 3
+
+
+def test_rotation_count_is_configurable(stack: Stack) -> None:
+    _seed(stack.backups, _dumps(4))
+    assert stack.run("0.2.0", MOWDECK_BACKUP_KEEP="1").returncode == 0
+    assert len(_names(stack.backups)) == 1
+    _seed(stack.backups, _dumps(6))
+    assert stack.run("0.2.1", MOWDECK_BACKUP_KEEP="5").returncode == 0
+    assert len(_names(stack.backups)) == 5
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "abc", "101", "2.5"])
+def test_deploy_rejects_a_bad_keep_count_before_touching_anything(
+    stack: Stack, value: str
+) -> None:
+    _seed(stack.backups, _dumps(2))
+    result = stack.run("0.2.0", MOWDECK_BACKUP_KEEP=value)
+    assert result.returncode != 0
+    assert "MOWDECK_BACKUP_KEEP" in result.stderr
+    assert stack.log == []
+    assert _names(stack.backups) == _dumps(2)
+
+
+@pytest.mark.parametrize("failure", ["truncated", "empty", "fail"])
+def test_a_failed_or_empty_dump_aborts_and_deletes_nothing(stack: Stack, failure: str) -> None:
+    _seed(stack.backups, _dumps(3))
+    _seed(stack.env_backups, _envs(3))
+    result = stack.run("0.2.0", MOWDECK_BACKUP_KEEP="1", FAKE_DUMP=failure)
+    assert result.returncode != 0
+    assert _names(stack.backups) == _dumps(3)  # no partial file, no deletion
+    assert _names(stack.env_backups) == _envs(3)
+    assert not stack.calls("git checkout")
+    assert not stack.calls(" up ")
+
+
+def test_rotation_leaves_foreign_files_and_directories_alone(stack: Stack) -> None:
+    _seed(stack.backups, [*_dumps(4), "notes.txt", "mowdeck-before-0.1.0.sql.gz"])
+    (stack.backups / "subdir").mkdir()
+    assert stack.run("0.2.0", MOWDECK_BACKUP_KEEP="1").returncode == 0
+    names = _names(stack.backups)
+    assert {"notes.txt", "mowdeck-before-0.1.0.sql.gz", "subdir"} <= set(names)
+    assert len([n for n in names if n.startswith("mowdeck-before-0.2.0-")]) == 1
+    assert not [n for n in names if n in _dumps(4)]
+
+
+def test_a_rerun_is_idempotent(stack: Stack) -> None:
+    _seed(stack.backups, _dumps(5))
+    assert stack.run("0.2.0").returncode == 0
+    first = _names(stack.backups)
+    assert stack.run("0.2.1").returncode == 0
+    second = _names(stack.backups)
+    assert len(first) == len(second) == 3
+    assert any("0.2.1" in n for n in second)
+    assert first[1:] == [n for n in second if "0.2.1" not in n]  # only the oldest went
+
+
+def test_earlier_env_copies_beside_the_dumps_move_to_the_env_directory(stack: Stack) -> None:
+    _seed(stack.backups, _envs(2), text=f"POSTGRES_PASSWORD={SECRET}\n")
+    result = stack.run("0.2.0")
+    assert result.returncode == 0, result.stderr
+    assert not list(stack.backups.glob("*.env"))
+    assert len(list(stack.env_backups.glob("env-before-*.env"))) == 3
+    assert "moved 2 earlier .env copies" in result.stderr
+    assert SECRET not in result.stdout + result.stderr
+
+
+def test_the_env_directory_must_not_sit_inside_the_dump_directory(stack: Stack) -> None:
+    for inside in (stack.backups / "env", stack.backups):
+        result = stack.run("0.2.0", MOWDECK_ENV_BACKUP_DIR=inside.as_posix())
+        assert result.returncode != 0
+        assert "MOWDECK_ENV_BACKUP_DIR" in result.stderr
+    result = stack.run("0.2.0", MOWDECK_BACKUP_DIR=(stack.env_backups / "dumps").as_posix())
+    assert result.returncode != 0
+    assert stack.log == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_dumps_env_copies_and_directories_are_private(stack: Stack) -> None:
+    stack.backups.mkdir()
+    stack.backups.chmod(0o755)  # an older, too open directory is tightened
+    assert stack.run("0.2.0").returncode == 0
+    for directory in (stack.backups, stack.env_backups):
+        assert directory.stat().st_mode & 0o777 == 0o700
+        files = list(directory.iterdir())
+        assert files
+        assert {path.stat().st_mode & 0o777 for path in files} == {0o600}
+
+
+@pytest.mark.parametrize("name", ["deploy.sh", "backup-lib.sh"])
+def test_deploy_script_is_lf_executable_and_shellcheck_clean(repo_root: Path, name: str) -> None:
+    path = repo_root / "infra" / "compose" / name
     assert b"\r" not in path.read_bytes()
     if shutil.which("git") and (repo_root / ".git").exists():
         result = subprocess.run(
-            ["git", "ls-files", "--stage", "infra/compose/deploy.sh"],  # noqa: S607
+            ["git", "ls-files", "--stage", f"infra/compose/{name}"],  # noqa: S607
             capture_output=True,
             text=True,
             cwd=repo_root,
@@ -292,7 +419,7 @@ def test_deploy_script_is_lf_executable_and_shellcheck_clean(repo_root: Path) ->
         assert result.stdout.startswith("100755"), "git must keep the executable bit"
     if shutil.which("shellcheck") is not None:
         lint = subprocess.run(  # noqa: S603
-            ["shellcheck", str(path)],  # noqa: S607
+            ["shellcheck", "-x", str(path)],  # noqa: S607
             capture_output=True,
             text=True,
             check=False,
