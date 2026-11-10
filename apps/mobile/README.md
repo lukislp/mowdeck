@@ -5,7 +5,7 @@ The MowDeck apps for iPhone and Android: Capacitor 8 shells that load the web ap
 | Path | Content |
 | --- | --- |
 | `capacitor.config.ts` | App id `app.mowdeck.mobile`, name, plugins; `server.url` is set natively at start from the stored address |
-| `index.html`, `offline.html`, `src/` | The two bundled pages: first-launch server screen and "server not reachable" (built to `www/` by Vite) |
+| `index.html`, `offline.html`, `src/` | The two bundled pages: first-launch server screen and "server not reachable" (built to `www/` by Vite); both have a German/English toggle (`src/i18n.ts`, choice kept in the bundled origin's localStorage, else the system language) |
 | `src/shell.ts` | JavaScript side of the shell's own plugin `MowDeckShell` (server address; on iOS the installation id for APNs, kept in the Keychain) |
 | `ios/` | Xcode project (Swift Package Manager). `MainViewController.swift` sets the server, `MowDeckShellPlugin.swift` (also `openAuthSession`), `App.entitlements` (push) |
 | `ios/MowDeckWidgets/`, `ios/MowerWidgetKit/` | The iPhone widgets and the Live Activity ([ADR 0059](../../docs/adr/0059-ios-widgets-and-live-activity.md)) and their shared Swift package (models, presentation, API client, watch protocol; `swift test --package-path apps/mobile/ios/MowerWidgetKit` on a Mac) |

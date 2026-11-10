@@ -4,12 +4,16 @@
 <!--
   Frame of the sign-in and registration pages: a nameplate on the metric grid (the same grid
   the map uses as background) and the form column. No hero, no illustration. Under the form the
-  build and the link to its source code (AGPL-3.0 section 13), reachable without an account.
+  language switch, in the app the server and the way to change it (without a server there is no
+  sign-in), and the build with the link to its source code (AGPL-3.0 section 13), reachable
+  without an account.
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
+  import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
   import SourceCode from '#lib/components/SourceCode.svelte';
+  import ChangeServer from '#lib/native/ChangeServer.svelte';
   import { m } from '#lib/paraglide/messages.js';
 
   let { title, children }: { title: string; children: Snippet } = $props();
@@ -25,6 +29,8 @@
     <h1>{title}</h1>
     {@render children()}
     <footer class="foot">
+      <LanguageSwitch testid="auth-language-switch" />
+      <ChangeServer testid="auth-change-server" variant="line" />
       <SourceCode />
     </footer>
   </main>
@@ -102,6 +108,10 @@
   }
 
   .foot {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--md-space-4);
     margin-top: auto;
     padding-top: var(--md-space-6);
   }

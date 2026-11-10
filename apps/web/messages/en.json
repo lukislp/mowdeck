@@ -644,6 +644,8 @@
   "native_title": "This app",
   "native_server": "Server",
   "native_change_server": "Change server",
+  "native_change_server_confirm": "You are signed out of this server and then choose another one.",
+  "native_change_server_confirm_action": "Sign out and change",
   "native_apns": "Apple Push",
   "native_apns_on": "on",
   "native_apns_pending": "connecting …",

@@ -10,6 +10,7 @@
   import DemoLock from '#lib/demo/DemoLock.svelte';
   import type { components } from '#lib/generated/notifications.js';
   import { formatDateTime, problemMessage } from '#lib/i18n.js';
+  import ChangeServer from '#lib/native/ChangeServer.svelte';
   import NativeAppPanel from '#lib/native/NativeAppPanel.svelte';
   import { nativeShell } from '#lib/native/runtime.js';
   import {
@@ -662,6 +663,12 @@
           </div>
         </Panel>
       </DemoLock>
+      <!-- Leaving the server is a local action of the app, so the demo does not lock it. -->
+      {#if nativeShell.active}
+        <Panel label={m.native_server()} testid="native-server-panel">
+          <ChangeServer testid="native-change-server" />
+        </Panel>
+      {/if}
     </div>
   </div>
 {/if}

@@ -7,7 +7,7 @@ import { ApnsRegistration } from './apns';
 import { nativeBridge, type CapacitorBridge, type NativeBridge } from './capacitor';
 import { pathFromDeepLink, pathFromNotificationAction } from './links';
 import { InboxNotifier, notificationNumber, toLocalNotification } from './local';
-import { NativeShell } from './shell.svelte';
+import { HAND_OVER_LIMIT_MS, NativeShell } from './shell.svelte';
 import type { InboxItem } from '#lib/stores/inbox.svelte.js';
 
 // --- a fake of the injected window.Capacitor ------------------------------------------------
@@ -337,7 +337,11 @@ describe('ApnsRegistration', () => {
 
 function shellSetup(
   platform: 'ios' | 'android',
-  options: { ntfy?: boolean; user?: () => string | null } = {},
+  options: {
+    ntfy?: boolean;
+    user?: () => string | null;
+    leaveSession?: () => Promise<void>;
+  } = {},
 ) {
   const plugins = ['App', 'LocalNotifications', 'SplashScreen', 'Badge', 'MowDeckShell'];
   if (platform === 'ios') plugins.push('PushNotifications');
@@ -362,6 +366,7 @@ function shellSetup(
     apns: api,
     ntfyConfigured: vi.fn().mockResolvedValue(options.ntfy ?? false),
     user: options.user,
+    leaveSession: options.leaveSession,
   });
   return { cap, api, shell };
 }
@@ -494,6 +499,70 @@ describe('NativeShell', () => {
     expect(cap.called('MowDeckShell', 'resetServerUrl')).toHaveLength(1);
     await shell.refreshNtfy();
     await shell.enableApns();
+  });
+});
+
+describe('NativeShell.changeServer', () => {
+  /** A signed-in iOS shell whose steps all write into one log. */
+  async function leaving(leaveSession: () => Promise<void>) {
+    const log: string[] = [];
+    const setup = shellSetup('ios', {
+      leaveSession: async () => {
+        log.push('session');
+        await leaveSession();
+      },
+    });
+    setup.cap.handlers.set('MowDeckShell', (method) => {
+      if (method === 'resetServerUrl') log.push('reset');
+      return method === 'getInstallationId' ? { id: INSTALLATION } : { url: 'https://x.lan' };
+    });
+    setup.api.remove.mockImplementation(async () => void log.push('push-token'));
+    await setup.shell.signedIn();
+    setup.cap.emit('PushNotifications', 'registration', { value: 'AA' });
+    await flush();
+    return { ...setup, log };
+  }
+
+  it('hands over in order (push token, session) before the shell forgets the server', async () => {
+    const { shell, cap, log } = await leaving(async () => undefined);
+    await shell.changeServer();
+    expect(log).toEqual(['push-token', 'session', 'reset']);
+    expect(cap.called('Badge', 'clear')).toHaveLength(1);
+  });
+
+  it('still switches when a step fails', async () => {
+    const { shell, api, log } = await leaving(async () => {
+      throw new Error('server unreachable');
+    });
+    api.remove.mockRejectedValue(new Error('offline'));
+    await shell.changeServer();
+    expect(log).toEqual(['session', 'reset']);
+  });
+
+  it('does not wait for a step that never answers', async () => {
+    const { shell, log } = await leaving(() => new Promise<void>(() => undefined));
+    vi.useFakeTimers();
+    try {
+      const done = shell.changeServer();
+      await vi.advanceTimersByTimeAsync(HAND_OVER_LIMIT_MS + 10);
+      await done;
+      expect(log).toEqual(['push-token', 'session', 'reset']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does nothing outside the app', async () => {
+    const leaveSession = vi.fn();
+    const shell = new NativeShell({
+      bridge: null,
+      storage: null,
+      apns: { add: vi.fn(), remove: vi.fn() },
+      ntfyConfigured: vi.fn(),
+      leaveSession,
+    });
+    await shell.changeServer();
+    expect(leaveSession).not.toHaveBeenCalled();
   });
 });
 

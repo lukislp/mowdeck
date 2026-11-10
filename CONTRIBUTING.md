@@ -156,14 +156,14 @@ Both suites refuse a target without the e2e marker (`infra/compose/docker-compos
 
 ### UI pull requests
 
-A pull request that touches `apps/web` or `libs/mowdeck-ui` attaches screenshots in light and dark theme at phone (390 x 844) and desktop (1280 x 800) width: with the test stack up (`pnpm e2e:stack up`), `pnpm e2e:stack screens` writes the main pages (login, mower list, mower detail in light and dark, mower settings) to `apps/web/screenshots/`; add the changed pages that it does not cover. Its description carries this checklist:
+A pull request that touches `apps/web` or `libs/mowdeck-ui` is checked in light and dark theme at phone (390 x 844) and desktop (1280 x 800) width. Screenshots are optional: the maintainer reviews UI changes on a deployment. To attach some anyway, with the test stack up (`pnpm e2e:stack up`), `pnpm e2e:stack screens` writes the main pages (login, mower list, mower detail in light and dark, mower settings) to `apps/web/screenshots/`. The description carries this checklist:
 
 - [ ] Only tokens used; no new colours, radii or fonts outside `tokens.css`
 - [ ] Colour is used only for state; every state also has text or a glyph
 - [ ] Readouts in Plex Mono with units; labels uppercase 12 px
 - [ ] Targets at least 48 px, gaps at least 8 px; checked at 390 px width
 - [ ] Emergency stop visible and reachable on every mower view, including with sheets and keyboard open
-- [ ] Light and dark screenshots attached; sunlight check (light theme, full brightness) for new status UI
+- [ ] Checked in light and dark theme (screenshots optional); sunlight check (light theme, full brightness) for new status UI
 - [ ] No hard-coded strings; German and English texts present and fitting (German is longer)
 - [ ] Pending, error, empty, offline and no-permission states designed
 - [ ] Keyboard focus visible, `prefers-reduced-motion` respected
