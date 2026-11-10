@@ -23,9 +23,8 @@ uv export --frozen --no-dev --no-emit-workspace --no-header \
   --package vision \
   --output-file /tmp/fuzz-deps.txt
 # The export is already the complete, resolved set, so nothing is resolved again (--no-deps).
-# --no-config keeps the root pyproject's [tool.uv] override-dependencies out: uv pip would add
-# the filelock>=4.2.1 override as an unpinned requirement, which --require-hashes refuses, and
-# without the override litellm's filelock<4 cap would clash with the locked filelock 4.x.
+# --no-config keeps the root pyproject's [tool.uv] settings out: an override-dependencies entry
+# there would be added as an unpinned requirement, which --require-hashes refuses.
 uv pip install --no-deps --no-config --require-hashes -r /tmp/fuzz-deps.txt
 
 srcs=(fuzz integrations/agora-bridge/src libs/*/src services/*/src)
