@@ -119,6 +119,9 @@ RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
         ),
         frozenset({"docs"}),
     ),
+    # The app's third-party notices: lock file against the committed file (ci-config runs it on
+    # every pull request; the web job runs the installed-packages comparison), and its tests.
+    (("tools/repo-checks/scripts/app_notices.py",), frozenset({"python", "web"})),
     # Renders the NATS users of Compose and the chart.
     (("tools/repo-checks/scripts/nats_auth.py",), SHARED),
     (("tools/repo-checks/tests/test_helm.py",), frozenset({"helm"})),
