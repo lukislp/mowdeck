@@ -417,7 +417,8 @@ def test_deploy_script_is_lf_executable_and_shellcheck_clean(repo_root: Path, na
         assert result.stdout.startswith("100755"), "git must keep the executable bit"
     if shutil.which("shellcheck") is not None:
         lint = subprocess.run(  # noqa: S603
-            ["shellcheck", "-x", str(path)],  # noqa: S607
+            ["shellcheck", "-x", path.name],  # noqa: S607
+            cwd=path.parent,  # the sourced backup-lib.sh is found relative to the script
             capture_output=True,
             text=True,
             check=False,
