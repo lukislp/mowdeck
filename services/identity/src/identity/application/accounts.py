@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Accounts: registration, renaming, deletion with a grace period, reconcile."""
+"""Accounts: registration, renaming, scheduled deletion with a grace period, reconcile."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +16,8 @@ from mowdeck_contracts.v1 import (
     AccountCreated,
     AccountKind,
     ApiTokenRevoked,
+    Principal,
+    PrincipalKind,
     UserChanged,
 )
 
@@ -30,6 +32,7 @@ from identity.domain.credentials import (
     validate_password,
     validate_username,
 )
+from identity.domain.erasure import deletion_blocked_by
 from identity.domain.errors import (
     AuthenticationFailed,
     ConflictError,
@@ -263,14 +266,29 @@ class AccountService:
             raise NotFoundError(msg)
         return acct
 
+    async def ensure_owner(self, principal: Principal, account_id: UUID) -> None:
+        """403 unless ``principal`` is a person who owns the account: the check of the actions
+        that must keep working while the account is locked for deletion (no OpenFGA tuples then,
+        ADR 0082). API tokens and services never pass."""
+        if principal.kind not in (PrincipalKind.USER, PrincipalKind.SUBUSER):
+            msg = "only the owner can do this"
+            raise ForbiddenError(msg)
+        async with self.deps.store.transaction() as tx:
+            membership = await tx.memberships.get(account_id=account_id, user_id=principal.subject)
+        if membership is None or membership.status is not Status.ACTIVE or not membership.is_owner:
+            msg = "only the owner can do this"
+            raise ForbiddenError(msg)
+
     async def request_deletion(
         self, account_id: UUID, password: str | None, ctx: RequestContext
     ) -> Account:
-        """Lock the account for the grace period (owner only, password re-entry or a recent
+        """Schedule the deletion of the account (owner only, password re-entry or a recent
         step-up confirmation, ADR 0057).
 
-        API tokens are revoked and the sessions of other members end; the owner keeps access
-        to restore the account. The purge after the grace period is a later job.
+        Refused (409) while the account has other members: the owner removes them first. The
+        account is locked for the grace period: API tokens are revoked, the sessions of other
+        members end, only the owner keeps access, to restore it (``restore``). After the grace
+        period ``ErasureService`` purges it in every service (ADR 0082).
         """
         if ctx.principal is None:
             msg = "login required"
@@ -292,8 +310,17 @@ class AccountService:
             tx = work.tx
             work.account_id = account_id
             acct = await self._load(tx, account_id)
-            if acct.status is AccountStatus.DELETING:
+            if acct.status is not AccountStatus.ACTIVE:
                 msg = "the account is already scheduled for deletion"
+                raise ConflictError(msg)
+            others = deletion_blocked_by(
+                await tx.memberships.find(account_id=account_id), ctx.principal.subject
+            )
+            if others:
+                msg = (
+                    f"the account still has {others} other member(s): remove them first, "
+                    "a deletion never removes people implicitly"
+                )
                 raise ConflictError(msg)
             acct.status = AccountStatus.DELETING
             acct.delete_after = now + self.deps.config.deletion_grace

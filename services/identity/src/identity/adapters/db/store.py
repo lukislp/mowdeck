@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from identity.adapters.db import tables
 from identity.application.ports import Ge, Gt, In, Lt
+from identity.domain.erasure import AccountErasure
 from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
@@ -191,6 +192,7 @@ class SqlTx:
     onboarding: SqlTable[OnboardingProgress]
     known_devices: SqlTable[KnownDevice]
     sandboxes: SqlTable[DemoSandbox]
+    erasures: SqlTable[AccountErasure]
 
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete one demo sandbox account's audit rows: the trigger lets a ``DELETE`` pass
@@ -201,6 +203,13 @@ class SqlTx:
             return await self.audit.delete(account_id=account_id)
         finally:
             await conn.execute(select(func.set_config("mowdeck.audit_purge", "off", True)))
+
+    async def scrub_audit(self, account_id: UUID) -> int:
+        """The personal fields of an erased account's audit rows, rows kept: the database
+        function ``audit_log_scrub`` (migration 0011) is the only way the append-only trigger
+        lets an ``UPDATE`` through, and it removes data only (ADR 0082)."""
+        result = await self.audit.conn.execute(select(func.audit_log_scrub(account_id)))
+        return int(result.scalar_one())
 
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
@@ -226,6 +235,7 @@ class SqlTx:
             onboarding=SqlTable(conn, tables.onboarding_progress, OnboardingProgress, "user_id"),
             known_devices=SqlTable(conn, tables.known_devices, KnownDevice, "id"),
             sandboxes=SqlTable(conn, tables.demo_sandboxes, DemoSandbox, "account_id"),
+            erasures=SqlTable(conn, tables.account_erasures, AccountErasure, "account_id"),
         )
 
 

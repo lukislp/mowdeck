@@ -17,9 +17,9 @@ from mowdeck_authz import Relation, account, user
 from mowdeck_service_kit.errors import Forbidden
 
 from identity.adapters.api.deps import (
+    AccountOwner,
     Ctx,
     FreshAuth,
-    ManageAccount,
     ManageUsers,
     Member,
     ServicesDep,
@@ -74,20 +74,21 @@ async def rename_account(
 @router.delete("", status_code=202)
 async def delete_account(
     account_id: UUID,
-    _: ManageAccount,
+    _: AccountOwner,
     services: ServicesDep,
     ctx: Ctx,
     body: AccountDeleteIn | None = None,
 ) -> AccountOut:
-    """Request deletion (owner): locked for the grace period. Needs the password in the body
-    or, without it, a recent step-up confirmation."""
+    """Schedule the deletion (owner): locked for the grace period, purged in every service after
+    it (ADR 0082). 409 while other members exist. Needs the password in the body or, without
+    it, a recent step-up confirmation."""
     password = body.password if body else None
     return AccountOut.of(await services.accounts.request_deletion(account_id, password, ctx))
 
 
 @router.post("/restore")
 async def restore_account(
-    account_id: UUID, _: ManageAccount, services: ServicesDep, ctx: Ctx
+    account_id: UUID, _: AccountOwner, services: ServicesDep, ctx: Ctx
 ) -> AccountOut:
     """Undo a deletion request within the grace period (owner)."""
     return AccountOut.of(await services.accounts.restore(account_id, ctx))

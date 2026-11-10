@@ -15,6 +15,7 @@ from typing import Any
 from uuid import UUID
 
 from identity.application.ports import Ge, Gt, In, Lt
+from identity.domain.erasure import AUDIT_DETAILS_KEPT, AccountErasure
 from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
@@ -169,10 +170,24 @@ class MemoryTx:
     onboarding: MemoryTable[OnboardingProgress]
     known_devices: MemoryTable[KnownDevice]
     sandboxes: MemoryTable[DemoSandbox]
+    erasures: MemoryTable[AccountErasure]
 
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete one demo sandbox account's audit rows (ADR 0076)."""
         return await self.audit.delete(account_id=account_id)
+
+    async def scrub_audit(self, account_id: UUID) -> int:
+        """The personal fields of an erased account's audit rows (ADR 0082), rows kept."""
+        changed = 0
+        for entry in self.audit.rows.values():
+            if entry.account_id != account_id:
+                continue
+            kept = {k: v for k, v in entry.details.items() if k in AUDIT_DETAILS_KEPT}
+            if entry.actor_name is None and entry.ip is None and kept == entry.details:
+                continue
+            entry.actor_name, entry.ip, entry.details = None, None, kept
+            changed += 1
+        return changed
 
 
 class MemoryStore:
@@ -205,6 +220,7 @@ class MemoryStore:
             onboarding=MemoryTable("user_id"),
             known_devices=MemoryTable("id", [("user_id", "token_hash")]),
             sandboxes=MemoryTable("account_id"),
+            erasures=MemoryTable("account_id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

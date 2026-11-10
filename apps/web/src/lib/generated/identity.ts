@@ -54,8 +54,9 @@ export type paths = {
         post?: never;
         /**
          * Delete Account
-         * @description Request deletion (owner): locked for the grace period. Needs the password in the body
-         *     or, without it, a recent step-up confirmation.
+         * @description Schedule the deletion (owner): locked for the grace period, purged in every service after
+         *     it (ADR 0082). 409 while other members exist. Needs the password in the body or, without
+         *     it, a recent step-up confirmation.
          */
         delete: operations["delete_account_api_v1_identity_accounts__account_id__delete"];
         options?: never;

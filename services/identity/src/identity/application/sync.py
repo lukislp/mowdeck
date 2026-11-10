@@ -124,15 +124,16 @@ class AuthzSync:
             acct = await tx.accounts.get(id=membership.account_id)
             if acct is None:
                 continue
-            deleting = acct.status is AccountStatus.DELETING
-            if deleting and not membership.is_owner:
+            if acct.status is not AccountStatus.ACTIVE:
+                # A locked account (deleting, purging) gives nobody a tuple, the owner neither:
+                # every service refuses everything. The owner's way out is Identity's own
+                # owner check (``AccountService.ensure_owner``), which reads the database, so
+                # the sign-in during the grace period can do nothing but restore (ADR 0082).
                 continue
             obj = account(acct.id)
             wanted.add(RelationshipTuple(subject, "member", obj))
             if membership.is_owner:
                 wanted.add(RelationshipTuple(subject, "owner", obj))
-            if deleting:
-                continue  # a locked account keeps only its owner, so it can be restored
             if membership.is_admin:
                 wanted.add(RelationshipTuple(subject, "admin", obj))
             assignments = await tx.assignments.find(

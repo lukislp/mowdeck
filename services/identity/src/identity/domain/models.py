@@ -20,7 +20,11 @@ class AccountStatus(StrEnum):
 
     ACTIVE = "active"
     DELETING = "deleting"
-    """Deletion requested: locked for everyone but the owner until ``delete_after``."""
+    """Deletion requested: locked for everyone but the owner until ``delete_after``; the owner
+    can restore it until then (ADR 0082)."""
+    PURGING = "purging"
+    """The grace period is over: every service is told to delete its data and Identity deletes
+    its own rows when all confirmed. Locked for everybody, no way back (ADR 0082)."""
 
 
 class UserKind(StrEnum):

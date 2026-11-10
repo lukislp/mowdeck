@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 ## Purpose
 
-- **Accounts** (household or business) with an owner. Registration creates the account, the owner, the default roles and the owner's tuples. Deletion locks the account for a grace period (7 days) during which the owner can restore it; the purge job is a later task.
+- **Accounts** (household or business) with an owner. Registration creates the account, the owner, the default roles and the owner's tuples. Deletion is scheduled: the account is locked for a grace period (7 days) during which only the owner can sign in, and only to restore it; after it a purge job tells every service to delete its data (`account.erase.<service>`) and then deletes Identity's own rows, the audit rows staying without their personal fields ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), [Account erasure](#account-erasure-adr-0082)).
 - **Users**: persons register; **sub-users** are created by an account with a username and a password (no e-mail needed) and belong to it. Usernames are unique per installation.
 - **Roles** are named bundles of permission keys per account. Owner and Admin are fixed relations (`account#owner`, `account#admin`); Manager, Operator, Viewer and custom roles are editable. A role is assigned at a level (account, site, group, mower) and Identity writes the expanded `grant_*` tuples (ADR 0014).
 - **Sessions**: password login, 10 minute EdDSA access tokens, opaque refresh tokens with rotation and reuse detection; for browsers a cookie-only refresh transport and a short reuse grace after a lost response ([ADR 0021](../../docs/adr/0021-browser-auth-flow.md)).
@@ -74,8 +74,8 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | POST | `/api/v1/identity/app-login/code` | token only (users) | Native app hand-off, browser side: `{request_id}` of the app's request (unknown, used or expired: 403). Ends the caller's login session, which must be younger than 5 minutes (else 403), and returns a one-time code `{code, expires_in}` (60 s) bound to the request's challenge |
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
-| DELETE | `/accounts/{account_id}` | `can_manage_account` (owner) | `{password}`; 202, status `deleting` with `delete_after`; API tokens revoked, other members' sessions end, their tuples removed |
-| POST | `/accounts/{account_id}/restore` | `can_manage_account` | Undo within the grace period |
+| DELETE | `/accounts/{account_id}` | the owner (database check, also while locked; tokens 403) | `{password}` or a recent step-up; 202, status `deleting` with `delete_after`; API tokens revoked, nobody keeps a tuple. 409 while the account has other members (remove them first) or is already scheduled |
+| POST | `/accounts/{account_id}/restore` | the owner (database check) | Undo within the grace period; 409 once the purge started |
 | POST | `/accounts/{account_id}/reconcile` | `can_manage_users` | Make OpenFGA match the database for every subject of the account |
 | GET | `/accounts/{account_id}/permissions` | `member` | Permission catalogue |
 | GET, POST | `/accounts/{account_id}/users` | `can_manage_users` | List; create a sub-user with optional `assignments` |
@@ -153,6 +153,16 @@ Consumed: `event.identity.grants.changed` (from other Identity instances) to cle
 
 The database is the source of truth; OpenFGA is a projection per subject. Every change runs in one database transaction; right before the commit Identity computes the desired tuples of the touched subjects from the database (memberships, owner and admin flags, role assignments expanded to `grant_*`, token grants), reads their current tuples from OpenFGA and writes only the difference. If OpenFGA cannot be read or written, the transaction rolls back and the request answers **503**: nothing is half applied. If the commit fails after the OpenFGA write, the touched subjects are reconciled again from the committed state at once. Remaining drift is repaired by `POST /accounts/{id}/reconcile`, `python -m identity.cli reconcile` and a periodic full reconcile (`MOWDECK_IDENTITY_RECONCILE_SECONDS`, default hourly). This replaces the outbox table of the design: the write-through is simpler and gives the 503 the plan asks for; the outbox remains an option if Identity ever needs to accept changes while OpenFGA is down.
 
+## Account erasure (ADR 0082)
+
+`AccountService.request_deletion` schedules a deletion; `ErasureService` (`application/erasure.py`, a background task every `MOWDECK_IDENTITY_ERASURE_SWEEP_SECONDS`) does the rest once `delete_after` has passed:
+
+1. The account becomes `purging` (all sessions end, no tuple for anybody, no way back) and an `account_erasures` row names the services that must confirm (`MOWDECK_IDENTITY_ERASURE_SERVICES`).
+2. Every service gets a core NATS request `account.erase.<service>` (`AccountEraseRequest`, answered with `AccountEraseReply`), Fleet first, the others `MOWDECK_IDENTITY_ERASURE_SETTLE_SECONDS` later. A confirmation is stored at once and never asked again; a failure is stored with its reason and retried with a doubling wait (30 s to 10 minutes). Identity keeps its rows while any listed service has not confirmed.
+3. After the last confirmation Identity deletes its own rows and tuples, scrubs the personal fields of the audit rows of the account (`audit_log_scrub`, migration 0011; the rows stay), writes `account.erased` and marks the record erased.
+
+`python -m identity.cli erasures [--all]` shows the open purges (and with `--all` the finished ones): services confirmed, attempts, the last error. A purge older than `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` logs an error on every attempt. Until every service answers `account.erase.<service>` (follow-up steps of the ADR) an account scheduled for deletion stays `purging`. The public demo runs no erasure (its sandboxes have their own purge).
+
 ## Settings
 
 All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `MOWDECK_<NAME>_FILE`). OpenFGA: `MOWDECK_OPENFGA_*` of `mowdeck-authz`. Service specific settings:
@@ -178,7 +188,12 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_IDENTITY_LOGIN_MAX_FAILURES` | `10` | Failures per username within the window before 429 |
 | `MOWDECK_IDENTITY_LOGIN_FAILURE_WINDOW_SECONDS` | `900` | Window of the username throttle |
 | `MOWDECK_IDENTITY_TRUST_FORWARDED_FOR` | `false` | Client IP from `X-Forwarded-For` (only behind a trusted proxy; Compose sets it), by the kit's rule with `MOWDECK_CLIENT_IP_DEPTH` (`GATEWAY_CLIENT_IP_DEPTH`; unset: the leftmost entry) |
-| `MOWDECK_IDENTITY_DELETION_GRACE_DAYS` | `7` | Grace period of an account deletion |
+| `MOWDECK_IDENTITY_DELETION_GRACE_DAYS` | `7` | Grace period of an account deletion (0: purged at the next sweep) |
+| `MOWDECK_IDENTITY_ERASURE_SERVICES` | `fleet,scheduler,telemetry,notifications,vision,planner,entitlements` | Services that must confirm an account erasure, in order (add `billing` when Billing runs; a listed service that is not deployed holds every purge back) |
+| `MOWDECK_IDENTITY_ERASURE_SWEEP_SECONDS` | `60` | Interval of the sweep that starts and continues purges |
+| `MOWDECK_IDENTITY_ERASURE_TIMEOUT_SECONDS` | `10` | How long one erasure request to a service may take |
+| `MOWDECK_IDENTITY_ERASURE_SETTLE_SECONDS` | `30` | Wait after Fleet confirmed, before the other services are asked |
+| `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` | `1` | A purge unfinished after this long is logged as an error |
 | `MOWDECK_IDENTITY_DEFAULT_PLAN` | `unlimited` | Plan of new accounts while billing is off |
 | `MOWDECK_IDENTITY_REFRESH_COOKIE_SECURE` | `true` | `Secure` flag of the refresh cookie (Compose development: `false`) |
 | `MOWDECK_IDENTITY_PUBLIC_URL` | empty | The address users open MowDeck at (`https://mowdeck.example.org`). Passkeys are bound to it: its host is the RP ID, its origin the only accepted one. HTTPS (plain HTTP only for `localhost`), a host name (no IP). Empty or unusable (logged): passkeys off |
@@ -248,6 +263,7 @@ Ed25519 keys live in the `signing_keys` table, private halves encrypted with AES
 | `retire-key KID` | Retire a key at once (emergency); tokens it signed fail |
 | `list-keys` | Keys and status |
 | `reconcile [--account ID]` | Make OpenFGA match the database |
+| `erasures [--all]` | The purges of deleted accounts: state, services confirmed, attempts, last error (ADR 0082) |
 | `grant-platform-admin USERNAME [--revoke]` | Make a user an operator admin: writes (or deletes) `platform:main#operator_admin`; operator admins manage accounts and plans (`can_manage_accounts`, `can_manage_plans`) and see no mower data. Audited (`platform.admin_granted`/`_revoked`). The tuple lives only in OpenFGA (reconcile leaves it alone); grant again after rebuilding the store |
 
 ### Operator level
@@ -271,7 +287,7 @@ Tables (Alembic revisions `0002` to `0004`): `accounts`, `users`, `memberships` 
 | `adapters/api/` | routes, schemas, dependencies, error mapping |
 | `adapters/db/` | tables, the PostgreSQL store, Alembic migrations |
 | `adapters/memory.py` | the memory store (tests) |
-| `adapters/crypto.py`, `bus/`, `modules.py` | Argon2id, AES-GCM, event publisher, descriptor fetcher |
+| `adapters/crypto.py`, `bus/`, `modules.py` | Argon2id, AES-GCM, event publisher, the NATS eraser (`bus/erasure.py`), descriptor fetcher |
 | `runtime.py`, `main.py`, `cli.py` | wiring, app, operator commands |
 
 ## Local start
@@ -314,4 +330,4 @@ docker rm -f identity-test-pg identity-test-fga
 ## Limits (Phase 1)
 
 - Access tokens stay valid until they expire (at most 10 minutes) after a user is disabled; object checks in OpenFGA fail at once.
-- No account switching endpoint, no invitations, no support access API, no operator console, no ownership transfer flow (the CLI `promote-owner` covers recovery), no purge job after the deletion grace period.
+- No account switching endpoint, no invitations, no support access API, no operator console, no ownership transfer flow (the CLI `promote-owner` covers recovery). The purge job after the deletion grace period waits for the services' handlers (ADR 0082).

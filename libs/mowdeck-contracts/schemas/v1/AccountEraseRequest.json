@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Request on ``account.erase.<service>`` (core NATS, internal): delete everything of the\naccount.",
+  "properties": {
+    "account_id": {
+      "format": "uuid",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "reason": {
+      "default": "account deletion",
+      "description": "Why: for the service's log line, never shown to anybody.",
+      "maxLength": 64,
+      "title": "Reason",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "title": "Requested At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "account_id",
+    "requested_at"
+  ],
+  "title": "AccountEraseRequest",
+  "type": "object"
+}

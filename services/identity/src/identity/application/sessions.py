@@ -117,7 +117,9 @@ class MeView:
 def _usable_account(acct: Account | None, membership: Membership) -> bool:
     if acct is None or membership.status is not Status.ACTIVE:
         return False
-    return acct.status is AccountStatus.ACTIVE or membership.is_owner
+    if acct.status is AccountStatus.ACTIVE:
+        return True
+    return acct.status is AccountStatus.DELETING and membership.is_owner
 
 
 class SessionService:

@@ -27,6 +27,7 @@ from prometheus_client import CollectorRegistry
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from identity.adapters.apple import AppleOAuthClient
+from identity.adapters.bus.erasure import BusAccountEraser
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
@@ -39,6 +40,7 @@ from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
 from identity.application.keys import KeyManager
 from identity.application.ports import (
+    AccountEraser,
     Clock,
     ModuleSource,
     OAuthClient,
@@ -79,6 +81,8 @@ class Runtime:
     """Tests: a fake Apple (``httpx.MockTransport``) behind the configured endpoints."""
     provisioner: SandboxProvisioner | None = None
     """Demo sandboxes (ADR 0076): fills and empties them; the HTTP provisioner unless given."""
+    eraser: AccountEraser | None = None
+    """Account erasure (ADR 0082): asks the services to delete; the NATS eraser unless given."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
     keys: KeyManager = field(init=False)
@@ -148,6 +152,12 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
+        if self.settings.erasure_enabled:
+            self.services.enable_erasure(
+                self.eraser
+                or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),
+                self.settings.erasure_config(),
+            )
         if self.settings.sandboxes_enabled:
             self.services.enable_sandboxes(
                 self.provisioner or self.http_provisioner(), self.settings.sandbox_config()

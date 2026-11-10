@@ -152,6 +152,11 @@ from mowdeck_contracts.v1.envelopes import (
     CommandStatus,
     EventEnvelope,
 )
+from mowdeck_contracts.v1.erasure import (
+    ERASURE_SERVICES,
+    AccountEraseReply,
+    AccountEraseRequest,
+)
 from mowdeck_contracts.v1.error_lexicon import (
     DEFAULT_LOCALE,
     GATEWAY_ERRORS_ENTRIES,
@@ -512,6 +517,7 @@ __all__ = [
     "DRIVE_CALIBRATION_OPTION_KEYS",
     "DRIVE_CORRELATION_PREFIX",
     "ENTITLEMENTS_PLAN_CHANGED",
+    "ERASURE_SERVICES",
     "FAMILY_ID_PATTERN",
     "FEATURE_AI_RECOVER",
     "FEATURE_AI_RECOVER_HOSTED",
@@ -601,6 +607,8 @@ __all__ = [
     "VISION_SNAPSHOT_HOLD_SECONDS",
     "VISION_STREAM_LEASE_SECONDS",
     "AccountCreated",
+    "AccountEraseReply",
+    "AccountEraseRequest",
     "AccountKind",
     "AccountPresence",
     "AccountWatchers",

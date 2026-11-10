@@ -355,6 +355,23 @@ demo_sandboxes = Table(
     Column("last_error", String(500)),
 )
 
+# Account erasure (ADR 0082): one row per account whose grace period ended. No foreign key and no
+# personal data: the row outlives the account and is the proof that it was erased.
+account_erasures = Table(
+    "account_erasures",
+    metadata,
+    Column("account_id", Uuid, primary_key=True),
+    Column("state", String(16), nullable=False, index=True),
+    Column("started_at", TS, nullable=False),
+    Column("required", JSONB, nullable=False),
+    Column("confirmed", JSONB, nullable=False),
+    Column("counts", JSONB, nullable=False),
+    Column("attempts", Integer, nullable=False),
+    Column("next_attempt_at", TS),
+    Column("last_error", String(500)),
+    Column("completed_at", TS),
+)
+
 # Schema only in Phase 1 (design section 5): support access and invitations.
 support_grants = Table(
     "support_grants",
