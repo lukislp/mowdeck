@@ -10,6 +10,7 @@
 const de = {
   title: 'MowDeck verbinden',
   lead: 'Gib die Adresse deines MowDeck-Servers ein. Die App lädt die Oberfläche direkt von dort.',
+  explain: 'MowDeck ist selbst gehostet: Die App braucht deinen eigenen MowDeck-Server.',
   label: 'Server-Adresse',
   hint: 'zum Beispiel mowdeck.home.lan',
   connect: 'Verbinden',
@@ -24,6 +25,11 @@ const de = {
   unreachable:
     'Unter dieser Adresse antwortet kein MowDeck-Server. Adresse, WLAN/VPN und Zertifikat prüfen.',
   useAnyway: 'Trotzdem verwenden',
+  tryDemo: 'Demo ausprobieren',
+  demoNote: 'Die Demo nutzt simulierte Mäher und wird regelmäßig zurückgesetzt.',
+  about: 'Was ist MowDeck?',
+  privacy: 'Datenschutz',
+  moreInfo: 'Mehr Informationen',
   offlineTitle: 'Server nicht erreichbar',
   offlineLead: 'Die App erreicht deinen MowDeck-Server gerade nicht.',
   retry: 'Erneut versuchen',
@@ -34,6 +40,7 @@ const de = {
 const en: Record<keyof typeof de, string> = {
   title: 'Connect MowDeck',
   lead: 'Enter the address of your MowDeck server. The app loads its interface directly from there.',
+  explain: 'MowDeck is self-hosted: the app needs your own MowDeck server.',
   label: 'Server address',
   hint: 'for example mowdeck.home.lan',
   connect: 'Connect',
@@ -47,6 +54,11 @@ const en: Record<keyof typeof de, string> = {
   unreachable:
     'No MowDeck server answers at this address. Check the address, Wi-Fi/VPN and certificate.',
   useAnyway: 'Use anyway',
+  tryDemo: 'Try the demo',
+  demoNote: 'The demo uses simulated mowers and is reset regularly.',
+  about: 'What is MowDeck?',
+  privacy: 'Privacy',
+  moreInfo: 'More information',
   offlineTitle: 'Server not reachable',
   offlineLead: 'The app cannot reach your MowDeck server right now.',
   retry: 'Try again',
