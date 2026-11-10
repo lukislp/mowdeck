@@ -328,9 +328,7 @@ def test_rotation_count_is_configurable(stack: Stack) -> None:
 
 
 @pytest.mark.parametrize("value", ["0", "-1", "abc", "101", "2.5"])
-def test_deploy_rejects_a_bad_keep_count_before_touching_anything(
-    stack: Stack, value: str
-) -> None:
+def test_deploy_rejects_a_bad_keep_count_before_touching_anything(stack: Stack, value: str) -> None:
     _seed(stack.backups, _dumps(2))
     result = stack.run("0.2.0", MOWDECK_BACKUP_KEEP=value)
     assert result.returncode != 0
@@ -409,7 +407,7 @@ def test_deploy_script_is_lf_executable_and_shellcheck_clean(repo_root: Path, na
     path = repo_root / "infra" / "compose" / name
     assert b"\r" not in path.read_bytes()
     if shutil.which("git") and (repo_root / ".git").exists():
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             ["git", "ls-files", "--stage", f"infra/compose/{name}"],  # noqa: S607
             capture_output=True,
             text=True,
