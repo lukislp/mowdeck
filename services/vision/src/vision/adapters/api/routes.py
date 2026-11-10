@@ -13,6 +13,9 @@ PUT  /me/provider                           the caller      save own provider (k
 DELETE /me/provider                         the caller      delete own provider
 POST /me/provider/test                      the caller      minimal vision call (rate limited)
 POST /me/provider/structured                the caller      text-only JSON answer (ADR 0075)
+GET  /me/consent                            the caller      consent to a cloud AI model: required?
+PUT  /me/consent                            the caller      agree to the provider in effect now
+DELETE /me/consent                          the caller      withdraw (automatic analysis goes off)
 GET  /me/preferences                        the caller      preferences: stereo frames, automatic
                                                             analysis on errors (with its limits)
 PUT  /me/preferences                        the caller      change them (opt-in: ``ai_recover``)
@@ -48,6 +51,7 @@ from mowdeck_contracts.v1 import VisionTask
 from vision.adapters.api.deps import (
     AutoSettingsDep,
     CallerDep,
+    ConsentDep,
     MowerDriver,
     MowerViewer,
     ProposalDriver,
@@ -57,6 +61,8 @@ from vision.adapters.api.deps import (
 )
 from vision.adapters.api.schemas import (
     ApproveIn,
+    ConsentOut,
+    DestinationOut,
     FamilyOut,
     PreferencesIn,
     PreferencesOut,
@@ -107,6 +113,11 @@ async def providers(caller: CallerDep, service: ProvidersDep) -> ProvidersOut:
         families=[FamilyOut.of(f) for f in service.families()],
         hosted_available=hosted,
         hosted_model=service.hosted.model if hosted else None,
+        hosted_destination=(
+            DestinationOut.of(destination)
+            if (destination := service.hosted_destination(hosted))
+            else None
+        ),
         secrets_available=service.box is not None,
     )
 
@@ -155,6 +166,9 @@ async def test_my_provider(caller: CallerDep, service: ProvidersDep) -> Provider
 @router.post(
     "/me/provider/structured",
     responses={
+        403: {
+            "description": "`vision-consent-required`: a cloud model the caller has not agreed to."
+        },
         409: {"description": "`vision-provider-missing`: no own provider, no hosted default."},
         422: {"description": "A field is out of its limits or the schema is not an object."},
         429: {"description": "`vision-quota`: the hourly limit of structured answers."},
@@ -183,6 +197,26 @@ async def structured_answer(
     return StructuredOut.of(result)
 
 
+@router.get("/me/consent")
+async def my_consent(caller: CallerDep, consent: ConsentDep) -> ConsentOut:
+    """Whether the provider in effect for the caller is a cloud model (consent `required`),
+    where requests would go (`destination`) and whether the recorded consent covers it."""
+    return ConsentOut.of(await consent.status(caller))
+
+
+@router.put("/me/consent")
+async def grant_my_consent(caller: CallerDep, consent: ConsentDep) -> ConsentOut:
+    """Agree that pictures, map sketches and texts go to the provider in effect now (a new
+    consent replaces an earlier one). 409 `vision-provider-missing` without a provider."""
+    return ConsentOut.of(await consent.grant(caller))
+
+
+@router.delete("/me/consent")
+async def withdraw_my_consent(caller: CallerDep, consent: ConsentDep) -> ConsentOut:
+    """Withdraw the consent and switch the caller's automatic analysis off."""
+    return ConsentOut.of(await consent.withdraw(caller))
+
+
 @router.get("/me/preferences")
 async def my_preferences(
     caller: CallerDep, service: ProvidersDep, auto: AutoSettingsDep
@@ -203,7 +237,8 @@ async def put_my_preferences(
     outside the work area, wheel slip), the service takes a photo, analyses it with the caller's
     provider (or the installation's) and asks for approval like a manual request; nothing is
     executed automatically. Enabling needs the plan feature ``ai_recover`` (403
-    ``feature-not-in-plan``; nothing is saved then)."""
+    ``feature-not-in-plan``; nothing is saved then) and, for a cloud model, the caller's consent
+    (403 ``vision-consent-required``, nothing saved)."""
     auto_view = (
         await auto.get(caller)
         if body.auto_analysis is None
@@ -228,7 +263,8 @@ async def recover(
     the background; poll ``GET /proposals/{id}``. Without images the mower's gateway is asked
     for one. 403 ``feature-not-in-plan`` without ``ai_recover``, 409 ``vision-provider-missing``
     without a usable provider, 409 when a proposal for the mower is open, 429 ``vision-quota``
-    beyond the daily cap."""
+    beyond the daily cap, 403 ``vision-consent-required`` when the provider is a cloud model the
+    caller has not agreed to (before any picture is taken)."""
     images = [image.to_image() for image in body.images]
     proposal = await service.request(principal, mower_id, body.task, images)
     return ProposalOut.of(proposal, rounds_left=service.config.max_rounds - proposal.round)

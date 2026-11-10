@@ -112,7 +112,7 @@ There is no defined backup retention today (the operator's `pg_dumpall` before u
 - **Stripe:** see 5.
 - **APNs:** the app removes its registration on sign-out (`nativeShell.signingOut()`), and the purge deletes the rows, so no push goes to the device again.
 - **Vendor clouds** (Mammotion, Husqvarna, Worx): MowDeck removes the stored credentials with the linked account and cannot delete what the vendor holds. The in-app text and the privacy text say so.
-- **Cloud AI provider** (ADR 0081, in review): a request already sent stays with the provider under its terms; MowDeck deletes the pictures and keys it stores.
+- **Cloud AI provider** ([ADR 0081](0081-explicit-consent-before-cloud-ai.md)): a request already sent stays with the provider under its terms; MowDeck deletes the pictures and keys it stores.
 
 ### 9. Web app (step 4)
 

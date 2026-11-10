@@ -24,6 +24,11 @@ class ProviderMissing(AssistantError):  # noqa: N818 - reads as a state
     """No AI provider may be used: the user has to configure one (409)."""
 
 
+class ConsentRequired(AssistantError):  # noqa: N818 - reads as a state
+    """The AI provider is a cloud model the caller has not agreed to (403). Vision owns the
+    consent rules; the assistant only passes the refusal on so the app can ask."""
+
+
 class ProviderQuota(AssistantError):  # noqa: N818 - reads as a state
     """The provider's hourly limit is reached (429)."""
 

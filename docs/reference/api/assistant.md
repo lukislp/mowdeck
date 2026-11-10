@@ -25,6 +25,7 @@ Interpret one request for one mower and validate the result against the mower's 
 | Status | Meaning | Body |
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [ProposalOut](#proposalout) |
+| 403 | `assistant-consent-required`: no consent to a cloud AI. | no body |
 | 404 | The mower does not exist or the caller cannot see it. | no body |
 | 409 | `assistant-provider-missing`: no AI provider configured. | no body |
 | 422 | Empty or too long text, or an unknown time zone. | no body |
