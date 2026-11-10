@@ -9,10 +9,12 @@ the repository tests (``tools/repo-checks/tests/test_ios_release.py``, CI job ``
 ``source`` checks on every pull request without a macOS runner.
 
     python ios_release_check.py source
-        The Xcode project, Info.plist, app icon and entitlements in apps/mobile/ios.
+        The Xcode project, Info.plist, app icon and entitlements in apps/mobile/ios, and the
+        privacy manifest of every target that uses a required-reason API (ITMS-91053).
 
     python ios_release_check.py app <App.app> --version X.Y.Z --build N
-        The built bundle: versions, compiled icon catalog, export compliance key, no Agora code.
+        The built bundle: versions, compiled icon catalog, export compliance key, no Agora code,
+        and a privacy manifest in every bundle that needs one.
 
     python ios_release_check.py build-number X.Y.Z [--rebuild N]
         CFBundleVersion of a release: major * 10000 + minor * 100 + patch, the Android versionCode
@@ -28,8 +30,9 @@ import plistlib
 import re
 import struct
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 REPO = Path(__file__).resolve().parents[3]
 IOS = REPO / "apps" / "mobile" / "ios" / "App"
@@ -427,6 +430,171 @@ def check_project_files(pbxproj: str, project_dir: Path) -> list[str]:
     return problems
 
 
+class Target(NamedTuple):
+    """One shipped bundle: the folder of its Info.plist and privacy manifest, the Swift sources
+    it compiles (local packages it links included), both relative to apps/mobile/ios, and where
+    the built bundle sits inside App.app."""
+
+    name: str
+    folder: str
+    sources: tuple[str, ...]
+    built: str
+
+
+# The bundles of the app, the one list the privacy manifest checks walk. Every target but the
+# notification extension links MowerWidgetKit (App Group state, ADR 0059/0060). Third-party
+# plugin sources (node_modules) are not scanned: a plugin without a manifest of its own is
+# covered by the manifest of the bundle it is compiled into (docs/ops/mobile-apps.md).
+_KIT = "MowerWidgetKit/Sources"
+TARGETS = (
+    Target("App", "App/App", ("App/App", _KIT), ""),
+    Target(
+        EXTENSION_NAME,
+        f"App/{EXTENSION_NAME}",
+        (f"App/{EXTENSION_NAME}", "NotificationServiceKit/Sources"),
+        f"PlugIns/{EXTENSION_NAME}.appex",
+    ),
+    Target(WIDGETS_NAME, WIDGETS_NAME, (WIDGETS_NAME, _KIT), f"PlugIns/{WIDGETS_NAME}.appex"),
+    Target(WATCH_NAME, WATCH_NAME, (WATCH_NAME, _KIT), f"Watch/{WATCH_NAME}.app"),
+    Target(
+        WATCH_WIDGETS_NAME,
+        WATCH_WIDGETS_NAME,
+        (WATCH_WIDGETS_NAME, _KIT),
+        f"Watch/{WATCH_NAME}.app/PlugIns/{WATCH_WIDGETS_NAME}.appex",
+    ),
+)
+MANIFEST = "PrivacyInfo.xcprivacy"
+# Required-reason API categories (Apple, "Describing use of required reason API"): the source
+# patterns that use one, and the approved reason codes. Add a pattern when the code starts using
+# another API of a category; the manifest must then declare it.
+REQUIRED_REASON_APIS: dict[str, tuple[re.Pattern[str], frozenset[str]]] = {
+    "NSPrivacyAccessedAPICategoryUserDefaults": (
+        re.compile(r"\bUserDefaults\b|\bNSUserDefaults\b"),
+        frozenset({"CA92.1", "1C8F.1", "C56D.1", "AC6B.1"}),
+    ),
+    "NSPrivacyAccessedAPICategoryFileTimestamp": (
+        re.compile(
+            r"creationDate|modificationDate|NSFileCreationDate|NSFileModificationDate"
+            r"|contentModificationDateKey|\bgetattrlist\b|\bf?l?stat\("
+        ),
+        frozenset({"DDA9.1", "C617.1", "3B52.1", "0A2A.1"}),
+    ),
+    "NSPrivacyAccessedAPICategorySystemBootTime": (
+        re.compile(r"systemUptime|mach_absolute_time|clock_gettime"),
+        frozenset({"35F9.1", "8FFB.1", "3D61.1"}),
+    ),
+    "NSPrivacyAccessedAPICategoryDiskSpace": (
+        re.compile(
+            r"volumeAvailableCapacity|volumeTotalCapacity|systemFreeSize|NSFileSystem(Free)?Size"
+            r"|\bstatf?s\(|\bstatvfs\("
+        ),
+        frozenset({"85F4.1", "E174.1", "7D9E.1", "B728.1"}),
+    ),
+    "NSPrivacyAccessedAPICategoryActiveKeyboards": (
+        re.compile(r"activeInputModes"),
+        frozenset({"3EC4.1", "54BD.1"}),
+    ),
+}
+
+
+def used_required_reason_apis(sources: Iterable[Path]) -> dict[str, list[str]]:
+    """Category -> names of the Swift/Objective-C files under ``sources`` that use an API of it.
+    Comment-only lines are ignored."""
+    used: dict[str, set[str]] = {}
+    for root in sources:
+        for path in sorted(root.rglob("*")):
+            if path.suffix not in {".swift", ".m", ".mm", ".h"}:
+                continue
+            code = "\n".join(
+                line
+                for line in path.read_text("utf-8").splitlines()
+                if not line.lstrip().startswith("//")
+            )
+            for category, (pattern, _reasons) in REQUIRED_REASON_APIS.items():
+                if pattern.search(code):
+                    used.setdefault(category, set()).add(path.name)
+    return {category: sorted(files) for category, files in used.items()}
+
+
+def check_privacy_manifest(manifest: dict[str, Any], used: Iterable[str], label: str) -> list[str]:
+    """A privacy manifest that declares exactly the required-reason API categories ``used``, each
+    with approved reason codes, no tracking and no collected data (MowDeck sends nothing to its
+    developer, docs/ops/mobile-apps.md)."""
+    used = set(used)
+    problems = []
+    if manifest.get("NSPrivacyTracking") is not False:
+        problems.append(f"{label}: NSPrivacyTracking must be false")
+    if manifest.get("NSPrivacyTrackingDomains") != []:
+        problems.append(f"{label}: NSPrivacyTrackingDomains must be an empty array")
+    if manifest.get("NSPrivacyCollectedDataTypes") != []:
+        problems.append(
+            f"{label}: NSPrivacyCollectedDataTypes must be an empty array (nothing is collected "
+            "by the developer; a change here changes the App Privacy answer)"
+        )
+    declared: dict[str, list[Any]] = {}
+    entries = manifest.get("NSPrivacyAccessedAPITypes")
+    for entry in entries if isinstance(entries, list) else []:
+        if isinstance(entry, dict):
+            reasons = entry.get("NSPrivacyAccessedAPITypeReasons")
+            declared[str(entry.get("NSPrivacyAccessedAPIType"))] = (
+                reasons if isinstance(reasons, list) else []
+            )
+    for category in sorted(used - set(declared)):
+        problems.append(f"{label}: uses {category} but does not declare it (ITMS-91053)")
+    for category, reasons in sorted(declared.items()):
+        if category not in REQUIRED_REASON_APIS:
+            problems.append(f"{label}: {category} is not a required-reason API category")
+        elif category not in used:
+            problems.append(f"{label}: declares {category} but no source uses it")
+        else:
+            allowed = REQUIRED_REASON_APIS[category][1]
+            unknown = sorted(str(r) for r in reasons if r not in allowed)
+            if not reasons or unknown:
+                problems.append(
+                    f"{label}: {category} needs approved reason codes, found {reasons} "
+                    f"(not approved: {unknown})"
+                )
+    return problems
+
+
+def check_privacy_manifests(ios_root: Path) -> list[str]:
+    """Every target that uses a required-reason API in its sources has a manifest declaring it
+    (and a manifest that exists is checked either way). ``ios_root`` is apps/mobile/ios."""
+    problems = []
+    for target in TARGETS:
+        used = used_required_reason_apis(ios_root / source for source in target.sources)
+        path = ios_root / target.folder / MANIFEST
+        if not path.is_file():
+            if used:
+                problems.append(
+                    f"{target.name}: uses {sorted(used)} but {target.folder}/{MANIFEST} is "
+                    "missing (ITMS-91053)"
+                )
+            continue
+        try:
+            manifest = _load_plist(path)
+        except (plistlib.InvalidFileException, ValueError, CheckError) as exc:
+            problems.append(f"{target.name}/{MANIFEST} is not a valid plist: {exc}")
+            continue
+        problems += check_privacy_manifest(manifest, used, f"{target.name}/{MANIFEST}")
+    return problems
+
+
+def check_built_privacy_manifests(app: Path, ios_root: Path) -> list[str]:
+    """The built App.app and its embedded bundles carry the manifest of every target whose
+    sources need one: a manifest in the app does not cover an extension."""
+    problems = []
+    for target in TARGETS:
+        if not used_required_reason_apis(ios_root / source for source in target.sources):
+            continue
+        if not (app / target.built / MANIFEST).is_file():
+            problems.append(
+                f"{target.built or app.name}/{MANIFEST} is missing: the bundle uses a "
+                "required-reason API and App Store Connect rejects the upload (ITMS-91053)"
+            )
+    return problems
+
+
 def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEMENTS) -> None:
     """Every static check of the app shell; raises CheckError with all problems."""
     problems = check_info_plist(_load_plist(ios / "App" / "Info.plist"))
@@ -438,6 +606,7 @@ def check_source(ios: Path = IOS, release_entitlements: Path = RELEASE_ENTITLEME
     problems += check_project(pbxproj)
     problems += check_project_integrity(pbxproj)
     problems += check_project_files(pbxproj, ios)
+    problems += check_privacy_manifests(ios.parent)
     extension = ios / EXTENSION_NAME
     problems += check_extension_plist(_load_plist(extension / "Info.plist"))
     widgets = ios.parent / WIDGETS_NAME
@@ -583,7 +752,7 @@ def check_built_watch(watch: Path, version: str, build: str) -> list[str]:
     return problems
 
 
-def check_app(app: Path, version: str, build: str) -> None:
+def check_app(app: Path, version: str, build: str, ios_root: Path = IOS.parent) -> None:
     """The built App.app before it is signed."""
     info = _load_plist(app / "Info.plist")
     problems = []
@@ -607,6 +776,7 @@ def check_app(app: Path, version: str, build: str) -> None:
     problems += check_built_extension(app / "PlugIns" / f"{EXTENSION_NAME}.appex", version, build)
     problems += check_built_widgets(app / "PlugIns" / f"{WIDGETS_NAME}.appex", version, build)
     problems += check_built_watch(app / "Watch" / f"{WATCH_NAME}.app", version, build)
+    problems += check_built_privacy_manifests(app, ios_root)
     if not (app / "public" / "index.html").is_file():
         problems.append("the bundled pages are missing (public/index.html): cap sync did not run")
     for path in app.rglob("*"):
@@ -639,10 +809,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "source":
             check_source()
-            print("iOS app shell: Info.plist, icon, entitlements and project are App Store ready.")
+            print(
+                "iOS app shell: Info.plist, icon, entitlements, privacy manifests and project are "
+                "App Store ready."
+            )
         elif args.command == "app":
             check_app(args.app, args.version, args.build)
-            print(f"{args.app}: {args.version} ({args.build}), icon catalog, no Agora files.")
+            print(
+                f"{args.app}: {args.version} ({args.build}), icon catalog, privacy manifests, "
+                "no Agora files."
+            )
         else:
             print(build_number(args.version, args.rebuild))
     except CheckError as exc:
