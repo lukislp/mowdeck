@@ -15,6 +15,8 @@
 import { assistantApi, unwrap } from '#lib/api/client.js';
 import type { components } from '#lib/generated/assistant.js';
 import { m } from '#lib/paraglide/messages.js';
+import { safety } from '#lib/safety/gate.svelte.js';
+import { needsSafetyAcknowledgement, type SafetyKind } from '#lib/safety/rule.js';
 import type { Locale, ScheduleIn } from '#lib/schedules/types.js';
 import type { CommandKind } from '#lib/stores/commands.svelte.js';
 
@@ -157,19 +159,40 @@ export interface ExecutionResult {
   failedAt: number | null;
 }
 
+/** What an action asks the safety rule: a start, a resume or a schedule start movement later. */
+export function safetyKindOf(action: ProposedAction): SafetyKind {
+  switch (action.kind) {
+    case 'start_now':
+      return 'start_mow';
+    case 'resume':
+      return 'resume_mow';
+    case 'start_later':
+      return 'schedule_enable';
+    case 'pause':
+      return 'pause_mow';
+    case 'dock':
+      return 'return_to_dock';
+  }
+}
+
 /**
  * Execute a confirmed proposal: every action in order, stopping at the first refusal so a
  * refused dock never leaves a later start behind. Never runs an expired or not executable
- * proposal.
+ * proposal. Before the first action that starts movement (a start, a resume, a schedule) the
+ * user acknowledges the safety check, once for the whole proposal; declining sends nothing
+ * (`failedAt: 0`, like a refusal of the first action). Pause and dock are never asked.
  */
 export async function execute(
   proposal: Proposal,
   executor: Executor,
   now: number,
+  acknowledge: (kind: SafetyKind) => Promise<boolean> = (kind) => safety.ask(kind),
 ): Promise<ExecutionResult> {
   if (!proposal.executable || expired(proposal, now) || !proposal.actions.length) {
     return { done: 0, failedAt: 0 };
   }
+  const asked = proposal.actions.map(safetyKindOf).find((kind) => needsSafetyAcknowledgement(kind));
+  if (asked && !(await acknowledge(asked))) return { done: 0, failedAt: 0 };
   let done = 0;
   for (const action of proposal.actions) {
     const command = commandOf(action);

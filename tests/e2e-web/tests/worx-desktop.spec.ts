@@ -20,6 +20,7 @@ import {
   registerByApi,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 const FLEET = '/api/v1/fleet';
@@ -125,6 +126,7 @@ test('worx: link with warnings, start a mower without map areas by its plans', a
     await expect(page.getByTestId('start-plan-now')).toBeVisible();
     await expect(page.getByTestId('start-plan-edge')).toBeVisible();
     await page.getByTestId('start-plan-zone-2').click();
+    await acknowledgeSafety(page);
     // The fake mower starts at the zone it was sent to (a zone, then a start).
     await expect
       .poll(

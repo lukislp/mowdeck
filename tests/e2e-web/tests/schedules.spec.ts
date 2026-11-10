@@ -25,6 +25,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 const SCHEDULER = '/api/v1/scheduler';
@@ -147,6 +148,7 @@ test('schedules: create, fire, skip next, run now in the rain, viewer read-only'
       (r) => r.url().endsWith(`${SCHEDULER}/schedules`) && r.request().method() === 'POST',
     );
     await page.getByTestId('sched-save').click();
+    await acknowledgeSafety(page);
     const createdResponse = await created;
     expect(createdResponse.status(), await createdResponse.text()).toBe(201);
     const scheduleId = ((await createdResponse.json()) as { id: string }).id;
@@ -202,6 +204,7 @@ test('schedules: create, fire, skip next, run now in the rain, viewer read-only'
     const sheet = page.getByTestId('run-sheet');
     await expect(sheet.getByTestId('run-respect-rain')).toHaveAttribute('aria-checked', 'true');
     await sheet.getByTestId('run-confirm').click();
+    await acknowledgeSafety(page);
     await expect(sheet.getByTestId('run-result')).toContainText('Regen');
     await expect(
       sheet.getByTestId('run-result').locator('[data-value="skipped_rain"]'),

@@ -110,6 +110,7 @@
     explainKey,
     type ErrorExplanation,
   } from '#lib/mower/error-explain.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import type { RainDecision } from '#lib/schedules/types.js';
   import {
     availability,
@@ -327,6 +328,7 @@
       ),
     setpoint: (command) => sendCommand(id, command),
     start: (request) => sendCommand(id, { kind: 'start_mow', ...request }),
+    acknowledge: () => safety.ask('start_mow'),
     dock: (endJob) => sendCommand(id, { kind: 'return_to_dock', end_job: endJob }),
     saveDefaults: (pattern) => saveMowDefaults(pattern),
     paths: {
@@ -390,6 +392,7 @@
     preview: (request, signal) =>
       unwrap(plannerApi.POST('/api/v1/planner/plans/preview', { body: request, signal })),
     plan: (request) => unwrap(plannerApi.POST('/api/v1/planner/plans', { body: request })),
+    acknowledge: (covered) => safety.ask('spot_mow', covered),
     command: (command) => sendCommand(id, command),
     paths: {
       replace: (seed) => {
@@ -1174,6 +1177,7 @@
   /** Start with one of the mower's own plans (no map areas to choose). */
   async function startPlan(plan: StartPlan): Promise<void> {
     planChoice = false;
+    if (!(await safety.ask('start_mow'))) return;
     await sendCommand(id, planCommand(plan));
   }
 
@@ -1200,7 +1204,8 @@
       return;
     }
     const item = BAR.find((b) => b.id === action);
-    if (item) await sendCommand(id, { kind: item.kind });
+    // Resume asks for the safety acknowledgement; pause and dock never do (`#lib/safety/rule`).
+    if (item && (await safety.ask(item.kind))) await sendCommand(id, { kind: item.kind });
   }
 
   /** The owner ended the job (or starts another): the planned path goes from the map. */

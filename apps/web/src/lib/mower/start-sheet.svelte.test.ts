@@ -26,6 +26,7 @@ function deps(): StartSheetDeps {
     preview: vi.fn(),
     setpoint: vi.fn(async () => true),
     start: vi.fn(async () => true),
+    acknowledge: vi.fn(async () => true),
     dock: vi.fn(async () => true),
     saveDefaults: vi.fn(async () => undefined),
     paths: { replace: vi.fn(), ended: vi.fn() },

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Lukas Körber
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   actionLabel,
@@ -130,10 +130,13 @@ describe('commandOf and scheduleOf', () => {
 });
 
 describe('execute', () => {
+  const ack = vi.fn(async () => true);
+  beforeEach(() => ack.mockClear());
+
   it('runs the actions in order through the regular endpoints', async () => {
     const run = executor();
     const order = proposal([immediate('dock'), later()]);
-    const result = await execute(order, run, NOW);
+    const result = await execute(order, run, NOW, ack);
     expect(result).toEqual({ done: 2, failedAt: null });
     expect(run.calls).toEqual([
       { kind: 'return_to_dock' },
@@ -143,9 +146,35 @@ describe('execute', () => {
 
   it('stops at the first refusal', async () => {
     const run = executor([false]);
-    const result = await execute(proposal([immediate('dock'), later()]), run, NOW);
+    const result = await execute(proposal([immediate('dock'), later()]), run, NOW, ack);
     expect(result).toEqual({ done: 0, failedAt: 0 });
     expect(run.schedule).not.toHaveBeenCalled();
+  });
+
+  it('asks the safety acknowledgement once, before a start, a resume or a schedule', async () => {
+    const run = executor();
+    await execute(proposal([immediate('start_now'), later()]), run, NOW, ack);
+    expect(ack).toHaveBeenCalledTimes(1);
+    expect(ack).toHaveBeenCalledWith('start_mow');
+    await execute(proposal([immediate('resume')]), executor(), NOW, ack);
+    expect(ack).toHaveBeenLastCalledWith('resume_mow');
+    await execute(proposal([later()]), executor(), NOW, ack);
+    expect(ack).toHaveBeenLastCalledWith('schedule_enable');
+  });
+
+  it('never asks for a pause or a dock', async () => {
+    const run = executor();
+    await execute(proposal([immediate('pause'), immediate('dock')]), run, NOW, ack);
+    expect(ack).not.toHaveBeenCalled();
+    expect(run.calls).toHaveLength(2);
+  });
+
+  it('sends nothing when the acknowledgement is declined', async () => {
+    const run = executor();
+    const declined = vi.fn(async () => false);
+    const result = await execute(proposal([immediate('start_now')]), run, NOW, declined);
+    expect(result).toEqual({ done: 0, failedAt: 0 });
+    expect(run.calls).toEqual([]);
   });
 
   it('never runs an expired or not executable proposal', async () => {
