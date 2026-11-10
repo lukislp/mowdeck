@@ -232,7 +232,7 @@ All routes are under the authenticated layout except `/login` and `/register` (t
 - **Users** (minimal): list members, create a sub-user (username, display name, temporary password with `must_change_password`, one role at account level), disable or enable, reset password. Role editing and per-group assignments come later.
 - **API tokens** (minimal): list, create with name and grants (preset: "Home Assistant: view and control, account level"), show the secret once with a copy button, revoke.
 - **Theme:** System (default), Light, Dark (section 12.2).
-- **Language:** Deutsch (default), English (section 6).
+- **Language:** Deutsch (default), English (section 6). The same switch sits in the footer of the sign-in and registration pages.
 - **Install:** Chromium fires `beforeinstallprompt`; the app stores the event and shows an "Install app" action in the account page and once as a dismissible hint on the list (https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeinstallprompt_event). iOS has no such event; the hint shows the Share, "Zum Home-Bildschirm" instructions instead. Installed state is detected with `matchMedia('(display-mode: standalone)')`.
 
 ### 4.5 Notifications (Task 12)

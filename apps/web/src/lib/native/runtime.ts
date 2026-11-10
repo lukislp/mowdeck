@@ -7,6 +7,7 @@
 import { fleetApi, identityApi, notificationsApi, unwrap } from '#lib/api/client.js';
 import { ApiProblem } from '#lib/api/problem.js';
 import { session } from '#lib/auth/session.svelte.js';
+import { forgetVisitor } from '#lib/demo/sandbox.js';
 
 import { nativeBridge } from './capacitor';
 import { NativeShell } from './shell.svelte';
@@ -24,6 +25,12 @@ export const nativeShell = new NativeShell({
   storage: localStore(),
   user: () => (session.me ? `${session.me.subject}@${session.me.account_id ?? ''}` : null),
   session: () => session.me?.session_id ?? null,
+  async leaveSession() {
+    // Like the logout of the settings page: a demo visitor who leaves on purpose gets no fresh
+    // sandbox by itself (ADR 0076).
+    forgetVisitor();
+    if (session.status === 'authenticated') await session.logout();
+  },
   apns: {
     add: (token, deviceName, installationId) =>
       unwrap(

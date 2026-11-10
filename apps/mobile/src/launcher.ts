@@ -10,12 +10,11 @@ import './pages.css';
 import { CapacitorHttp } from '@capacitor/core';
 
 import { checkServer, type ConnectResult } from './connect';
-import { applyTexts, texts } from './i18n';
+import { startLanguage } from './i18n';
+import { languageStorage } from './language-storage';
 import { MowDeckShell } from './shell';
 
-const language = navigator.language ?? 'en';
-const t = texts(language);
-applyTexts(document, t, language);
+const page = startLanguage(document, languageStorage(), navigator.language);
 
 const form = document.querySelector<HTMLFormElement>('#connect')!;
 const input = document.querySelector<HTMLInputElement>('#server')!;
@@ -42,15 +41,18 @@ function render(result: ConnectResult): void {
   pending = null;
   switch (result.kind) {
     case 'invalid':
-      show(t[result.problem], 'error');
+      show(page.texts()[result.problem], 'error');
       break;
     case 'unreachable':
       pending = result.origin;
       anyway.hidden = false;
-      show(t.unreachable + (result.insecure ? ` ${t.insecure}` : ''), 'error');
+      show(
+        page.texts().unreachable + (result.insecure ? ` ${page.texts().insecure}` : ''),
+        'error',
+      );
       break;
     case 'ok':
-      if (result.insecure) show(t.insecure, 'warning');
+      if (result.insecure) show(page.texts().insecure, 'warning');
       void use(result.origin);
       break;
   }
@@ -59,7 +61,7 @@ function render(result: ConnectResult): void {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   submit.disabled = true;
-  submit.textContent = t.checking;
+  submit.textContent = page.texts().checking;
   show('', 'none');
   void checkServer(input.value, async (url) => {
     const response = await CapacitorHttp.get({ url, connectTimeout: 8000, readTimeout: 8000 });
@@ -68,7 +70,7 @@ form.addEventListener('submit', (event) => {
     .then(render)
     .finally(() => {
       submit.disabled = false;
-      submit.textContent = t.connect;
+      submit.textContent = page.texts().connect;
     });
 });
 
