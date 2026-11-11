@@ -12,6 +12,7 @@ from mowdeck_contracts.v1 import AccountKind, PlainText, UiAreaDef
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 from identity.application.security import SecurityOverview, SessionView
+from identity.application.self_deletion import SelfDeleted
 from identity.application.sessions import MeView, TokenPair
 from identity.application.users import MemberView
 from identity.domain.devices import ip_prefix
@@ -267,6 +268,41 @@ class AccountDeleteIn(In):
     """``DELETE /accounts/{id}``: the owner's password, or none after a step-up confirmation."""
 
     password: Password | None = None
+
+
+class SelfDeletionIn(In):
+    """``DELETE /me``: the caller's password, or none after a step-up confirmation."""
+
+    password: Password | None = None
+
+
+class SelfDeletionOut(BaseModel):
+    """``DELETE /me``: which of the two deletions the caller's role meant, and its state."""
+
+    operation: Literal["account", "user"] = Field(
+        description=(
+            "`user`: the caller was a member without the owner relation and is deleted now; "
+            "the account stays. `account`: the caller owns the account, which is now scheduled "
+            "for deletion (`DELETE /accounts/{id}`)."
+        )
+    )
+    account_id: UUID = Field(description="The account the caller was signed in to.")
+    delete_after: datetime | None = Field(
+        default=None,
+        description=(
+            "`account` only: when the grace period ends and the purge starts; until then the "
+            "owner can call `POST /accounts/{id}/restore`. Null for `user` (nothing to restore)."
+        ),
+    )
+
+    @classmethod
+    def of(cls, done: SelfDeleted) -> "SelfDeletionOut":
+        """From the use case's result."""
+        return cls(
+            operation=done.operation.value,
+            account_id=done.account_id,
+            delete_after=done.delete_after,
+        )
 
 
 class LevelIn(In):

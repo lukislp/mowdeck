@@ -291,7 +291,8 @@ class SecurityService:
         """True when the access token belongs to a login session that was ended (revoked,
         logged out, handed to the app): Identity's own endpoints refuse it at once, other
         services accept it until it expires. Tokens without a session (API tokens) and
-        sessions Identity does not know are not ended."""
+        sessions Identity does not know are not ended, unless the user is gone as well: a
+        deleted user's sessions were deleted with them."""
         if principal.session_id is None or principal.kind not in (
             PrincipalKind.USER,
             PrincipalKind.SUBUSER,
@@ -300,7 +301,11 @@ class SecurityService:
         async with self.deps.store.transaction() as tx:
             if await tx.sessions.count(family_id=principal.session_id, revoked_at=None):
                 return False
-            return await tx.sessions.count(family_id=principal.session_id) > 0
+            if await tx.sessions.count(family_id=principal.session_id) > 0:
+                return True
+            # No row of the session at all: a user who was deleted (ADR 0082) took the session
+            # rows along, and the access token must not outlive them here.
+            return await tx.users.count(id=principal.subject) == 0
 
     # --- events ------------------------------------------------------------------------------
 

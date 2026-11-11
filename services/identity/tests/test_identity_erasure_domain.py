@@ -14,18 +14,20 @@ from identity.domain.erasure import (
     AUDIT_DETAILS_KEPT,
     AccountErasure,
     ErasureState,
+    SelfDeletion,
+    audit_fields_after_user_scrub,
+    concerns_user,
     deletion_blocked_by,
     grace_over,
     other_members,
     retry_delay,
+    self_deletion,
 )
 from identity.domain.models import Account, AccountStatus, Membership, Status
 
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=UTC)
-MIGRATION = (
-    Path(__file__).resolve().parents[1]
-    / "src/identity/adapters/db/migrations/versions/0011_account_erasure.py"
-)
+VERSIONS = Path(__file__).resolve().parents[1] / "src/identity/adapters/db/migrations/versions"
+MIGRATIONS = (VERSIONS / "0011_account_erasure.py", VERSIONS / "0012_user_audit_scrub.py")
 
 
 def _member(user_id: UUID, *, owner: bool = False, status: Status = Status.ACTIVE) -> Membership:
@@ -114,8 +116,9 @@ def test_the_record_accepts_the_stored_state_string() -> None:
     assert erasure.state is ErasureState.ERASED
 
 
-def test_the_migration_keeps_the_same_audit_keys_as_the_domain() -> None:
-    spec = importlib.util.spec_from_file_location("migration_0011", MIGRATION)
+@pytest.mark.parametrize("migration", MIGRATIONS, ids=lambda path: path.name)
+def test_the_migrations_keep_the_same_audit_keys_as_the_domain(migration: Path) -> None:
+    spec = importlib.util.spec_from_file_location(f"migration_{migration.stem}", migration)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -126,3 +129,45 @@ def test_the_migration_keeps_the_same_audit_keys_as_the_domain() -> None:
 def test_no_personal_key_is_kept() -> None:
     personal = {"username", "name", "display_name", "email", "from", "to", "device", "client"}
     assert not personal & AUDIT_DETAILS_KEPT
+
+
+def test_the_owner_deletes_the_account_and_everybody_else_themselves() -> None:
+    assert self_deletion(_member(uuid4(), owner=True)) is SelfDeletion.ACCOUNT
+    assert self_deletion(_member(uuid4())) is SelfDeletion.USER
+    admin = _member(uuid4())
+    admin.is_admin = True
+    assert self_deletion(admin) is SelfDeletion.USER  # an admin is not the owner
+    assert self_deletion(_member(uuid4(), status=Status.DISABLED)) is SelfDeletion.USER
+
+
+def test_an_audit_row_concerns_a_user_as_actor_or_as_target() -> None:
+    anna, other = uuid4(), uuid4()
+
+    def row(actor: str | None, target_type: str | None, target_id: str | None) -> bool:
+        return concerns_user(
+            anna, actor_subject=actor, target_type=target_type, target_id=target_id
+        )
+
+    assert row(f"user:{anna}", "role", "r-1")
+    assert row(None, "user", str(anna))
+    assert row(f"user:{other}", "user", str(anna))
+    assert not row(f"user:{other}", "user", str(other))
+    assert not row(f"api_token:{anna}", "api_token", str(anna))  # an id of another kind
+    assert not row(None, "session", str(anna))
+    assert not row(None, None, None)
+
+
+def test_a_deleted_users_audit_row_keeps_only_what_is_not_theirs() -> None:
+    anna, admin = uuid4(), uuid4()
+    details = {"username": "anna", "device": "Firefox", "session": "s-1", "subuser": True}
+    kept = {"session": "s-1", "subuser": True}
+
+    def after(actor: str | None) -> tuple[str | None, str | None, dict[str, object]]:
+        return audit_fields_after_user_scrub(
+            anna, actor_subject=actor, actor_name="A name", ip="10.0.0.1", details=details
+        )
+
+    assert after(f"user:{anna}") == (None, None, kept)  # the user acted
+    assert after(None) == (None, None, kept)  # a sign-in: the address is the user's
+    assert after(f"user:{admin}") == ("A name", "10.0.0.1", kept)  # the admin's name and address
+    assert details["username"] == "anna"  # the input is not changed

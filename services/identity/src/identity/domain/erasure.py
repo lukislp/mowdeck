@@ -13,13 +13,19 @@ gone; the :class:`AccountErasure` record stays as the proof):
   which services have to confirm, which did, and when the next attempt is due. No way back.
 * **erased**: every required service confirmed and Identity deleted its own rows.
 
+A member who is not the owner deletes only themselves ("delete me", step 3): the user row, the
+membership and the personal rows go at once, without a grace period, and the account stays.
+:func:`self_deletion` decides which of the two operations applies to a member, and
+:func:`audit_fields_after_user_scrub` what an audit row keeps once a user is gone.
+
 The functions here are pure: the caller passes ``now``.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from identity.domain.models import Account, AccountStatus, Membership
@@ -76,6 +82,57 @@ def other_members(memberships: Iterable[Membership], user_id: UUID) -> list[Memb
 def deletion_blocked_by(memberships: Iterable[Membership], user_id: UUID) -> int:
     """How many other members stop ``user_id`` from deleting the account (0: nothing does)."""
     return len(other_members(memberships, user_id))
+
+
+class SelfDeletion(StrEnum):
+    """What "delete me" means for a member (``DELETE /identity/me``)."""
+
+    ACCOUNT = "account"
+    """The owner: the whole account, scheduled with the grace period (the account deletion)."""
+    USER = "user"
+    """Every other member, sub-users included: the user alone, at once; the account stays."""
+
+
+def self_deletion(membership: Membership) -> SelfDeletion:
+    """Which operation deletes this member. The owner cannot leave an account behind without an
+    owner (there is no hand-over), so the owner's own deletion is the account's; everybody else
+    deletes only themselves."""
+    return SelfDeletion.ACCOUNT if membership.is_owner else SelfDeletion.USER
+
+
+def user_subject(user_id: UUID) -> str:
+    """``actor_subject`` of a user's own audit rows."""
+    return f"user:{user_id}"
+
+
+def concerns_user(
+    user_id: UUID, *, actor_subject: str | None, target_type: str | None, target_id: str | None
+) -> bool:
+    """Whether an audit row is about this user: they acted, or they are the target."""
+    return actor_subject == user_subject(user_id) or (
+        target_type == "user" and target_id == str(user_id)
+    )
+
+
+def audit_fields_after_user_scrub(
+    user_id: UUID,
+    *,
+    actor_subject: str | None,
+    actor_name: str | None,
+    ip: str | None,
+    details: Mapping[str, Any],
+) -> tuple[str | None, str | None, dict[str, Any]]:
+    """``(actor_name, ip, details)`` of an audit row that concerns a deleted user.
+
+    ``details`` keeps only :data:`AUDIT_DETAILS_KEPT`. The name and the address go when they are
+    the user's: the user acted, or nobody is named as the actor (a sign-in, where the address is
+    the one the user came from). When somebody else acted on the user (an admin created or
+    disabled them) the name and address are that person's and stay."""
+    kept = {key: value for key, value in details.items() if key in AUDIT_DETAILS_KEPT}
+    by_somebody_else = actor_subject is not None and actor_subject != user_subject(user_id)
+    if by_somebody_else:
+        return actor_name, ip, kept
+    return None, None, kept
 
 
 def grace_over(account: Account, now: datetime) -> bool:

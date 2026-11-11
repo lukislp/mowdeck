@@ -9,7 +9,12 @@
   account only. Either way the sessions in the account end, the API tokens the user created in
   the account are revoked and the tuples are removed.
 * The owner cannot be disabled or removed; only the owner can disable or remove an admin;
-  nobody disables or removes themselves.
+  nobody disables or removes themselves through the administration.
+* A member who is not the owner can delete themselves (``delete_self``, ADR 0082): the user row,
+  every credential and session, the membership, the role assignments and tuples go at once, the
+  audit rows keep no personal field, and ``identity.user.deleted`` tells the other services.
+  What a deleted user leaves is in one place, :func:`delete_user_rows`, shared with the removal
+  of a sub-user and the erasure of an account.
 """
 
 from collections.abc import Sequence
@@ -29,21 +34,61 @@ from mowdeck_contracts.v1 import (
 from mowdeck_service_kit.entitlements import require_limit
 
 from identity.application.accounts import ensure_not_scheduled_for_deletion, ensure_unique_user
+from identity.application.api_tokens import is_widget_token
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import Tx
 from identity.application.roles import AssignmentSpec, assign_role
 from identity.application.work import Work
 from identity.domain.credentials import normalize_email, validate_password, validate_username
-from identity.domain.errors import ForbiddenError, InvalidInput, NotFoundError
+from identity.domain.erasure import SelfDeletion, self_deletion
+from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
 from identity.domain.models import (
+    ApiToken,
     Membership,
     RoleAssignment,
     Status,
     SubjectType,
+    TokenPurpose,
     User,
     UserKind,
 )
+
+OWNER_DELETES_THE_ACCOUNT = (
+    "the owner cannot leave the account: delete the account instead "
+    "(DELETE /api/v1/identity/accounts/{account_id})"
+)
+"""Why an owner is not deleted as a user; names the operation that applies."""
+
+
+async def delete_user_rows(tx: Tx, found: User) -> None:
+    """Everything Identity holds of one user, then the user: sessions, the tour progress, known
+    devices, passkeys and open ceremonies, app login codes, linked providers and their open
+    redirects, role assignments, memberships and the login attempts under the username.
+
+    The one list of a user's rows (PostgreSQL cascades most of them from ``users``; the memory
+    store does not, and a list that is spelled out does not depend on a foreign key somebody
+    forgets). Used by the removal of a sub-user, by "delete me" and by the account erasure.
+    """
+    user_id = found.id
+    await tx.sessions.delete(user_id=user_id)
+    await tx.onboarding.delete(user_id=user_id)
+    await tx.known_devices.delete(user_id=user_id)
+    await tx.passkeys.delete(user_id=user_id)
+    await tx.webauthn_challenges.delete(user_id=user_id)
+    await tx.app_login_codes.delete(user_id=user_id)
+    await tx.external_identities.delete(user_id=user_id)
+    await tx.oauth_states.delete(user_id=user_id)
+    await tx.assignments.delete(subject_type=SubjectType.USER.value, subject_id=user_id)
+    await tx.memberships.delete(user_id=user_id)
+    await tx.login_attempts.delete(username_norm=found.username_norm)
+    await tx.users.delete(id=user_id)
+
+
+def is_personal_token(token: ApiToken) -> bool:
+    """A token that is its creator's own and not the account's: a personal access token
+    (ADR 0064) or an iOS widget credential (ADR 0059, named after the creator's device)."""
+    return token.purpose is TokenPurpose.PERSONAL or is_widget_token(token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,15 +384,7 @@ class UserService:
             )
             await tx.memberships.delete(id=membership.id)
             if owned:
-                await tx.assignments.delete(subject_type=SubjectType.USER.value, subject_id=user_id)
-                await tx.memberships.delete(user_id=user_id)
-                await tx.sessions.delete(user_id=user_id)
-                # PostgreSQL cascades these; the memory store needs it spelled out.
-                await tx.external_identities.delete(user_id=user_id)
-                await tx.oauth_states.delete(user_id=user_id)
-                await tx.onboarding.delete(user_id=user_id)
-                await tx.login_attempts.delete(username_norm=found.username_norm)
-                await tx.users.delete(id=user_id)
+                await delete_user_rows(tx, found)
             await work.audit(
                 ctx,
                 "user.deleted" if owned else "user.removed",
@@ -355,13 +392,67 @@ class UserService:
                 target=("user", user_id),
                 details={"username": found.username_norm, "subuser": owned},
             )
-            work.emit(
-                IDENTITY_USER_DELETED,
-                account_id,
-                UserChanged(
-                    user_id=user_id,
-                    account_id=account_id,
-                    username=found.username_norm,
-                    subuser=owned,
-                ),
+            _emit_deleted(work, account_id, found, owned=owned)
+
+    async def delete_self(self, account_id: UUID, ctx: RequestContext) -> None:
+        """The caller deletes themselves (ADR 0082, "delete me"): a member who is not the owner.
+
+        At once and for good, without a grace period: nothing of the account is lost (what the
+        user created belongs to the account and stays, without their name), so there is nothing
+        to restore. In one unit of work: every session ends, the API tokens the user created are
+        revoked and their personal ones (personal access tokens, widget credentials) deleted,
+        the user's rows go (:func:`delete_user_rows`), the tuples are reconciled away, and the
+        audit rows about the user lose their personal fields (the rows stay, the last one is
+        ``user.self_deleted``). ``identity.user.deleted`` goes out after the commit: the other
+        services drop the user's rows and their name.
+
+        The caller's re-authentication is the use case above this one
+        (:class:`~identity.application.self_deletion.SelfDeletionService`). The owner is refused
+        here too (409): the rule is checked in the transaction that deletes.
+        """
+        actor = ctx.principal
+        if actor is None:
+            msg = "login required"
+            raise ForbiddenError(msg)
+        async with self.deps.uow() as work:
+            work.account_id = account_id
+            tx = work.tx
+            membership = await tx.memberships.get(account_id=account_id, user_id=actor.subject)
+            found = await tx.users.get(id=actor.subject) if membership else None
+            if membership is None or found is None:
+                msg = "user not found"
+                raise NotFoundError(msg)
+            if self_deletion(membership) is not SelfDeletion.USER:
+                raise ConflictError(OWNER_DELETES_THE_ACCOUNT)
+            owned = found.kind is UserKind.SUBUSER and found.owner_account_id == account_id
+            await self._cascade(work, account_id, found.id, "user deleted", all_sessions=True)
+            for token in await tx.api_tokens.find(account_id=account_id, created_by=found.id):
+                if is_personal_token(token):
+                    await tx.api_tokens.delete(id=token.id)
+            await work.audit(
+                ctx,
+                "user.self_deleted",
+                account_id=account_id,
+                target=("user", found.id),
+                details={"subuser": owned},
             )
+            await delete_user_rows(tx, found)
+            await tx.scrub_user_audit(found.id)
+            _emit_deleted(work, account_id, found, owned=owned, reason="self")
+
+
+def _emit_deleted(
+    work: Work, account_id: UUID, found: User, *, owned: bool, reason: str | None = None
+) -> None:
+    """``identity.user.deleted`` after the commit: the other services drop what is the user's."""
+    work.emit(
+        IDENTITY_USER_DELETED,
+        account_id,
+        UserChanged(
+            user_id=found.id,
+            account_id=account_id,
+            username=found.username_norm,
+            subuser=owned,
+            reason=reason,
+        ),
+    )
