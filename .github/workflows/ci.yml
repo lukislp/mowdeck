@@ -360,6 +360,39 @@ jobs:
       - run: pnpm --filter ts-codegen check
       - run: pnpm --filter web build
 
+  # The same steps as `web` on Node 26 (Active LTS since 2026-10-28), ahead of the move from
+  # Node 24 (docs/dev/web-app.md, "Node version"). A job of its own, not a matrix entry of `web`:
+  # a matrix would rename the required check `web`. It is informational: not in the ruleset of
+  # `main`, nothing needs it, and it runs on pull requests only, so a push to `main` never waits
+  # for it or fails because of it. Node is pinned to an exact 26.x release at least two weeks old;
+  # `.node-version` stays on 24 and is what every other job uses. To bump, change `node-version`
+  # below to the newest 26.x LTS release of that age (nodejs.org/dist/index.json).
+  web-node26:
+    needs: [changes]
+    if: ${{ !cancelled() && github.event_name != 'push' && needs.changes.outputs.web != 'false' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.0
+          cache: pnpm
+      - run: node --version
+      - run: pnpm install --frozen-lockfile
+      - name: App bundle notices are current
+        run: python3 tools/repo-checks/scripts/app_notices.py check --installed
+      - run: pnpm -r lint
+      - run: pnpm -r check
+      - run: pnpm -r --filter '!e2e-web' test
+      - run: pnpm --filter ts-codegen check
+      - run: pnpm --filter web build
+
   compose:
     needs: [changes]
     if: ${{ !cancelled() && needs.changes.outputs.compose != 'false' }}

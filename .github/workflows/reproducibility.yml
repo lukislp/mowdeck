@@ -35,6 +35,7 @@ on:
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - .node-version
+      - .corepack-version
       - .npmrc
       - apps/web/vite.config.ts
       - apps/web/package.json

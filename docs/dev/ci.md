@@ -13,7 +13,7 @@ The first job, `changes`, lists the files the pull request changes (the diff bet
 | `infra/helm/**` | helm |
 | `tests/load/**` | compose |
 | `apps/mobile/**` | web (+ gradle-wrapper for the Gradle wrapper) |
-| `apps/web/**`, `libs/mowdeck-ui/**`, `tools/ts-codegen/**`, `services/matter-server/**`, `package.json`, `pnpm-lock.yaml`, `.node-version`, ESLint/Stylelint/Prettier configuration | web, docker, camera-relay-media, e2e, e2e-web, e2e-demo (`apps/web/openapi/**` also python and docs) |
+| `apps/web/**`, `libs/mowdeck-ui/**`, `tools/ts-codegen/**`, `services/matter-server/**`, `package.json`, `pnpm-lock.yaml`, `.node-version`, `.corepack-version`, ESLint/Stylelint/Prettier configuration | web, docker, camera-relay-media, e2e, e2e-web, e2e-demo (`apps/web/openapi/**` also python and docs) |
 | `services/**`, `libs/**` | python, docs, docker, camera-relay-media, e2e, e2e-web, e2e-demo (`libs/**` also openfga-model) |
 | `pyproject.toml`, `uv.lock`, `.python-version`, `infra/compose/**`, `infra/mirror-env.sh`, `infra/openfga/**`, `infra/billing/**`, `infra/entitlements/**` | every job except web and gradle-wrapper |
 | `tests/e2e/**` | python, e2e |
@@ -41,6 +41,8 @@ Neither number is a gate beyond the web threshold; they are there to be visible 
 ## Required checks
 
 The branch ruleset of `main` requires `python`, `openfga-model`, `docs`, `web`, `compose`, `helm`, `docker`, `camera-relay-media`, `e2e` and `e2e-web` from this workflow (plus `review / dependency-review`, the Socket Security checks and CodeQL, which are not scoped). GitHub counts a job skipped by its `if:` as passed, so a skipped required job does not block the merge. A workflow that does not start at all (a `paths` filter under `on:`) would leave its required checks pending forever, which is why `ci.yml` has no `paths` filter and always starts; `test_ci_scope.py` keeps it that way. `e2e-web`, which merges the shard reports, is skipped together with its shards when the suite is not needed and still fails when a needed shard failed or was skipped.
+
+`web-node26` runs the steps of `web` on Node 26 (an exact 26.x release pinned in the job, see its comment and [Web app](web-app.md#node-version)) ahead of the move from Node 24, on pull requests only. It is deliberately not in the ruleset, and a job of its own rather than a matrix entry of `web`, so that the required check keeps the name `web`.
 
 Other workflows that only matter for some paths keep their own `paths` filter, because none of them is a required check: `helm-kind.yml` (the chart), `fuzzing.yml` (fuzzed code), `mirror-images.yml` (the image list), `reproducibility.yml` (the build inputs, see below).
 

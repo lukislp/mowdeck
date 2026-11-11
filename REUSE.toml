@@ -33,6 +33,7 @@ path = [
   "templates/service/template/{{_copier_conf.answers_file}}.jinja",
   ".python-version",
   ".node-version",
+  ".corepack-version",
   "pnpm-lock.yaml",
   "tests/e2e-web/fake-github/client_secret",
 ]
