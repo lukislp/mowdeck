@@ -142,8 +142,11 @@ class MemoryStore:
         rows = [s for (pid, _), s in self.step_rows.items() if pid == proposal_id]
         return [copy.deepcopy(s) for s in sorted(rows, key=lambda s: s.index)]
 
-    async def record_request(self, request: ProviderRequest) -> None:
+    async def record_request(self, request: ProviderRequest) -> bool:
+        if request.proposal_id is not None and request.proposal_id not in self.proposals:
+            return False
         self.requests.append(request)
+        return True
 
     async def count_requests(
         self,
@@ -221,6 +224,21 @@ class MemoryStore:
         if mower_id not in self.watch_accounts or previous != error_code:
             self.watch_accounts[mower_id] = account_id  # as the SQL store writes the column
         return previous
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted like the SQL store, under its table names."""
+        mine = {k for k, p in self.proposals.items() if p.account_id == account_id}
+        settings = set(self.preferences) | set(self.auto) | set(self.consents)
+        counts = {
+            "proposals": len(mine),
+            "proposal_images": sum(1 for key in self.images if key[0] in mine),
+            "proposal_steps": sum(1 for key in self.step_rows if key[0] in mine),
+            "provider_requests": sum(1 for r in self.requests if r.account_id == account_id),
+            "user_providers": sum(1 for key in self.providers if key[1] == account_id),
+            "user_preferences": sum(1 for key in settings if key[1] == account_id),
+            "auto_watch": sum(1 for a in self.watch_accounts.values() if a == account_id),
+        }
+        return {table: found for table, found in counts.items() if found}
 
     async def purge_account(self, account_id: UUID) -> int:
         gone = {k for k, p in self.proposals.items() if p.account_id == account_id}

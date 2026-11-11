@@ -438,8 +438,14 @@ class Store(ActivityStore, Protocol):
         ...
 
     async def purge_account(self, account_id: UUID) -> AccountPurge:
-        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0076):
-        directory, watches, geofences, preferences, test throttles, push subscriptions, APNs
-        devices, ntfy targets, inbox, camera images, deliveries, silences and Live Activity
-        registrations. The maintenance window belongs to the installation and stays."""
+        """Delete every row of an account in one transaction (the purge of an expired demo
+        sandbox, ADR 0076, and of a deleted account, ADR 0082): directory, watches, geofences,
+        preferences, test throttles, push subscriptions, APNs devices, ntfy targets, inbox,
+        camera images, deliveries, silences and Live Activity registrations. The maintenance
+        window belongs to the installation and stays."""
+        ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in every table, by table name; tables without one are left
+        out, so an account Notifications holds nothing of answers ``{}`` (ADR 0082)."""
         ...

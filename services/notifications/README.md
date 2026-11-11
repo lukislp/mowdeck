@@ -156,6 +156,7 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 | consumed | `event.telemetry.>` | durable queue `notifications-telemetry` | `telemetry.blade_hours.threshold` (`BladeHoursThreshold`): `blade_maintenance`; other telemetry events ignored |
 | consumed | `event.tracking.>` | durable queue `notifications-tracking` | `tracking.started`, `.moved`, `.stale`, `.ended` (`TrackingEvent`): the four `tracking_*` kinds |
 | consumed | `event.identity.grants.changed` | every instance | drop cached authorization decisions |
+| reply | `account.erase.notifications` | core NATS, queue `notifications-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply`: deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | request | `fleet.mowers.list` | at startup, retried | seeds the directory (`MowerListRequest` with one shard) |
 | request | `gateway.errors.explain` | core NATS, per rendered `mower_stuck` (cached an hour) | `ErrorExplainRequest` / `ErrorExplainReply`: the `error_detail` of the push text, with the lexicon of the state's `cloud_provider`, else its `connection` (ADR 0067) |
 | produced | `event.notifications.sent` | | `NotificationSent`: one rendered notification for one user and the channels it was queued for, with `created_at` (the inbox item's) |
@@ -240,6 +241,20 @@ Empty values mean unset. Compose mounts `infra/compose/secrets/apns/` (git-ignor
 
 VAPID keys for production: `python -m notifications.cli generate-vapid-keys` prints both as environment lines; keep the private key in a secret file (`MOWDECK_NOTIFICATIONS_VAPID_PRIVATE_KEY_FILE`). Changing the pair invalidates every browser subscription.
 
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.notifications` (core NATS, internal, no principal) after Fleet removed the account's mowers, and Notifications deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted, in one transaction:** `preferences`, `test_requests`, `push_subscriptions` (endpoint and keys), `apns_devices` (device tokens), `ntfy_targets` (server, topic, access token), `inbox`, `notification_images` (the camera photos), `deliveries` (queued and finished, so nothing queued is sent afterwards), `alarm_silences`, `live_activity_devices` (push-to-start tokens, the widget flag), `live_activities` (update tokens), `mower_watch`, `mower_geofence` and `mower_directory`. Every table with a `user_id` also has the `account_id`, so nothing is keyed by a person alone; `maintenance_window` is the installation's and stays.
+- **Work in flight:** the sends the outbox of this replica had already claimed for the account are cancelled, and so are camera photos still being taken for it (a photo that arrived later would be a row of the account again). A send that already reached the push service cannot be taken back.
+- **In memory:** what the use cases keep per mower (photo budget, command throttle, parsed geofence, Live Activity throttles and area names) is dropped when the mower is removed (`mower.removed`, which Fleet's erasure publishes first) and again for the mowers the purged rows still named. The rate limit of the push image URLs is keyed by notification id and empties itself after a minute without requests.
+- **Third parties:** none is called. Without the token, endpoint or topic no push reaches the device again. What stays outside MowDeck: the registration at Apple until the app signs out or is removed (the app removes it on sign-out), a Live Activity already on the lock screen until iOS ends it, the browser's subscription at its push service until the browser drops it, and messages an ntfy server still caches under its own retention.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge, over the schema); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
+
+Not closed by this: with several replicas the cancelling and the memory reach the replica that answers (another one finishes a send it already started, at most `MOWDECK_NOTIFICATIONS_SEND_DEADLINE_SECONDS` later, and keeps its per-mower memory until `mower.removed` reaches it or the process ends); and a message of the account that arrives after the purge (a late state or map snapshot of a mower that is already gone) is stored like any other, because the service cannot tell an erased account from one it has not seen yet.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), the cancelling in the outbox and the fan-out, and the row count of the `Store` port); the SQL is in `adapters/db/`.
+
 ## Layers
 
 | Package | Content | Rule |
@@ -247,7 +262,7 @@ VAPID keys for production: `python -m notifications.cli generate-vapid-keys` pri
 | `domain/` | models, rules, geofence geometry, quiet hours, message rendering | pure Python, no I/O |
 | `application/` | watcher (rules use case), fan-out, outbox worker, user settings, ports | depends on `domain` and ports only |
 | `adapters/api/` | FastAPI routers, the caller gate, problem mapping | translate HTTP to use cases |
-| `adapters/bus/` | subscriptions, `notifications.sent` publisher, directory seed | translate messages to use cases |
+| `adapters/bus/` | subscriptions, `notifications.sent` publisher, directory seed, the account erasure request (`erasure.py`) | translate messages to use cases |
 | `adapters/channels/` | registry, `webpush`, `apns`, `ntfy`, `log`, VAPID keys, extension interfaces | implement `NotificationChannel` |
 | `adapters/db/`, `adapters/memory.py` | PostgreSQL store, Alembic migrations, in-memory store | implement the `Store` port |
 | `messages/` | DE and EN templates | data |

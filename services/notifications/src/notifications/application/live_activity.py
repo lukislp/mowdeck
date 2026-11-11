@@ -108,7 +108,8 @@ class LiveActivities:
         self._areas: dict[UUID, dict[str, str]] = {}
 
     def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
-        """Drop what is kept in memory about these mowers (demo sandbox purge)."""
+        """Drop what is kept in memory about these mowers (a removed mower, an account
+        purge)."""
         gone = set(mower_ids)
         for mower_id in gone:
             self._last.pop(mower_id, None)

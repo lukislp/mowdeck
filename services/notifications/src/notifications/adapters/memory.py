@@ -8,6 +8,7 @@ Transactions run one at a time and are all or nothing (the snapshot is restored 
 
 import asyncio
 import copy
+import dataclasses
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
@@ -79,6 +80,13 @@ class _Data:
     images: dict[UUID, NotificationImage] = field(default_factory=dict)
     activity_devices: dict[tuple[UUID, UUID], ActivityDevice] = field(default_factory=dict)
     live_activities: dict[tuple[UUID, UUID, UUID], LiveActivity] = field(default_factory=dict)
+
+
+INSTALLATION_DATA = frozenset({"maintenance"})
+"""The memory tables that belong to the installation, not to an account."""
+
+ACCOUNT_DATA = tuple(f.name for f in dataclasses.fields(_Data) if f.name not in INSTALLATION_DATA)
+"""The memory tables that hold rows of accounts (what the account erasure counts, ADR 0082)."""
 
 
 class _MemoryTx:
@@ -606,6 +614,22 @@ class MemoryStore:
             data.activity_devices = drop(data.activity_devices)
             data.live_activities = drop(data.live_activities)
             return AccountPurge(deleted=removed, mower_ids=mowers)
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every memory table of an account (the maintenance window is the
+        installation's); the two keyed by ``(user, account, ...)`` by their key."""
+        data = self.data
+        keyed = {"tests", "silences"}
+        counts: dict[str, int] = {}
+        for name in ACCOUNT_DATA:
+            rows: dict[Any, Any] = getattr(data, name)
+            if name in keyed:
+                found = sum(1 for key in rows if key[1] == account_id)
+            else:
+                found = sum(1 for row in rows.values() if row.account_id == account_id)
+            if found:
+                counts[name] = found
+        return counts
 
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         def match(user: UUID, account: UUID) -> bool:

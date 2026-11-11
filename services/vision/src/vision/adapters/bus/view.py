@@ -98,6 +98,9 @@ class BusMowerView:
         self._paths: dict[UUID, tuple[UUID, MowPath | None, datetime]] = {}
         self._starts: dict[UUID, list[str]] = {}
         self._watches: dict[UUID, set[_Watch]] = {}
+        self._owners: dict[UUID, UUID] = {}
+        """The account of every mower something is kept of (a mower of which only commands
+        were seen has no state or snapshot that names it)."""
 
     # --- port -----------------------------------------------------------------------------
 
@@ -153,11 +156,13 @@ class BusMowerView:
     def forget_account(self, account_id: UUID) -> set[UUID]:
         """Drop the states, maps, capabilities, paths, commands, tracks and starts of the
         account's mowers (known from their states and snapshots); open watches stay."""
-        mowers = {m for m, s in self._states.items() if s.state.account_id == account_id}
+        mowers = {m for m, owner in self._owners.items() if owner == account_id}
+        mowers |= {m for m, s in self._states.items() if s.state.account_id == account_id}
         mowers |= {m for m, (owner, _) in self._maps.items() if owner == account_id}
         mowers |= {m for m, (owner, _) in self._capabilities.items() if owner == account_id}
         mowers |= {m for m, (owner, _, _) in self._paths.items() if owner == account_id}
         for mower_id in mowers:
+            self._owners.pop(mower_id, None)
             self._states.pop(mower_id, None)
             self._maps.pop(mower_id, None)
             self._capabilities.pop(mower_id, None)
@@ -180,6 +185,7 @@ class BusMowerView:
         if current is not None and current.state.observed_at > state.observed_at:
             return  # an older state delivered late
         self._states[state.mower_id] = ObservedState(state, received)
+        self._owners[state.mower_id] = state.account_id
         self._add_track(state)
         self._push(state.mower_id, WatchEvent("state", received, state=state))
 
@@ -196,6 +202,7 @@ class BusMowerView:
     def on_map(self, snapshot: MowerMapSnapshot) -> None:
         """A map snapshot."""
         self._maps[snapshot.mower_id] = (snapshot.account_id, snapshot.map)
+        self._owners[snapshot.mower_id] = snapshot.account_id
 
     def on_path(self, snapshot: MowerPathSnapshot) -> None:
         """A path snapshot (older ones delivered late are ignored)."""
@@ -203,14 +210,17 @@ class BusMowerView:
         if current is not None and current[2] > snapshot.observed_at:
             return
         self._paths[snapshot.mower_id] = (snapshot.account_id, snapshot.path, snapshot.observed_at)
+        self._owners[snapshot.mower_id] = snapshot.account_id
 
     def on_capabilities(self, snapshot: MowerCapabilitiesSnapshot) -> None:
         """A capabilities snapshot."""
         self._capabilities[snapshot.mower_id] = (snapshot.account_id, snapshot.capabilities)
+        self._owners[snapshot.mower_id] = snapshot.account_id
 
     def on_command(self, envelope: CommandEnvelope) -> None:
         """A command for a mower (drive frames of one session folded into one entry)."""
         kind = envelope.command.kind
+        self._owners[envelope.mower_id] = envelope.account_id
         history = self._commands.setdefault(envelope.mower_id, deque(maxlen=MAX_COMMANDS))
         correlation = envelope.correlation_id
         if kind == "manual_drive" and history and history[-1][2] == correlation:
