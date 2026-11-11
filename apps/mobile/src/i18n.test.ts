@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  fill,
   LANGUAGE_KEY,
   readLanguage,
   resolveLanguage,
@@ -140,6 +141,29 @@ describe('the texts of the bundled pages', () => {
       for (const key of keys) {
         expect(de, `${file}: ${key} (de)`).toHaveProperty(key);
         expect(en, `${file}: ${key} (en)`).toHaveProperty(key);
+      }
+    }
+  });
+});
+
+describe('fill', () => {
+  it('puts the host into every placeholder and leaves unknown ones', () => {
+    expect(fill('{host} ... {host} {other}', { host: 'nas.lan:8080' })).toBe(
+      'nas.lan:8080 ... nas.lan:8080 {other}',
+    );
+  });
+
+  it('has the host in each text of the confirmation, in both languages', () => {
+    for (const language of ['de', 'en']) {
+      const t = texts(language);
+      for (const key of [
+        'redirected',
+        'redirectedOpen',
+        'anywayTitle',
+        'anywayBody',
+        'anywayOpen',
+      ] as const) {
+        expect(fill(t[key], { host: 'x.lan' }), `${language}: ${key}`).toContain('x.lan');
       }
     }
   });
