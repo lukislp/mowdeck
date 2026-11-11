@@ -251,6 +251,8 @@ def run(
         "port": settings.http_port,
         "log_config": None,
         "proxy_headers": True,
+        # uvicorn's access log line carries the client address; the public demo keeps none.
+        "access_log": not settings.demo_mode,
         "timeout_graceful_shutdown": int(settings.shutdown_grace_seconds) or None,
         **server_tls_options(settings),
         **uvicorn_options,

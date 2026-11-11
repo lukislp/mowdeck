@@ -176,7 +176,7 @@ class PasskeyService:
             aaguid=created.aaguid,
             backup_eligible=created.backup_eligible,
             backed_up=created.backed_up,
-            created_user_agent=(ctx.user_agent or "")[:200] or None,
+            created_user_agent=ctx.stored_user_agent,
         )
         async with self.deps.uow() as work:
             if await work.tx.passkeys.count(user_id=principal.subject) >= MAX_PASSKEYS_PER_USER:

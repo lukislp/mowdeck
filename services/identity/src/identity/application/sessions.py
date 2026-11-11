@@ -172,7 +172,7 @@ class SessionService:
         async with self.deps.store.transaction() as tx:
             if username_norm:
                 await tx.login_attempts.add(
-                    LoginAttempt(uuid4(), now, username_norm, False, ctx.ip, reason)
+                    LoginAttempt(uuid4(), now, username_norm, False, ctx.stored_ip, reason)
                 )
             # Failures of a known user or token also land in the audit log of its accounts.
             accounts: list[UUID | None] = [None]
@@ -325,14 +325,14 @@ class SessionService:
                 idle_expires_at=now + config.refresh_idle,
                 absolute_expires_at=now + config.refresh_absolute,
                 last_used_at=now,
-                user_agent=(ctx.user_agent or "")[:200] or None,
-                ip=ctx.ip,
+                user_agent=ctx.stored_user_agent,
+                ip=ctx.stored_ip,
                 auth_time=auth_time,
                 auth_method=auth_method,
             )
             await tx.sessions.add(session)
             await tx.login_attempts.add(
-                LoginAttempt(uuid4(), now, found.username_norm, True, ctx.ip)
+                LoginAttempt(uuid4(), now, found.username_norm, True, ctx.stored_ip)
             )
             found.last_login_at = now
             await tx.users.update(found)
@@ -827,8 +827,8 @@ class SessionService:
                     idle_expires_at=min(now + config.refresh_idle, session.absolute_expires_at),
                     absolute_expires_at=session.absolute_expires_at,
                     last_used_at=now,
-                    user_agent=(ctx.user_agent or "")[:200] or None,
-                    ip=ctx.ip,
+                    user_agent=ctx.stored_user_agent,
+                    ip=ctx.stored_ip,
                     auth_time=session.auth_time,
                     auth_method=session.auth_method,
                 )

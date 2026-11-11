@@ -56,6 +56,32 @@ class IdentityConfig:
     """Public demo (ADR 0068): the prepared user every visitor signs in as with one click.
     None outside demo mode, where the one-click sign-in does not exist."""
 
+    @property
+    def demo(self) -> bool:
+        """Public demo mode: the one predicate for "this is the public demo" in Identity."""
+        return self.demo_username is not None
+
+    def request_context(
+        self,
+        *,
+        principal: Principal | None = None,
+        ip: str | None = None,
+        correlation_id: str | None = None,
+        user_agent: str | None = None,
+        extra: dict[str, str] | None = None,
+    ) -> "RequestContext":
+        """The context of one request. The only place that decides whether the visitor's address
+        and browser may be written down: the public demo keeps neither (see
+        :attr:`RequestContext.stored_ip`)."""
+        return RequestContext(
+            principal=principal,
+            ip=ip,
+            correlation_id=correlation_id,
+            user_agent=user_agent,
+            extra=extra or {},
+            keep_visitor_data=not self.demo,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class GitHubLogin:
@@ -96,6 +122,21 @@ class RequestContext:
     correlation_id: str | None = None
     user_agent: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
+    keep_visitor_data: bool = True
+    """False in the public demo: ``ip`` and ``user_agent`` still serve the in-memory rate limit
+    and the response, but nothing persists them (use ``stored_ip`` and ``stored_user_agent``
+    for every row, audit entry and device record)."""
+
+    @property
+    def stored_ip(self) -> str | None:
+        """The address to persist: None when the context must not keep visitor data."""
+        return self.ip if self.keep_visitor_data else None
+
+    @property
+    def stored_user_agent(self) -> str | None:
+        """The browser string to persist (cut to the column width): None when the context must
+        not keep visitor data, and None for an empty one."""
+        return (self.user_agent or "")[:200] or None if self.keep_visitor_data else None
 
     @property
     def actor_subject(self) -> str | None:
@@ -111,7 +152,7 @@ class RequestContext:
             "actor_subject": self.actor_subject,
             "actor_kind": self.principal.kind.value if self.principal else None,
             "actor_name": self.principal.display_name if self.principal else None,
-            "ip": self.ip,
+            "ip": self.stored_ip,
             "correlation_id": self.correlation_id,
         }
         return AuditEntry(**{**base, **values})  # type: ignore[arg-type]
