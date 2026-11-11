@@ -180,6 +180,7 @@ USERS: dict[str, Access] = {
             "gateway.errors.explain",
             "gateway.mower.*.photo",
         ),
+        serve=("account.erase.notifications",),
         consume=(
             "command.mower.*",
             "device.mower.>",
@@ -257,6 +258,7 @@ USERS: dict[str, Access] = {
             "fleet.drive.stop",
             "gateway.mower.*.photo",
         ),
+        serve=("account.erase.vision",),
         consume=(
             "command.mower.*",
             "command.result.mower.*",

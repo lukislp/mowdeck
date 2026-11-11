@@ -30,6 +30,7 @@ import asyncio
 import contextlib
 from datetime import datetime, timedelta
 from typing import Protocol
+from uuid import UUID
 
 from mowdeck_service_kit import get_logger
 
@@ -74,6 +75,8 @@ class Outbox:
         self._clock = clock
         self._observer = observer
         self._in_flight: dict[str, set[asyncio.Task[None]]] = {}
+        self._sending: dict[asyncio.Task[None], UUID] = {}
+        """The account of every delivery being sent right now."""
         self._finished = asyncio.Event()
         self._progress_at = clock()
         """Last time the outbox had nothing to do or finished a delivery."""
@@ -146,6 +149,17 @@ class Outbox:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    def forget_account(self, account_id: UUID) -> None:
+        """Cancel the running sends of an account that was erased (ADR 0082).
+
+        Their rows are gone already, so nothing is claimed for the account again; what this
+        replica claimed before must not leave afterwards. A send that already reached the
+        channel's server cannot be taken back.
+        """
+        for task, owner in list(self._sending.items()):
+            if owner == account_id:
+                task.cancel()
+
     def stalled_for(self, now: datetime | None = None) -> timedelta | None:
         """How long the outbox has made no progress, None while that is below ``stall_after``.
 
@@ -158,9 +172,11 @@ class Outbox:
         task = asyncio.create_task(self._run(delivery), name=f"delivery-{delivery.id}")
         group = self._in_flight.setdefault(delivery.channel, set())
         group.add(task)
+        self._sending[task] = delivery.account_id
 
         def done(finished: asyncio.Task[None]) -> None:
             group.discard(finished)
+            self._sending.pop(finished, None)
             self._progress_at = self._clock()
             self._finished.set()
 

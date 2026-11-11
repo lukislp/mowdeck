@@ -117,7 +117,8 @@ class Fanout:
         self._config = config
         self._clock = clock
         self._photos = photos
-        self._captures: set[asyncio.Task[None]] = set()
+        self._captures: dict[asyncio.Task[None], UUID] = {}
+        """The photos being taken, with the account each is for."""
         self._photo_log: dict[UUID, list[datetime]] = {}
         """Per mower: when photos were requested in the last 24 hours (the notifications
         budget; per replica, reset by a restart)."""
@@ -134,9 +135,16 @@ class Fanout:
         await self.drain()
 
     def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
-        """Drop the photo budget of these mowers (demo sandbox purge)."""
+        """Drop the photo budget of these mowers (a removed mower, an account purge)."""
         for mower_id in mower_ids:
             self._photo_log.pop(mower_id, None)
+
+    def forget_account(self, account_id: UUID) -> None:
+        """Cancel the photos being taken for an account that was erased (ADR 0082): a photo
+        that arrived afterwards would be stored as a row of the account again."""
+        for task, owner in list(self._captures.items()):
+            if owner == account_id:
+                task.cancel()
 
     async def prune_images(self) -> int:
         """Delete the photos past their retention."""
@@ -163,8 +171,8 @@ class Fanout:
         task = asyncio.create_task(
             self._capture(image_id, mower_id, account_id), name=f"notification-photo-{image_id}"
         )
-        self._captures.add(task)
-        task.add_done_callback(self._captures.discard)
+        self._captures[task] = account_id
+        task.add_done_callback(lambda finished: self._captures.pop(finished, None))
 
     async def _capture(self, image_id: UUID, mower_id: UUID, account_id: UUID) -> None:
         """Take the photo and store it (or a failure marker, so the push image URL answers 410
