@@ -1892,7 +1892,7 @@ requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
     { name = "packaging", specifier = ">=24.0" },
-    { name = "pymammotion", specifier = "==0.10.13" },
+    { name = "pymammotion", specifier = "==0.10.14" },
 ]
 provides-extras = ["esphome"]
 
@@ -1910,7 +1910,7 @@ dependencies = [
 requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
-    { name = "pyworxcloud", specifier = "==6.4.2" },
+    { name = "pyworxcloud", specifier = "==6.5.0" },
 ]
 
 [[package]]
@@ -2807,7 +2807,7 @@ wheels = [
 
 [[package]]
 name = "pymammotion"
-version = "0.10.13"
+version = "0.10.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2832,9 +2832,9 @@ dependencies = [
     { name = "webrtc-models" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/76/03/90edadf36ae5bdd2821cbd123b4d95d2a4ec8bd216d97cdd2bbd141a4877/pymammotion-0.10.13.tar.gz", hash = "sha256:b75b815d19a7e897195a0a9ca5431ba8fbf3cbbfbb92ef15ce5840760ae30949", size = 754052, upload-time = "2026-10-26T23:23:39.551Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/fc/5117a35676e47402fbc6ee7eb9f3a59cb3eea77d412dabe04d629b4844bb/pymammotion-0.10.14.tar.gz", hash = "sha256:35da0305dc543cd3527700539c98a41335e851eb6578b5794ec043b4290a5260", size = 757613, upload-time = "2026-11-08T00:31:59.97Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/0e/136330afbdca66071a86e688f6247b87f4940e63813686e3c72e04eb165b/pymammotion-0.10.13-py3-none-any.whl", hash = "sha256:f269e5ff17548cba443a185b23d50b7296d139df9a0ff5d05d29fc5411fea0de", size = 838845, upload-time = "2026-10-26T23:23:37.546Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/ae/f30bcfa2b55b7aed6b816a1fdafaf5571b020731a528fc13f6fec5b182f1/pymammotion-0.10.14-py3-none-any.whl", hash = "sha256:1b0c6b52707350cf56c5439c390deb5b852fb3ba7a628e4d57df366ee5fd087c", size = 842956, upload-time = "2026-11-08T00:31:57.962Z" },
 ]
 
 [[package]]
@@ -3030,7 +3030,7 @@ wheels = [
 
 [[package]]
 name = "pyworxcloud"
-version = "6.4.2"
+version = "6.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -3039,9 +3039,9 @@ dependencies = [
     { name = "tzdata" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/f2/8150009db744697368091f0e072996a97831aa00bc009d925c234878925a/pyworxcloud-6.4.2.tar.gz", hash = "sha256:4d9e2a1ab4103b15ea5edfc0811452b216568013f585ef03ae08d2ddec6384cc", size = 66401, upload-time = "2026-07-12T12:16:46.946Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/90/07391d2bfed5618e79e0abcbc977010c89e32fbd63b95bd2d2bb6d63636f/pyworxcloud-6.5.0.tar.gz", hash = "sha256:f48d0ebcc0baa2a77300a8259aab8707b4f900cdd79651e0c1679da927b0c710", size = 67879, upload-time = "2026-11-07T11:35:13.385Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/a3/f42c4e7c68961375aea0866b4f2630ff0e2eddd086bb1a25e7c50252fac1/pyworxcloud-6.4.2-py3-none-any.whl", hash = "sha256:913b81a51dbf81325d5468995305cae7f5116573fdd3ce17c98449b9eb780a0e", size = 74766, upload-time = "2026-07-12T12:16:48.106Z" },
+    { url = "https://files.pythonhosted.org/packages/45/5c/09bf83aefe7d070e1e29e8ea7b21b807a6b359b28720c34830e4e22117b0/pyworxcloud-6.5.0-py3-none-any.whl", hash = "sha256:702b58e72a9b8d92ee74d42f08c2ed861e6334bd415da8b044e5439207504081", size = 76181, upload-time = "2026-11-07T11:35:14.354Z" },
 ]
 
 [[package]]
