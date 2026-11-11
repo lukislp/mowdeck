@@ -46,6 +46,7 @@ from vision.adapters.api.demo import router as demo_router
 from vision.adapters.api.deps import install_error_mapping
 from vision.adapters.api.routes import router
 from vision.adapters.authz import AuthzDriveChecker
+from vision.adapters.bus.erasure import subscribe_erasure
 from vision.adapters.bus.gateways import BusFleetGateway, BusPhotoSource, BusPublisher
 from vision.adapters.bus.subscriptions import subscribe_all
 from vision.adapters.bus.view import BusMowerView
@@ -57,6 +58,7 @@ from vision.application.assist import AssistConfig, VisionService
 from vision.application.auto import AutoAnalysis, AutoSettings
 from vision.application.consent import ConsentGate, ConsentService
 from vision.application.demo import DemoPurge
+from vision.application.erasure import account_erasure
 from vision.application.executor import DriveConfig, Executor
 from vision.application.ports import (
     Clock,
@@ -247,7 +249,9 @@ def build_app(
         app.state.vision_service = service
         app.state.provider_service = providers
         app.state.auto_analysis = auto
-        app.state.vision_demo = DemoPurge(store_ref, mower_view, auto.forget_mowers)
+        purge = DemoPurge(store_ref, mower_view, auto.forget_mowers, service.stop_account)
+        app.state.vision_demo = purge
+        app.state.vision_erasure = account_erasure(purge, store_ref)
         app.state.auto_settings = AutoSettings(
             store=store_ref, entitlements=plans, clock=now, config=auto_limits, consent=consent
         )
@@ -276,6 +280,7 @@ def build_app(
                     active_bus, mower_view, store_ref, auto if auto_limits.enabled else None
                 )
             )
+            subscriptions.append(await subscribe_erasure(active_bus, app.state.vision_erasure))
             cache = app.state.authorizer
             if hasattr(cache, "invalidate_subject"):
                 subscriptions.append(await subscribe_cache_invalidation(active_bus, cache))

@@ -160,7 +160,7 @@ class AutoAnalysis:
         self._running: set[UUID] = set()
 
     def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
-        """Drop the remembered error of these mowers (demo sandbox purge)."""
+        """Drop the remembered error of these mowers (an account purge)."""
         for mower_id in mower_ids:
             self._known.pop(mower_id, None)
 
@@ -183,7 +183,7 @@ class AutoAnalysis:
             error_code=code,
             previous=previous,
         )
-        self.service.spawn(self._run(state, code), f"vision-auto-{mower_id}")
+        self.service.spawn(self._run(state, code), f"vision-auto-{mower_id}", state.account_id)
         return True
 
     async def _run(self, state: MowerState, code: str) -> None:
