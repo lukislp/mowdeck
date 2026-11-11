@@ -138,6 +138,30 @@ input[aria-invalid='true'] {
   background: var(--md-state-paused-bg);
 }
 
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md-space-2);
+  padding: var(--md-space-3);
+  border: var(--md-border-control) solid var(--md-color-line-strong);
+  border-radius: var(--md-radius-2);
+}
+
+.confirm[hidden] {
+  display: none;
+}
+
+.confirm-title {
+  margin: 0;
+  font-weight: var(--md-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.confirm .hint {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .links {
   display: flex;
   flex-wrap: wrap;
