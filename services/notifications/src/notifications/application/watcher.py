@@ -92,7 +92,8 @@ class Watcher:
         """Parsed geofences by mower with the ``observed_at`` they were stored with."""
 
     def forget_mowers(self, mower_ids: Collection[UUID]) -> None:
-        """Drop the command throttle of these mowers (demo sandbox purge)."""
+        """Drop the command throttle and the parsed geofence of these mowers (a removed mower,
+        an account purge)."""
         gone = set(mower_ids)
         self._recorded = {k: v for k, v in self._recorded.items() if k[0] not in gone}
         self._fences = {k: v for k, v in self._fences.items() if k not in gone}
@@ -338,9 +339,17 @@ class Watcher:
             await tx.put_directory(self._entry(registration), replace=True)
 
     async def mower_removed(self, mower_id: UUID) -> None:
-        """Forget the mower."""
+        """Forget the mower: its rows and what this replica keeps of it in memory (the parsed
+        geofence, the area names, the throttles). The memory matters for a deleted account
+        (ADR 0082): Fleet removes the mowers first, so the account purge that follows no longer
+        finds a row that names them."""
         async with self._store.transaction() as tx:
             await tx.drop_mower(mower_id)
+        gone = (mower_id,)
+        self.forget_mowers(gone)
+        self._fanout.forget_mowers(gone)
+        if self._live is not None:
+            self._live.forget_mowers(gone)
 
     async def seed(self, registrations: Sequence[MowerRegistration]) -> int:
         """Add Fleet's list to the directory without overwriting newer event data."""
