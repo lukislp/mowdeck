@@ -111,7 +111,7 @@ Roadmap and what is done: [docs/phases.md](docs/phases.md).
 
 ## Quick start
 
-Requirements: Docker; for development also Python 3.13, [uv](https://docs.astral.sh/uv/), Node 24 (24.21 or newer) and pnpm 10.34.6 (`corepack enable`).
+Requirements: Docker; for development also Python 3.13, [uv](https://docs.astral.sh/uv/), Node 24 (24.21 or newer) and pnpm 10.34.6 ([set up through Corepack](docs/dev/web-app.md#pnpm-and-corepack)).
 
 ```bash
 cp infra/compose/.env.example infra/compose/.env   # then set the passwords and keys

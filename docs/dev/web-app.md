@@ -15,13 +15,26 @@ The frontend is a pnpm workspace next to the uv workspace. The root holds only c
 
 Root files: `pnpm-workspace.yaml`, `package.json` (`packageManager: pnpm@10.34.6`, shared lint tooling), `.npmrc` (`engine-strict`, no automatic peers, exact versions), `.node-version` (`24.21.0`), `.prettierrc.json`, `.prettierignore`, `eslint.config.js`, `stylelint.config.js`. The root `pyproject.toml` excludes `libs/mowdeck-ui` and `tools/ts-codegen` from the uv workspace.
 
-Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 (`corepack enable` or `npm install -g pnpm@10.34.6`), and for the dev loop the Compose stack (Docker).
+Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 (set up through Corepack, see [pnpm and Corepack](#pnpm-and-corepack)), and for the dev loop the Compose stack (Docker).
 
 ### Node version
 
 The workspace runs on Node 24 LTS ("Krypton"). One release is pinned in three places that move together: `.node-version` (`24.21.0`, read by `actions/setup-node` in the `ci`, `release` and `apple-testflight` workflows and by `fnm`/`nvm`), `NODE_IMAGE` under "Image sources" in `infra/compose/.env.example` (`node:24.21.0-alpine` with its index digest; the same default in `apps/web/Dockerfile` and `infra/compose/docker-compose.yml`, kept equal by `tools/repo-checks/tests/test_images.py`) and the root `engines` (`>=24.21.0`, enforced by `engine-strict`). `@types/node` follows the major (24.x). As with every dependency, only releases and image digests at least two weeks old are taken. Dependabot updates none of these: it cannot parse the `*_IMAGE` build arguments, does not touch `.node-version`, and ignores `@types/node` majors, so a Node bump is a deliberate pull request that changes all of them.
 
-Next step: Node 26 enters Active LTS at the end of October 2026; the move is planned once it has been LTS for a few weeks (mid-November 2026), with a 26.x release and image digest at least two weeks old. Beyond the pins above, that move has to replace Corepack, which Node 25 and later no longer ship: the Dockerfile's `corepack enable pnpm` (for example a pinned `npm install -g corepack@<version>` or pnpm's standalone installer, keeping the sha512 check of `packageManager`) and the `corepack enable` in these docs and `apps/mobile/scripts`. CI installs pnpm with `pnpm/action-setup` and is not affected. The e2e-web job runs the Playwright tests in the Node of its pinned Playwright image, independent of `.node-version`.
+Next step: Node 26 is Active LTS since 2026-10-28, and the move is staged. Done: Corepack no longer comes from Node (below), and CI runs the job `web` on Node 26 as well (`web-node26`, informational: it is not a required check). Still to do, in one pull request once the 26.x release and its image digest are at least two weeks old: `.node-version`, `NODE_IMAGE`, the `engines` ranges, `@types/node` and the Dev Container's Node feature. The e2e-web job runs the Playwright tests in the Node of its pinned Playwright image, independent of `.node-version`.
+
+### pnpm and Corepack
+
+pnpm is installed through Corepack, which reads `packageManager` in the root `package.json` (`pnpm@10.34.6` with its sha512) and refuses a download that does not match. Node 25 and later no longer ship Corepack, so it comes from npm at the version in `.corepack-version`, which works on Node 24 and on Node 26:
+
+```bash
+npm install --global --force "corepack@$(cat .corepack-version)"   # --force replaces the copy Node 24 bundles
+corepack enable pnpm
+```
+
+On Windows PowerShell: `npm install --global --force "corepack@$(Get-Content .corepack-version)"`, then `corepack enable pnpm`. The first `pnpm` call downloads the pinned pnpm (`COREPACK_ENABLE_DOWNLOAD_PROMPT=0` skips Corepack's confirmation, as the Dockerfiles and the Dev Container do).
+
+`.corepack-version` is the one place for the Corepack version: `apps/web/Dockerfile` and `services/matter-server/Dockerfile` copy it into the build stage, `.devcontainer/on-create.sh` reads it, and `tools/repo-checks/tests/test_node_toolchain.py` fails when a script, Dockerfile or document names a Corepack version of its own or runs `corepack enable` without the install. It is a manual pin like the Node pins above: Dependabot cannot see it, so bump it by hand with the same age rule (a release at least two weeks old, with an `engines` range that covers every Node in use: `npm view corepack@<version> engines`) and let `docker` and `reproducibility` prove the images. CI installs pnpm with `pnpm/action-setup` and does not use Corepack.
 
 ## Dev loop
 

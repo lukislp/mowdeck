@@ -58,7 +58,7 @@ TestFlight builds register with **production** APNs: set `APNS_ENVIRONMENT=produ
 
 ## iPhone: build and install from the Mac
 
-Prerequisites on the Mac: Xcode (from the App Store, opened once, `sudo xcode-select -s /Applications/Xcode.app`), Node.js 24 (24.21 or newer) with `corepack enable` (pnpm), git and a clone of this repository. Everything below also works over SSH from the PC.
+Prerequisites on the Mac: Xcode (from the App Store, opened once, `sudo xcode-select -s /Applications/Xcode.app`), Node.js 24 (24.21 or newer) with pnpm ([set up through Corepack](../dev/web-app.md#pnpm-and-corepack)), git and a clone of this repository. Everything below also works over SSH from the PC.
 
 ### One-time setup
 

@@ -13,5 +13,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # uv is part of the image (.devcontainer/Dockerfile copies it from the pinned UV_IMAGE).
 uv --version
 
-# pnpm, at the version of package.json "packageManager" (Corepack reads it).
+# pnpm, at the version of package.json "packageManager" (Corepack reads it). Corepack itself comes
+# from npm at the version of .corepack-version: Node 25 and later no longer bundle it (the same
+# step as the Dockerfiles; docs/dev/web-app.md, "pnpm and Corepack").
+sudo env "PATH=$PATH" npm install --global --force "corepack@$(< .corepack-version)"
 sudo env "PATH=$PATH" corepack enable
