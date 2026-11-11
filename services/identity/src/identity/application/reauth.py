@@ -85,7 +85,7 @@ class Reauthenticator:
         reason = f"{action.replace('_', ' ')} reauth"
         async with self.deps.uow() as work:
             await work.tx.login_attempts.add(
-                LoginAttempt(uuid4(), now, found.username_norm, False, ctx.ip, reason)
+                LoginAttempt(uuid4(), now, found.username_norm, False, ctx.stored_ip, reason)
             )
             await work.audit(
                 ctx,

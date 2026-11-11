@@ -132,7 +132,7 @@ class SecurityService:
     @property
     def _demo(self) -> bool:
         """Demo mode: all visitors share one user, so only the own session may be shown."""
-        return self.deps.config.demo_username is not None
+        return self.deps.config.demo
 
     @staticmethod
     def _user(ctx: RequestContext) -> Principal:
