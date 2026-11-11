@@ -394,6 +394,11 @@ flowchart LR
 | Subject | Stream | Publishes or requests | Subscribes or answers |
 |---|---|---|---|
 | `account.erase.*` | core | identity | - |
+| `account.erase.entitlements` | core | - | entitlements |
+| `account.erase.fleet` | core | - | fleet |
+| `account.erase.planner` | core | - | planner |
+| `account.erase.scheduler` | core | - | scheduler |
+| `account.erase.telemetry` | core | - | telemetry |
 | `camera.mower.*.relay.*` | CAMERA | camera-relay | fleet |
 | `command.mower.*` | COMMANDS | fleet, realtime, vision | device-gateway, notifications, vision |
 | `command.result.mower.*` | COMMANDS | device-gateway | fleet, realtime, telemetry, vision |

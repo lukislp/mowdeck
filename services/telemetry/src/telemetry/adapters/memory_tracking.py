@@ -101,6 +101,18 @@ class MemoryTrackingStore:
         ]
         return before - len(self.sessions) - len(self.links) - len(self.photos)
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        counts = {
+            "tracking_sessions": sum(
+                1 for s in self.sessions.values() if s.account_id == account_id
+            ),
+            "tracking_links": sum(
+                1 for link in self.links.values() if link.account_id == account_id
+            ),
+            "tracking_photos": sum(1 for p in self.photos if p.account_id == account_id),
+        }
+        return {name: found for name, found in counts.items() if found}
+
     async def add_link(self, link: TrackingLink) -> None:
         self.links[link.id] = link
 

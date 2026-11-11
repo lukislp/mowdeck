@@ -63,10 +63,21 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | --- | --- | --- | --- | --- |
 | reply | `entitlements.plan.set` | core NATS, queue `entitlements` (internal, Billing only) | `PlanSetRequest{account_id, plan, status, trial_until?, grace_until?, reason, account_name?, reference?}` / `PlanSetReply{ok, plan, status, changed, error?}` | sets the plan with `source=billing`: history row (actor `service:billing:<reference>`), `entitlements.plan.changed`; a trial without `trial_until` lasts the plan's trial days, a grace period without `grace_until` `MOWDECK_ENTITLEMENTS_GRACE_DAYS`; a request equal to the stored row changes nothing; unknown plan: `unknown_plan`, invalid request: `invalid_request` |
 | reply | `entitlements.check` | core NATS, queue `entitlements` (internal) | `EntitlementCheckRequest{account_id, feature \| limit: {key, current}}` / `EntitlementCheckReply{allowed, plan, status, reason, limit, current, snapshot}` | neither feature nor limit: names the plan (Identity's `plan` claim); counted as `mowdeck_entitlements_checks_total{kind, outcome}` |
+| reply | `account.erase.entitlements` | core NATS, queue `entitlements-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | produced | `event.entitlements.plan.changed` | JetStream `EVENTS` | `EventEnvelope[PlanChanged]` | one account on manual assignment; `all_accounts` on plan edits and at every start |
 | consumed | `event.identity.account.created` | JetStream, durable and deliver group `entitlements-accounts` | `EventEnvelope[AccountCreated]` | gives the account the default plan (a trial when the plan has trial days); idempotent |
 
 Reasons of a refusal: `feature_not_in_plan`, `limit_reached`, `plan_inactive` (grace or expired), and on the client side `entitlements_unavailable`.
+
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.entitlements` (core NATS, internal, no principal) and Entitlements deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted:** the account's plan row (`account_plans`, it holds the account's name) and its assignment history (`plan_history`, it holds the actor of each change), in one transaction. No `plan.changed` event: the account is gone everywhere. The plans and the feature catalogue (`plans`, `features`) are the installation's and stay.
+- **In memory:** nothing of an account is kept. A later `entitlements.check` for the erased account creates no row (an unknown account resolves to the default plan without one).
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
 
 ## Enforcement in the other services
 
@@ -104,7 +115,7 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `domain/` | plans, account plans, the plan file parser, the resolution rules (status at a moment) | pure Python, no I/O |
 | `application/` | `EntitlementsService` (seed, resolve, check, assign, accounts), `CatalogueService`, ports | depends on `domain` and ports only |
 | `adapters/api/` | FastAPI routers, schemas, the operator gate | translate HTTP to use cases |
-| `adapters/bus/` | `entitlements.check`, `identity.account.created`, the event publisher | translate messages to use cases |
+| `adapters/bus/` | `entitlements.check`, `identity.account.created`, `account.erase.entitlements`, the event publisher | translate messages to use cases |
 | `adapters/db/` | SQLAlchemy Core store, Alembic migrations; `adapters/memory.py` for tests | implement the store port |
 | `main.py` | wiring (`build_app`) and `main()` | the only place that knows every layer |
 

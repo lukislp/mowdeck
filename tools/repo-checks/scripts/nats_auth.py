@@ -126,7 +126,7 @@ USERS: dict[str, Access] = {
     ),
     "entitlements": Access(
         publish=("event.entitlements.>",),
-        serve=("entitlements.check", "entitlements.plan.set"),
+        serve=("account.erase.entitlements", "entitlements.check", "entitlements.plan.set"),
         consume=("event.identity.account.created", *_GRANTS),
     ),
     "fleet": Access(
@@ -149,6 +149,7 @@ USERS: dict[str, Access] = {
             "relay.camera.renew",
         ),
         serve=(
+            "account.erase.fleet",
             "fleet.commands.issue",
             "fleet.drive.start",
             "fleet.drive.stop",
@@ -190,6 +191,7 @@ USERS: dict[str, Access] = {
     ),
     "planner": Access(
         publish=(*_PLANS, "tracks.positions.query"),
+        serve=("account.erase.planner",),
         consume=("device.mower.>", *_GRANTS, *_PLAN_CHANGES),
     ),
     "realtime": Access(
@@ -212,6 +214,7 @@ USERS: dict[str, Access] = {
     ),
     "scheduler": Access(
         publish=(*_PLANS, "event.scheduler.>", "fleet.commands.issue", "fleet.targets.resolve"),
+        serve=("account.erase.scheduler",),
         consume=("device.mower.>", *_GRANTS, *_PLAN_CHANGES, "telemetry.mower.*"),
     ),
     "telemetry": Access(
@@ -225,7 +228,7 @@ USERS: dict[str, Access] = {
             "gateway.mower.*.photo",
             "gateway.mower.*.tracking",
         ),
-        serve=("tracks.positions.query",),
+        serve=("account.erase.telemetry", "tracks.positions.query"),
         consume=(
             "command.result.mower.*",
             "device.mower.>",

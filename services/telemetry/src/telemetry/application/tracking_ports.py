@@ -99,6 +99,11 @@ class TrackingStore(Protocol):
         sandbox purge, ADR 0076); returns the number of rows removed."""
         ...
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in this store's tables, by table name; tables without one
+        are left out (account erasure, ADR 0082)."""
+        ...
+
     def leader(self) -> AbstractAsyncContextManager[bool]:
         """Try to become the replica that runs the background tick; yields False when another
         replica is running it."""

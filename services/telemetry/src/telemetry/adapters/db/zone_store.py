@@ -18,6 +18,7 @@ from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from mowdeck_service_kit.db import account_row_counts
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -25,6 +26,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from telemetry.adapters.db import tables
 from telemetry.adapters.db.reads import read_connection
 from telemetry.domain.zones import LatLon, Presence, VirtualZone, ZoneDay, ZoneTime
+
+_ACCOUNT_TABLES = (tables.zone_days, tables.zone_presence, tables.virtual_zones)
+"""The tables of :class:`SqlZoneStore`, in deletion order (all carry ``account_id``): what the
+purge of an account deletes and what the account erasure counts afterwards."""
 
 _Z = tables.virtual_zones.c
 _P = tables.zone_presence.c
@@ -220,9 +225,13 @@ class SqlZoneStore:
         and the zones; one transaction."""
         removed = 0
         async with self.engine.begin() as conn:
-            for table in (tables.zone_days, tables.zone_presence, tables.virtual_zones):
+            for table in _ACCOUNT_TABLES:
                 result = await conn.execute(
                     sa.delete(table).where(table.c.account_id == account_id)
                 )
                 removed += result.rowcount
         return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        async with read_connection(self.engine) as conn:
+            return await account_row_counts(conn, _ACCOUNT_TABLES, account_id)

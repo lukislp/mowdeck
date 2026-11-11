@@ -6,9 +6,11 @@
 from dataclasses import dataclass
 
 from mowdeck_contracts.v1 import ModuleDescriptor
+from mowdeck_service_kit.erasure import AccountErasure
 
 from entitlements.application.catalogue import CatalogueService
 from entitlements.application.entitlements import EntitlementsConfig, EntitlementsService
+from entitlements.application.erasure import account_erasure
 from entitlements.application.ports import Clock, EventPublisher, ModuleSource, Store
 
 
@@ -18,6 +20,8 @@ class Services:
 
     entitlements: EntitlementsService
     catalogue: CatalogueService
+    erasure: AccountErasure
+    """Answers ``account.erase.entitlements`` (ADR 0082)."""
 
 
 def build_services(
@@ -31,7 +35,9 @@ def build_services(
 ) -> Services:
     """Wire the use cases."""
     catalogue = CatalogueService(store, own_descriptor, clock, source)
+    entitlements = EntitlementsService(store, catalogue, events, config, clock)
     return Services(
-        entitlements=EntitlementsService(store, catalogue, events, config, clock),
+        entitlements=entitlements,
         catalogue=catalogue,
+        erasure=account_erasure(entitlements, store),
     )

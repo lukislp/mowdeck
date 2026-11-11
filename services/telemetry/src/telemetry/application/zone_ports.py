@@ -74,3 +74,8 @@ class ZoneStore(Protocol):
         """Delete every zone, presence and day total of an account (demo sandbox purge, ADR
         0076); returns the number of rows removed."""
         ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in this store's tables, by table name; tables without one
+        are left out (account erasure, ADR 0082)."""
+        ...

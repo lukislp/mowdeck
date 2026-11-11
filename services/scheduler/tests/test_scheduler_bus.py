@@ -149,7 +149,8 @@ async def test_scheduler_app_startup_shutdown_and_wiring() -> None:
     with pytest.raises(ValueError, match="DATABASE_URL"):
         build_app(make_settings())
     async with harness(background_tasks=True, scheduler_tick_seconds=0.1) as h:
-        assert len(h.app.state.subscriptions) == 5  # states, maps, capabilities, grants, plans
+        # states, maps, capabilities, grants, account erasure, plans
+        assert len(h.app.state.subscriptions) == 6
         assert (await h.client.get("/metrics")).status_code == 200
     assert default_principal_resolver({}) is None
     assert MemoryStore().data.schedules == {}

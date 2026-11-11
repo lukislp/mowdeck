@@ -212,6 +212,16 @@ class MemoryTx:
         """Delete the account's audit rows (demo purge)."""
         return await self._tables.audit.delete(account_id=account_id)
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every memory table (each entity carries ``account_id``)."""
+        counts: dict[str, int] = {}
+        for field in dataclasses.fields(self._tables):
+            table: MemoryTable[Any] = getattr(self._tables, field.name)
+            found = sum(1 for row in table.rows.values() if row.account_id == account_id)
+            if found:
+                counts[field.name] = found
+        return counts
+
 
 class MemoryStore:
     """Implements ``Store`` in memory."""

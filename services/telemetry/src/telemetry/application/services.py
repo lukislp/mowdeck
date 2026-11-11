@@ -5,6 +5,8 @@
 
 from dataclasses import dataclass
 
+from mowdeck_service_kit.erasure import AccountErasure
+
 from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
 from telemetry.application.demo import DemoPurge
@@ -39,6 +41,8 @@ class Services:
     """Virtual zones (ADR 0070); None without a zone store."""
     demo: DemoPurge | None = None
     """The demo sandbox purge (ADR 0076), wired at startup."""
+    erasure: AccountErasure | None = None
+    """Answers ``account.erase.telemetry`` (ADR 0082), wired at startup."""
     demo_history: DemoHistory | None = None
     """Past mowing days for demo mowers from daily templates (ADR 0068, ADR 0079)."""
 

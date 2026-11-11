@@ -1,15 +1,19 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Demo sandbox purge (ADR 0076): remove everything Fleet holds of one demo account.
+"""Account purge: remove everything Fleet holds of one account.
 
-Identity's cleanup job calls this when a visitor's sandbox expires. First every mower goes the
+Two callers: Identity's cleanup job when a visitor's demo sandbox expires (ADR 0076, the demo
+endpoint) and the account erasure of a deleted account (ADR 0082,
+:mod:`fleet.application.erasure`). First every mower goes the
 way of a normal removal (:meth:`MowerService.remove_in`, as the system): its rows and tuples go
 and ``mower.removed`` is published, so the Device-Gateway closes the simulated connection. One
 unit of work per mower, so a retry after a partial failure continues where it stopped. Then one
 unit of work removes the rest: groups and sites (the default site too) with their tuples, base
 stations, linked accounts, command records, drive sessions, leftovers keyed by the account and,
-last, the account's audit rows. Idempotent: an account without data answers 0.
+last, the account's audit rows. What this replica keeps in memory goes too: the cached still
+images of the mowers and the login throttle's entries of the account (their key holds the vendor
+e-mail address). Idempotent: an account without data answers 0.
 """
 
 from uuid import UUID
@@ -19,15 +23,17 @@ from fleet.application.context import SYSTEM
 from fleet.application.hierarchy import group_tuples, site_tuples
 from fleet.application.mowers import MowerService
 from fleet.application.ports import Tx
+from fleet.application.throttle import LoginThrottle
 from fleet.application.work import UnitOfWork, Work
 
 
 class AccountPurge:
-    """Deletes one demo account's data (rows, tuples, cached images)."""
+    """Deletes one account's data (rows, tuples, cached images, throttle entries)."""
 
-    def __init__(self, uow: UnitOfWork, camera: CameraService) -> None:
+    def __init__(self, uow: UnitOfWork, camera: CameraService, throttle: LoginThrottle) -> None:
         self.uow = uow
         self.camera = camera
+        self.throttle = throttle
 
     async def purge(self, account_id: UUID) -> int:
         """Remove everything of ``account_id``; returns the number of rows and objects removed."""
@@ -36,6 +42,7 @@ class AccountPurge:
         for mower_id in mower_ids:
             deleted += await self._remove_mower(account_id, mower_id)
         deleted += self.camera.forget(mower_ids)
+        deleted += self.throttle.forget_account(account_id)
         async with self.uow() as work:
             deleted += await self._remove_places(work, account_id)
             deleted += await self._remove_records(work.tx, account_id)
