@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""The real cloud: a :class:`~mowdeck_control_worx.session.WorxSession` on pyworxcloud 6.4.2.
+"""The real cloud: a :class:`~mowdeck_control_worx.session.WorxSession` on pyworxcloud 6.5.0.
 
 One :class:`PyworxSession` is one ``WorxCloud`` of pyworxcloud: :meth:`PyworxSession.open`
 logs in (``authenticate``: the brand app's OAuth client, password grant), lists the account's
