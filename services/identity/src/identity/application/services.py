@@ -84,7 +84,7 @@ class Services:
         self.users = UserService(self.deps)
         self.roles = RoleService(self.deps)
         self.tokens = ApiTokenService(self.deps)
-        self.audit = AuditService(self.deps.store, demo=self.deps.config.demo_username is not None)
+        self.audit = AuditService(self.deps.store, demo=self.deps.config.demo)
         self.platform = PlatformService(self.deps)
         self.passkeys = PasskeyService(self.deps, self.ceremonies, limiter)
         self.external = ExternalIdentityService(self.deps, self.sessions, limiter)

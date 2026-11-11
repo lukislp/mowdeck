@@ -87,7 +87,9 @@ DEVICE_COOKIE_PATH = "/api/v1/identity"
 
 def _context(request: Request, principal: Principal | None) -> RequestContext:
     device = request.cookies.get(DEVICE_COOKIE)
-    return RequestContext(
+    # The rule "the public demo writes down no address and no browser" lives in the config.
+    config = get_services(request).deps.config
+    return config.request_context(
         principal=principal,
         ip=client_ip(request),
         correlation_id=get_correlation_id(),

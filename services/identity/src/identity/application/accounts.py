@@ -212,14 +212,7 @@ class AccountService:
             await seed_roles(tx, account_id, now)
             work.touch(user(user_id))
             work.ensure(platform_tuple(account_id))
-            actor = (
-                ctx
-                if ctx.principal
-                else RequestContext(
-                    ip=ctx.ip, correlation_id=ctx.correlation_id, user_agent=ctx.user_agent
-                )
-            )
-            entry = actor.audit_entry(
+            entry = ctx.audit_entry(
                 at=now,
                 action="account.registered",
                 account_id=account_id,
