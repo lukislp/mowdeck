@@ -14,6 +14,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import {
   RUN,
+  acknowledgeSafety,
   actor,
   capabilities,
   createMowerByApi,
@@ -192,6 +193,7 @@ test('spot mowing on a phone: a bottom sheet with snap points keeps the map visi
   }
 
   await start.tap();
+  await acknowledgeSafety(page);
   const stop = sheet.getByTestId('spot-stop');
   await expect(stop).toBeInViewport({ timeout: 30_000 });
   await expect(sheet).toHaveAttribute('data-snap', 'peek');

@@ -80,6 +80,7 @@
   import { appendLive } from '#lib/mower/route.js';
   import { m } from '#lib/paraglide/messages.js';
   import type { DriveEvent } from '#lib/realtime/client.svelte.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
 
@@ -287,8 +288,14 @@
     });
   });
 
-  function start(): void {
+  /**
+   * Every drive session asks for the safety acknowledgement anew: the risk starts with the
+   * session (it ends by itself, by leaving the page and by the time limit), so a session is the
+   * unit, not the page visit and never "ask once".
+   */
+  async function start(): Promise<void> {
     startError = null;
+    if (!(await safety.ask('drive_session'))) return;
     pilot.reset();
     armed = false;
     bladesOn = false;
@@ -524,7 +531,7 @@
         pending={starting}
         disabled={!canStart}
         testid="drive-start"
-        onclick={start}>{m.drive_start()}</Button
+        onclick={() => void start()}>{m.drive_start()}</Button
       >
     {/if}
   {/snippet}

@@ -26,6 +26,7 @@ import {
   pickProvider,
   registerByApi,
   waitForMap,
+  acknowledgeSafety,
 } from './support';
 
 const OUT = fileURLToPath(new URL('../../../apps/web/screenshots/', import.meta.url));
@@ -142,6 +143,7 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
     await page.goto(`/mowers/${secondId}/drive`);
     await expect(page.getByTestId('drive-start')).toBeEnabled({ timeout: 30_000 });
     await page.getByTestId('drive-start').click();
+    await acknowledgeSafety(page);
     await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
     const pad = page.getByTestId('joystick');
     await pad.scrollIntoViewIfNeeded();

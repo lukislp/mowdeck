@@ -74,6 +74,7 @@
   } from '#lib/mower/maintenance.js';
   import { m } from '#lib/paraglide/messages.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
   import DemoLock from '#lib/demo/DemoLock.svelte';
@@ -214,6 +215,7 @@
 
   const speedSetting = $derived(caps?.drive_speed_setting ?? null);
   const calibration = new DriveCalibrationFlow({
+    acknowledge: () => safety.ask('drive_calibrate'),
     command: (command) => sendCommand(id, command),
     save: async (input) => {
       const saved = await putDriveCalibration(id, input);
@@ -307,8 +309,9 @@
     ),
   );
 
-  function runMaintenance(action: MaintenanceAction): void {
-    void sendCommand(id, { kind: action });
+  async function runMaintenance(action: MaintenanceAction): Promise<void> {
+    // Leaving the dock moves the mower: the safety acknowledgement first (not for the other actions).
+    if (await safety.ask(action)) await sendCommand(id, { kind: action });
   }
 
   function show(found: Mower): void {
@@ -616,7 +619,7 @@
           blockers={maintenanceBlockers}
           results={maintenanceResults}
           driveSession={maintenanceDriving}
-          onrun={runMaintenance}
+          onrun={(action) => void runMaintenance(action)}
         />
       </Panel>
     {/if}

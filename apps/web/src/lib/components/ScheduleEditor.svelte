@@ -30,6 +30,7 @@
     toBody,
     type ScheduleFormState,
   } from '#lib/schedules/form.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import { mowSummary, type CapsLike } from '#lib/schedules/mow-options.js';
   import { recurrenceSummary } from '#lib/schedules/recurrence.js';
   import {
@@ -172,6 +173,10 @@
   });
 
   async function save(values: ScheduleFormState): Promise<void> {
+    // A new enabled schedule, or one switched on, starts the mower unattended: asked here, once.
+    // Changing an enabled schedule or saving a disabled one is not asked; the automatic runs never.
+    const starting = values.enabled && (id === null || schedule?.enabled === false);
+    if (starting && !(await safety.ask('schedule_enable'))) return;
     saving = true;
     saveProblem = null;
     try {

@@ -11,7 +11,15 @@
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
-import { PASSWORD, RUN, actor, loginByUi, registerByApi, watchCsp } from './support';
+import {
+  PASSWORD,
+  RUN,
+  actor,
+  loginByUi,
+  registerByApi,
+  watchCsp,
+  acknowledgeSafety,
+} from './support';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -148,6 +156,7 @@ test('4 Start uses the areas chosen on the map: executed, then mowing live', asy
   const startButton = page.getByTestId('area-start');
   await expect(startButton).toHaveText('Starten (2)');
   await startButton.click();
+  await acknowledgeSafety(page);
   await expect(
     page
       .getByRole('status')
