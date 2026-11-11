@@ -16,6 +16,9 @@ from pathlib import Path
 
 TOOLS_VERSION = re.compile(r"^// swift-tools-version: ?\d+\.\d+(\.\d+)?$")
 
+LICENCE_TAG = "SPDX-License-" + "Identifier:"
+"""Written in two parts: REUSE reads the tag as a licence statement wherever it finds it whole."""
+
 
 def _manifests(repo_root: Path) -> list[Path]:
     listed = subprocess.run(
@@ -49,4 +52,4 @@ def test_every_swift_manifest_keeps_its_licence_header(repo_root: Path) -> None:
     """Moving the header down must not lose it (REUSE)."""
     for manifest in _manifests(repo_root):
         head = manifest.read_text("utf-8").split("\n")[:4]
-        assert any("SPDX-License-Identifier:" in line for line in head), manifest
+        assert any(LICENCE_TAG in line for line in head), manifest
