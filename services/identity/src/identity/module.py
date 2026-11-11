@@ -13,6 +13,7 @@ from mowdeck_contracts.v1 import (
     IDENTITY_USER_CREATED,
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
+    USER_CHANGED_VERSION,
     EventDef,
     ModuleDescriptor,
     PermissionDef,
@@ -41,9 +42,21 @@ DESCRIPTOR = ModuleDescriptor(
     ],
     events=[
         EventDef(type=IDENTITY_ACCOUNT_CREATED, schema_ref=f"{_SCHEMAS}/AccountCreated.json"),
-        EventDef(type=IDENTITY_USER_CREATED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
-        EventDef(type=IDENTITY_USER_DISABLED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
-        EventDef(type=IDENTITY_USER_DELETED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
+        EventDef(
+            type=IDENTITY_USER_CREATED,
+            version=USER_CHANGED_VERSION,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
+        EventDef(
+            type=IDENTITY_USER_DISABLED,
+            version=USER_CHANGED_VERSION,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
+        EventDef(
+            type=IDENTITY_USER_DELETED,
+            version=USER_CHANGED_VERSION,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
         EventDef(type=IDENTITY_GRANTS_CHANGED, schema_ref=f"{_SCHEMAS}/GrantsChanged.json"),
         EventDef(type=IDENTITY_API_TOKEN_REVOKED, schema_ref=f"{_SCHEMAS}/ApiTokenRevoked.json"),
     ],

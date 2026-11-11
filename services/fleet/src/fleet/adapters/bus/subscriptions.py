@@ -81,6 +81,7 @@ from prometheus_client import CollectorRegistry, Counter
 from pydantic import ValidationError
 
 from fleet.adapters.bus.erasure import subscribe_erasure
+from fleet.adapters.bus.streams import subscribe_mower_streams
 from fleet.adapters.bus.user_erasure import subscribe_user_erasure
 from fleet.application.services import Services
 
@@ -351,6 +352,7 @@ async def subscribe_all(
         ),
         await subscribe_erasure(bus, services.erasure),
         await subscribe_user_erasure(bus, services.user_erasure),
+        await subscribe_mower_streams(bus, services.mower_streams),
     ]
     if cache is not None:
         subscriptions.append(await subscribe_cache_invalidation(bus, cache))

@@ -307,6 +307,24 @@ class CloudDiscovery(Protocol):
         ...
 
 
+class MowerStreams(Protocol):
+    """What the message streams hold of a mower (ADR 0082).
+
+    The streams keep a mower's commands, states, snapshots and camera events for their retention
+    (up to 30 days), on subjects that carry the mower id. Fleet owns the mowers and removes
+    their messages when a mower goes. Both calls are idempotent.
+    """
+
+    async def purge(self, mower_id: UUID) -> int:
+        """Remove every stored message of the mower; how many were removed. Raises when a
+        stream could not be purged."""
+        ...
+
+    async def remaining(self, mower_id: UUID) -> int:
+        """How many messages of the mower the streams still hold."""
+        ...
+
+
 class SecretCipher(Protocol):
     """Encrypts the passwords of linked accounts at rest."""
 

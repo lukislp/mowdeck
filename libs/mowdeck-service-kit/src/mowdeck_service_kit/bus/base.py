@@ -27,7 +27,7 @@ Delivery semantics (identical for both implementations):
 
 import asyncio
 import contextlib
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -214,6 +214,59 @@ class EventBus(Protocol):
     @property
     def is_connected(self) -> bool:
         """True while the bus can publish."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class StoredMessage:
+    """A message as a stream holds it (:meth:`StreamStore.stored_messages`)."""
+
+    stream: str
+    sequence: int
+    subject: str
+    data: bytes
+    headers: Mapping[str, str] = field(default_factory=dict)
+
+
+@runtime_checkable
+class StreamStore(Protocol):
+    """What the streams *hold*, for the one purpose of removing it (ADR 0082).
+
+    An :class:`EventBus` moves messages; the streams also keep them for their retention (30 days
+    in ``EVENTS`` and ``DEVICE``), so data of an erased account or a removed mower would outlive
+    its rows there. This port removes it. It is deliberately not part of :class:`EventBus`: only
+    the service that owns what a message is about may hold it (Fleet for the subjects of a mower,
+    Identity for the events of an account or a user), and the NATS permissions allow the calls to
+    nobody else (``tools/repo-checks/scripts/nats_auth.py``, ``purge`` and ``erase``).
+
+    Two ways, by what the subject can address:
+
+    * :meth:`purge_subject` removes every message of a subject filter in one server call. For
+      subjects that name what is removed (``telemetry.mower.<id>``).
+    * :meth:`stored_messages` and :meth:`erase_message` read a subject filter message by message
+      and remove single ones. For subjects that do not name it (``event.<domain>.<name>``: the
+      account is in the envelope), where the caller decides per message.
+
+    Every call is idempotent: purging or erasing what is gone removes nothing. All subjects must
+    belong to a stream (``ValueError`` otherwise).
+    """
+
+    async def purge_subject(self, subject: str) -> int:
+        """Remove every stored message matching ``subject`` (wildcards allowed) from its stream;
+        returns how many were removed."""
+        ...
+
+    async def count_subject(self, subject: str) -> int:
+        """How many stored messages match ``subject`` (a cheap server side count)."""
+        ...
+
+    def stored_messages(self, subject: str) -> AsyncIterator[StoredMessage]:
+        """The stored messages matching ``subject``, oldest first, as they are now (messages
+        published while reading may or may not be seen)."""
+        ...
+
+    async def erase_message(self, message: StoredMessage) -> bool:
+        """Remove one stored message (overwritten, not only unlinked); False when it was gone."""
         ...
 
 

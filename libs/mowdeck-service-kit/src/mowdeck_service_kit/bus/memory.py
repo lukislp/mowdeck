@@ -10,7 +10,7 @@ returns), which keeps tests deterministic. Every published message is recorded i
 
 import asyncio
 import time
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 
 from mowdeck_contracts.v1.subjects import STREAMS, StreamSpec, subject_matches
@@ -24,6 +24,7 @@ from mowdeck_service_kit.bus.base import (
     NoRespondersError,
     PublishResult,
     RequestTimeoutError,
+    StoredMessage,
     check_acknowledge,
     check_batch_limits,
     dispatch,
@@ -73,8 +74,9 @@ class InMemoryBus:
         self._seen: dict[tuple[str, str], tuple[float, int]] = {}
         self._sequences: dict[str, int] = {}
         self._round_robin: dict[tuple[str, str], int] = {}
-        self._last: dict[str, BusMessage] = {}
-        """The newest stored message of every stream subject (``last_per_subject``)."""
+        self._stored: dict[str, dict[int, BusMessage]] = {}
+        """What every stream holds, by sequence (:class:`~mowdeck_service_kit.bus.StreamStore`).
+        Only the per-subject limit of a stream is applied, never its age or size."""
         self._closed = False
 
     @property
@@ -147,7 +149,7 @@ class InMemoryBus:
         if msg_id is not None:
             self._seen[(stream.name, msg_id)] = (self._clock(), sequence)
         self.published.append(message)
-        self._last[subject] = message
+        self._store(stream, sequence, message)
         for sub in self._targets(subject, jetstream=True):
             await self._deliver_with_retries(sub, message)
         return PublishResult(stream=stream.name, sequence=sequence)
@@ -199,10 +201,64 @@ class InMemoryBus:
         )
         self._subscriptions.append(sub)
         if last_per_subject:
-            for stored_subject, message in list(self._last.items()):
-                if subject_matches(subject, stored_subject):
-                    await self._deliver_with_retries(sub, message)
+            for message in self._newest(subject):
+                await self._deliver_with_retries(sub, message)
         return sub
+
+    # --- what the streams hold (StreamStore, ADR 0082) ----------------------------------------
+
+    def _store(self, stream: StreamSpec, sequence: int, message: BusMessage) -> None:
+        held = self._stored.setdefault(stream.name, {})
+        held[sequence] = message
+        limit = stream.max_msgs_per_subject
+        if limit > 0:
+            same = [seq for seq, kept in held.items() if kept.subject == message.subject]
+            for seq in same[:-limit]:
+                del held[seq]
+
+    def _newest(self, subject: str) -> list[BusMessage]:
+        """The newest stored message of every stream subject matching ``subject``."""
+        newest: dict[str, BusMessage] = {}
+        for held in self._stored.values():
+            for _, message in sorted(held.items()):
+                if subject_matches(subject, message.subject):
+                    newest[message.subject] = message
+        return list(newest.values())
+
+    def _held(self, subject: str) -> tuple[str, dict[int, BusMessage]]:
+        stream = _stream_for(self.streams, subject.replace("*", "x").replace(">", "x"))
+        if stream is None:
+            msg = f"no stream stores {subject!r}"
+            raise ValueError(msg)
+        return stream.name, self._stored.setdefault(stream.name, {})
+
+    async def purge_subject(self, subject: str) -> int:
+        """Remove the stored messages matching ``subject``; how many."""
+        self._ensure_open()
+        _, held = self._held(subject)
+        gone = [seq for seq, m in held.items() if subject_matches(subject, m.subject)]
+        for seq in gone:
+            del held[seq]
+        return len(gone)
+
+    async def count_subject(self, subject: str) -> int:
+        """How many stored messages match ``subject``."""
+        self._ensure_open()
+        _, held = self._held(subject)
+        return sum(1 for m in held.values() if subject_matches(subject, m.subject))
+
+    async def stored_messages(self, subject: str) -> AsyncIterator[StoredMessage]:
+        """The stored messages matching ``subject``, oldest first."""
+        self._ensure_open()
+        name, held = self._held(subject)
+        for seq, message in sorted(held.items()):
+            if seq in held and subject_matches(subject, message.subject):
+                yield StoredMessage(name, seq, message.subject, message.data, dict(message.headers))
+
+    async def erase_message(self, message: StoredMessage) -> bool:
+        """Remove one stored message; False when it was gone."""
+        self._ensure_open()
+        return self._stored.get(message.stream, {}).pop(message.sequence, None) is not None
 
     async def subscribe_batch(
         self,

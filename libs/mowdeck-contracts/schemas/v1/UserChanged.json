@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Payload of ``identity.user.created``, ``identity.user.disabled`` and ``.deleted``.\n\n``account_id`` is the account in which the change happened (None only for platform level\nchanges). ``subuser`` is True for users owned by the account.",
+  "description": "Payload of ``identity.user.created``, ``identity.user.disabled`` and ``.deleted``.\n\n``account_id`` is the account in which the change happened (None only for platform level\nchanges). ``subuser`` is True for users owned by the account.\n\n**Version 2** (:data:`USER_CHANGED_VERSION`, ADR 0082) carries no ``username``: the events\nstay in the ``EVENTS`` stream for its retention, no consumer ever read the name, and a deleted\nuser's name must not outlive the user there. The user is named by the opaque ``user_id``\nalone. The field stays in the model, optional, so that a version 1 event still stored in the\nstream decodes; producers no longer set it. A consumer built before version 2 requires the\nfield and drops a version 2 event, so consumers are updated with or before Identity (one\nrelease ships both).",
   "properties": {
     "account_id": {
       "anyOf": [
@@ -39,15 +39,22 @@
       "type": "string"
     },
     "username": {
-      "maxLength": 64,
-      "minLength": 1,
-      "title": "Username",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Username"
     }
   },
   "required": [
-    "user_id",
-    "username"
+    "user_id"
   ],
   "title": "UserChanged",
   "type": "object"

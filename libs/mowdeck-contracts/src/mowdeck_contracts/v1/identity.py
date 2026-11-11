@@ -51,6 +51,10 @@ IDENTITY_SESSION_NEW_DEVICE: Final = "identity.session.new_device"
 """Event type: a login from a device the user never used before (payload :class:`NewDeviceLogin`,
 ADR 0065); Notifications tells the user."""
 
+USER_CHANGED_VERSION: Final = 2
+"""Envelope ``version`` of the three ``identity.user.*`` events since ADR 0082: the payload
+:class:`UserChanged` without ``username``."""
+
 IDENTITY_EVENT_TYPES: Final = (
     IDENTITY_ACCOUNT_CREATED,
     IDENTITY_USER_CREATED,
@@ -92,11 +96,20 @@ class UserChanged(ContractModel):
 
     ``account_id`` is the account in which the change happened (None only for platform level
     changes). ``subuser`` is True for users owned by the account.
+
+    **Version 2** (:data:`USER_CHANGED_VERSION`, ADR 0082) carries no ``username``: the events
+    stay in the ``EVENTS`` stream for its retention, no consumer ever read the name, and a deleted
+    user's name must not outlive the user there. The user is named by the opaque ``user_id``
+    alone. The field stays in the model, optional, so that a version 1 event still stored in the
+    stream decodes; producers no longer set it. A consumer built before version 2 requires the
+    field and drops a version 2 event, so consumers are updated with or before Identity (one
+    release ships both).
     """
 
     user_id: UUID
     account_id: UUID | None = None
-    username: str = Field(min_length=1, max_length=64)
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    """Version 1 only (deprecated): the normalized user name. Never set since version 2."""
     subuser: bool = False
     reason: str | None = Field(default=None, max_length=200)
 

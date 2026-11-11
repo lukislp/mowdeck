@@ -16,7 +16,12 @@ JetStream streams. Each entry lists what the service's code does on the bus:
 * ``publish``: subjects it publishes on, or sends core NATS requests to;
 * ``serve``: core NATS subjects it answers (request/reply; replies go to the requester's inbox
   through ``allow_responses``);
-* ``consume``: stream filters it reads through JetStream push consumers.
+* ``consume``: stream filters it reads through JetStream push consumers;
+* ``purge``: stream subject filters whose stored messages it removes with a filtered purge
+  (ADR 0082: Fleet, for the subjects of a removed mower);
+* ``erase``: stream subject filters whose stored messages it reads one by one and deletes singly
+  (ADR 0082: Identity, for the events of an erased account or a deleted user, which no subject
+  names).
 
 From that the generator derives the server permissions, least privilege by construction:
 
@@ -24,7 +29,13 @@ From that the generator derives the server permissions, least privilege by const
   wait for the streams), ``$JS.API.CONSUMER.CREATE.<stream>.*.<filter>`` for each consumed
   filter (the subject based API: the server checks the filter in the API subject against the
   request), ``$JS.API.CONSUMER.INFO.<stream>.*`` and ``$JS.ACK.<stream>.>`` of the consumed
-  streams; ``streams`` alone may create and update the streams;
+  streams; ``streams`` alone may create and update the streams; ``$JS.API.STREAM.PURGE.<stream>``
+  for the streams of the ``purge`` filters, and ``$JS.API.STREAM.MSG.GET.<stream>`` plus
+  ``$JS.API.STREAM.MSG.DELETE.<stream>`` for the streams of the ``erase`` filters. The server
+  checks these three per stream only (the filter of a purge and the sequence of a delete are in
+  the request body), so they are given to the one owner of what the stream's messages are about
+  and to nobody else; the filters listed here are what its code may pass, kept in step by the
+  scan below;
 * subscribe: the served subjects and the user's own inbox ``_INBOX.<user>.>`` (replies and
   the delivery subjects of its consumers), never another user's inbox.
 
@@ -57,7 +68,7 @@ CHART_AUTH_CONF = Path("infra/helm/mowdeck/files/nats-auth.conf")
 STREAMS_USER = "streams"
 """The user of the one-shot job ``nats-streams`` (``python -m mowdeck_service_kit.bus.streams``)."""
 
-Kind = Literal["publish", "serve", "consume"]
+Kind = Literal["publish", "serve", "consume", "purge", "erase"]
 
 
 @dataclass(frozen=True)
@@ -67,12 +78,16 @@ class Access:
     publish: tuple[str, ...] = ()
     serve: tuple[str, ...] = ()
     consume: tuple[str, ...] = ()
+    purge: tuple[str, ...] = ()
+    erase: tuple[str, ...] = ()
     manage_streams: bool = False
 
     def entries(self) -> Iterable[tuple[Kind, str]]:
         yield from (("publish", s) for s in self.publish)
         yield from (("serve", s) for s in self.serve)
         yield from (("consume", s) for s in self.consume)
+        yield from (("purge", s) for s in self.purge)
+        yield from (("erase", s) for s in self.erase)
 
 
 # Every service that asks Entitlements about plans (mowdeck_service_kit.entitlements).
@@ -166,11 +181,22 @@ USERS: dict[str, Access] = {
             *_GRANTS,
             *_USER_DELETED,
             *_PLAN_CHANGES,
+            "event.mower.removed",
+        ),
+        # Fleet owns the mowers: it removes what the streams hold of a removed one (ADR 0082).
+        purge=(
+            "camera.mower.*.>",
+            "command.mower.*",
+            "command.result.mower.*",
+            "device.mower.*.>",
+            "telemetry.mower.*",
         ),
     ),
     "identity": Access(
         publish=(*_PLANS, "account.erase.*", "event.identity.>"),
-        consume=(*_GRANTS, *_PLAN_CHANGES),
+        consume=(*_GRANTS, *_USER_DELETED, *_PLAN_CHANGES),
+        # Identity owns accounts and users: it removes their stored events (ADR 0082).
+        erase=("event.>",),
     ),
     "notifications": Access(
         publish=(
@@ -303,6 +329,9 @@ def check_users(users: Mapping[str, Access]) -> list[str]:
         for subject in access.consume:
             if not stream_of(subject):
                 problems.append(f"{user}: consumes {subject}, which no stream stores")
+        for subject in (*access.purge, *access.erase):
+            if not stream_of(subject):
+                problems.append(f"{user}: removes {subject}, which no stream stores")
         for subject in access.serve:
             if stream_of(subject):
                 problems.append(f"{user}: serves {subject}, which a stream captures")
@@ -327,6 +356,10 @@ def permissions(user: str, access: Access) -> tuple[list[str], list[str]]:
     for name in sorted(consumed):
         publish += [f"$JS.API.CONSUMER.CREATE.{name}.*.{f}" for f in sorted(consumed[name])]
         publish += [f"$JS.API.CONSUMER.INFO.{name}.*", f"$JS.ACK.{name}.>"]
+    for name in sorted({stream_of(subject) for subject in access.purge}):
+        publish.append(f"$JS.API.STREAM.PURGE.{name}")
+    for name in sorted({stream_of(subject) for subject in access.erase}):
+        publish += [f"$JS.API.STREAM.MSG.GET.{name}", f"$JS.API.STREAM.MSG.DELETE.{name}"]
     subscribe = [f"_INBOX.{user}.>", *sorted(access.serve)]
     return publish, subscribe
 
@@ -375,14 +408,20 @@ def render(users: Mapping[str, Access] = USERS) -> str:
 def summary(users: Mapping[str, Access] = USERS) -> str:
     """The map as a Markdown table (for the ADR and the pull request)."""
     rows = [
-        "| User | Publishes and requests | Answers (core NATS) | Consumes (JetStream) |",
-        "| --- | --- | --- | --- |",
+        "| User | Publishes and requests | Answers (core NATS) | Consumes (JetStream) "
+        "| Removes stored messages |",
+        "| --- | --- | --- | --- | --- |",
     ]
     for user in sorted(users):
         access = users[user]
         cells = [
             "<br>".join(f"`{s}`" for s in sorted(subjects)) or "-"
-            for subjects in (access.publish, access.serve, access.consume)
+            for subjects in (
+                access.publish,
+                access.serve,
+                access.consume,
+                (*access.purge, *access.erase),
+            )
         ]
         if access.manage_streams:
             cells[0] = "creates and updates the streams " + ", ".join(stream_names())
@@ -395,6 +434,10 @@ def summary(users: Mapping[str, Access] = USERS) -> str:
 _SUBSCRIBE = {"subscribe", "_subscribe", "subscribe_batch"}
 _REQUEST = {"request", "_request"}
 _PUBLISH = {"publish", "_publish", "emit", "connection_event", "_connection_event"}
+_PURGE = {"purge_subject", "count_subject"}
+"""``StreamStore`` calls on a subject filter that is purged as a whole (and counted for it)."""
+_ERASE = {"stored_messages"}
+"""``StreamStore`` call that reads a subject filter to delete single messages."""
 _CORE = {"account", "fleet", "gateway", "entitlements", "tracks", "relay", "presence"}
 """First tokens of the core NATS subjects (request/reply, and ``presence.accounts``)."""
 _SUBJECT = re.compile(r"[a-z_][a-z0-9_*>-]*(\.[a-z0-9_*>-]+)+")
@@ -512,6 +555,11 @@ def scan(root: Path) -> dict[str, set[tuple[Kind, str]]]:
                     typed = event_type(keyword.value)
                     if keyword.arg == "type" and typed:
                         uses.add(("publish", f"event.{typed}"))
+                if name in _PURGE | _ERASE and node.args:
+                    removed = resolve(node.args[0])
+                    if removed is not None and stream_of(removed):
+                        uses.add(("purge" if name in _PURGE else "erase", removed))
+                    continue
                 if name not in _SUBSCRIBE | _REQUEST | _PUBLISH or not node.args:
                     continue
                 if name in _PUBLISH and "bus" not in receiver:

@@ -143,7 +143,7 @@ Produced on JetStream `EVENTS`, payloads in `mowdeck_contracts.v1.identity` (JSO
 | `event.identity.account.created` | `AccountCreated` | registration |
 | `event.identity.user.created` | `UserChanged` | registration, new sub-user |
 | `event.identity.user.disabled` | `UserChanged` | user or membership disabled |
-| `event.identity.user.deleted` | `UserChanged` | sub-user deleted, person removed, a member deleted themselves (`reason: "self"`); Fleet, Scheduler, Telemetry, Notifications and Vision drop what is the user's ([Delete me](#delete-me-adr-0082)) |
+| `event.identity.user.deleted` | `UserChanged` (version 2: the user id, no user name) | sub-user deleted, person removed, a member deleted themselves (`reason: "self"`); Identity itself erases the stored events that name the user; Fleet, Scheduler, Telemetry, Notifications and Vision drop what is the user's ([Delete me](#delete-me-adr-0082)) |
 | `event.identity.grants.changed` | `GrantsChanged` | tuples of subjects changed: drop cached decisions (`mowdeck_authz.events.subscribe_cache_invalidation`) |
 | `event.identity.api_token.revoked` | `ApiTokenRevoked` | token revoked (also by disable, removal, account deletion) |
 | `event.identity.session.new_device` | `NewDeviceLogin` | a login from a device the user had not used before, alerts on (ADR 0065) |
@@ -160,7 +160,7 @@ The database is the source of truth; OpenFGA is a projection per subject. Every 
 
 1. The account becomes `purging` (all sessions end, no tuple for anybody, no way back; before this the owner keeps every permission) and an `account_erasures` row names the services that must confirm (`MOWDECK_IDENTITY_ERASURE_SERVICES`).
 2. Every service gets a core NATS request `account.erase.<service>` (`AccountEraseRequest`, answered with `AccountEraseReply`), Fleet first, the others `MOWDECK_IDENTITY_ERASURE_SETTLE_SECONDS` later. A confirmation is stored at once and never asked again; a failure is stored with its reason and retried with a doubling wait (30 s to 10 minutes). Identity keeps its rows while any listed service has not confirmed.
-3. After the last confirmation Identity deletes its own rows and tuples, scrubs the personal fields of the audit rows of the account (`audit_log_scrub`, migration 0011; the rows stay), writes `account.erased` and marks the record erased.
+3. After the last confirmation Identity removes the account's domain events from the `EVENTS` stream (`EventLog`, `adapters/bus/event_log.py`: the stream keeps them 30 days and its subjects name no account, so Identity reads it and deletes every message whose envelope or payload names the account; a failure is the step `event_stream` of the record and is retried, the rows stay until it succeeded). Then Identity deletes its own rows and tuples, scrubs the personal fields of the audit rows of the account (`audit_log_scrub`, migration 0011; the rows stay), writes `account.erased` and marks the record erased.
 
 `python -m identity.cli erasures [--all]` shows the open purges (and with `--all` the finished ones): services confirmed, attempts, the last error. A purge older than `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` logs an error on every attempt. Until every service answers `account.erase.<service>` (follow-up steps of the ADR) the switch stays off and an account scheduled for deletion stays `deleting`; with the switch on and a service missing it stays `purging`. The public demo runs no erasure (its sandboxes have their own purge).
 
@@ -186,7 +186,7 @@ What goes with a deleted member, in one transaction:
 | API tokens the user created for the account | revoked, the row stays with the account (as when an admin removes the user) |
 | Audit rows about the user | stay; `audit_log_scrub_user` (migration 0012) removes the personal `details` keys, and the name and address where they are the user's. A row somebody else wrote about the user keeps that person's name and address. The last row is `user.self_deleted` |
 
-Every access token of the user is refused by Identity at once (`session_ended` treats a session whose user is gone as ended); other services accept it until it expires (at most the access token lifetime) and then find no permission, because the tuples are gone. After the commit `identity.user.deleted` goes out and the other services drop what is the user's: their own rows (Notifications, Vision), their name in records that stay with the account (Fleet, Scheduler), the tracking share links they created (Telemetry). What the user created (mowers, schedules, zones) belongs to the account and stays.
+Every access token of the user is refused by Identity at once (`session_ended` treats a session whose user is gone as ended); other services accept it until it expires (at most the access token lifetime) and then find no permission, because the tuples are gone. After the commit `identity.user.deleted` goes out and the other services drop what is the user's: their own rows (Notifications, Vision), their name in records that stay with the account (Fleet, Scheduler), the tracking share links they created (Telemetry). What the user created (mowers, schedules, zones) belongs to the account and stays. Identity also consumes the event itself (durable `identity-user-events`) and erases from the `EVENTS` stream every stored event that names the user: by `user_id` (their notifications, a login from a new device) or by a principal reference with their display name. The three `identity.user.*` events no longer carry the user name (`UserChanged` version 2), so the announcement that stays holds ids only.
 
 ## Settings
 
@@ -313,7 +313,7 @@ Tables (Alembic revisions `0002` to `0004`): `accounts`, `users`, `memberships` 
 | `adapters/api/` | routes, schemas, dependencies, error mapping |
 | `adapters/db/` | tables, the PostgreSQL store, Alembic migrations |
 | `adapters/memory.py` | the memory store (tests) |
-| `adapters/crypto.py`, `bus/`, `modules.py` | Argon2id, AES-GCM, event publisher, the NATS eraser (`bus/erasure.py`), descriptor fetcher |
+| `adapters/crypto.py`, `bus/`, `modules.py` | Argon2id, AES-GCM, event publisher, the NATS eraser (`bus/erasure.py`), the stored events of an erased account or user (`bus/event_log.py`), descriptor fetcher |
 | `runtime.py`, `main.py`, `cli.py` | wiring, app, operator commands |
 
 ## Local start

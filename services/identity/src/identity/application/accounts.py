@@ -236,7 +236,7 @@ class AccountService:
             work.emit(
                 IDENTITY_USER_CREATED,
                 account_id,
-                UserChanged(user_id=user_id, account_id=account_id, username=username_norm),
+                UserChanged(user_id=user_id, account_id=account_id),
             )
         return Registered(account_id, user_id)
 

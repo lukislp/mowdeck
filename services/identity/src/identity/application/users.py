@@ -211,9 +211,7 @@ class UserService:
             work.emit(
                 IDENTITY_USER_CREATED,
                 account_id,
-                UserChanged(
-                    user_id=created.id, account_id=account_id, username=username_norm, subuser=True
-                ),
+                UserChanged(user_id=created.id, account_id=account_id, subuser=True),
             )
         return MemberView(created, membership, assignments)
 
@@ -293,7 +291,6 @@ class UserService:
                     UserChanged(
                         user_id=user_id,
                         account_id=account_id,
-                        username=found.username_norm,
                         subuser=owned,
                     ),
                 )
@@ -457,7 +454,6 @@ def _emit_deleted(
         UserChanged(
             user_id=found.id,
             account_id=account_id,
-            username=found.username_norm,
             subuser=owned,
             reason=reason,
         ),

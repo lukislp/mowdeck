@@ -15,7 +15,9 @@ Skipped unless ``MOWDECK_TEST_NATS_AUTH_URL`` points at a NATS server with JetSt
 
 It checks that a service user can do what its service does and nothing else: no anonymous
 client, no subject outside the allow list, no other user's inbox, no consumer with a broader
-filter, no stream changes except by the ``streams`` user.
+filter, no stream changes except by the ``streams`` user, and stored messages removed only by
+the owner of what they are about (ADR 0082): Fleet purges the subjects of a mower, Identity
+erases single domain events.
 """
 
 import asyncio
@@ -215,6 +217,75 @@ async def test_a_service_cannot_read_what_is_not_its_own(streams: None) -> None:
             "$JS.API.CONSUMER.CREATE.EVENTS.evil.event.identity.>", json.dumps(body).encode(), 2
         )
         assert "error" in json.loads(answer.data)
+
+
+async def test_fleet_purges_the_subjects_of_a_mower_and_nobody_else_can(streams: None) -> None:
+    mower_id = uuid4()
+    gateway, fleet = _bus("device-gateway"), _bus("fleet")
+    await gateway.connect()
+    await fleet.connect()
+    try:
+        await gateway.publish(f"telemetry.mower.{mower_id}", b"{}")
+        await gateway.publish(f"device.mower.{mower_id}.map", b"{}")
+        await fleet.publish(f"command.mower.{mower_id}", b"{}")
+        assert await fleet.count_subject(f"telemetry.mower.{mower_id}") == 1
+        assert await fleet.purge_subject(f"telemetry.mower.{mower_id}") == 1
+        assert await fleet.purge_subject(f"device.mower.{mower_id}.>") == 1
+        assert await fleet.purge_subject(f"command.mower.{mower_id}") == 1
+        assert await fleet.purge_subject(f"command.result.mower.{mower_id}") == 0
+        assert await fleet.purge_subject(f"camera.mower.{mower_id}.>") == 0
+        assert await fleet.count_subject(f"device.mower.{mower_id}.>") == 0
+        # Not the domain events, and not message by message.
+        with pytest.raises(BusError):
+            await fleet.purge_subject("event.mower.removed")
+        with pytest.raises(BusError):
+            _ = [m async for m in fleet.stored_messages("event.mower.removed")]
+        # The publisher of the states may not remove them, nor may a consumer.
+        with pytest.raises(BusError):
+            await gateway.purge_subject(f"telemetry.mower.{mower_id}")
+    finally:
+        await gateway.close()
+        await fleet.close()
+    async with UserClient("vision") as vision:
+        assert vision.nc is not None
+        with pytest.raises(nats.errors.TimeoutError):
+            await vision.nc.request("$JS.API.STREAM.PURGE.DEVICE", b"{}", 1)
+        assert await vision.violation("$js.api.stream.purge.device")
+
+
+async def test_identity_erases_single_events_and_nobody_else_can(streams: None) -> None:
+    marker = uuid4().hex
+    identity, notifications = _bus("identity"), _bus("notifications")
+    await identity.connect()
+    await notifications.connect()
+    try:
+        await notifications.publish("event.notifications.raised", f"raised {marker}".encode())
+        await identity.publish("event.identity.user.created", f"created {marker}".encode())
+        mine = [m async for m in identity.stored_messages("event.>") if marker.encode() in m.data]
+        assert sorted(m.subject for m in mine) == [
+            "event.identity.user.created",
+            "event.notifications.raised",
+        ]
+        assert [await identity.erase_message(m) for m in mine] == [True, True]
+        assert await identity.erase_message(mine[0]) is False
+        left = [m async for m in identity.stored_messages("event.>") if marker.encode() in m.data]
+        assert left == []
+        # Identity purges no stream as a whole, and reads no other stream.
+        with pytest.raises(BusError):
+            await identity.purge_subject("event.>")
+        with pytest.raises(BusError):
+            _ = [m async for m in identity.stored_messages("telemetry.mower.*")]
+        # A publisher of events can neither read the stream by sequence nor delete from it.
+        with pytest.raises(BusError):
+            _ = [m async for m in notifications.stored_messages("event.>")]
+    finally:
+        await identity.close()
+        await notifications.close()
+    async with UserClient("notifications") as client:
+        assert client.nc is not None
+        with pytest.raises(nats.errors.TimeoutError):
+            await client.nc.request("$JS.API.STREAM.MSG.DELETE.EVENTS", b'{"seq": 1}', 1)
+        assert await client.violation("$js.api.stream.msg.delete.events")
 
 
 async def test_only_the_streams_job_changes_streams(streams: None) -> None:

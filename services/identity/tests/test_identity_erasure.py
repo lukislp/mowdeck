@@ -287,7 +287,7 @@ async def test_a_failure_in_identity_itself_is_retried_too(monkeypatch: pytest.M
         service = _erasure(h)
         await service.begin_due()
 
-        async def broken(_: AccountErasure) -> None:
+        async def broken(_: AccountErasure, __: int) -> None:
             msg = "database busy"
             raise RuntimeError(msg)
 

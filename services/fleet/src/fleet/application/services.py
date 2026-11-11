@@ -5,6 +5,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from uuid import UUID
 
 from mowdeck_authz import Authorizer, TupleBackend, TupleWriter
 from mowdeck_authz.writer import SupportsInvalidate
@@ -51,6 +52,7 @@ from fleet.application.ports import (
     CommandPublisher,
     EventPublisher,
     FirmwareCheckGateway,
+    MowerStreams,
     PathPreviewGateway,
     PhotoGateway,
     SecretCipher,
@@ -82,6 +84,9 @@ class Services:
     writer: TupleWriter
     purge: AccountPurge
     erasure: AccountErasure
+    """Erases an account: rows, tuples, memory and the stream messages of its mowers."""
+    mower_streams: MowerStreams
+    """Removes what the message streams hold of a mower (``mower.removed``, ADR 0082)."""
     """Answers ``account.erase.fleet`` (ADR 0082)."""
     user_erasure: UserErasure
     """Forgets a deleted user (``identity.user.deleted``, ADR 0082)."""
@@ -107,6 +112,7 @@ def build_services(
     firmware_check_gateway: FirmwareCheckGateway | None = None,
     photo_gateway: PhotoGateway | None = None,
     snapshot_min_interval_seconds: float = 30.0,
+    mower_streams: MowerStreams | None = None,
 ) -> Services:
     """Wire the use cases. Tuples are written with ``TupleWriter(owner="fleet")``."""
     writer = TupleWriter(tuple_backend, owner="fleet", caches=caches)
@@ -130,6 +136,7 @@ def build_services(
     )
     throttle = LoginThrottle(clock)
     purge = AccountPurge(uow, camera, throttle)
+    streams = mower_streams or _NoMowerStreams()
     return Services(
         sites=sites,
         groups=GroupService(uow, store, access, clock, entitlements),
@@ -166,9 +173,20 @@ def build_services(
         access=access,
         writer=writer,
         purge=purge,
-        erasure=account_erasure(purge, store),
+        erasure=account_erasure(purge, store, streams),
+        mower_streams=streams,
         user_erasure=user_erasure(store),
     )
+
+
+class _NoMowerStreams:
+    """Without a bus there are no streams, so nothing of a mower is held in one."""
+
+    async def purge(self, mower_id: UUID) -> int:
+        return 0
+
+    async def remaining(self, mower_id: UUID) -> int:
+        return 0
 
 
 class _NoCameraGateway:

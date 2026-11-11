@@ -37,7 +37,7 @@ class AccountPurge:
 
     async def purge(self, account_id: UUID) -> int:
         """Remove everything of ``account_id``; returns the number of rows and objects removed."""
-        mower_ids = await self._mower_ids(account_id)
+        mower_ids = await self.mower_ids(account_id)
         deleted = 0
         for mower_id in mower_ids:
             deleted += await self._remove_mower(account_id, mower_id)
@@ -48,7 +48,9 @@ class AccountPurge:
             deleted += await self._remove_records(work.tx, account_id)
         return deleted
 
-    async def _mower_ids(self, account_id: UUID) -> list[UUID]:
+    async def mower_ids(self, account_id: UUID) -> list[UUID]:
+        """The mowers the account has now (the account erasure purges their stream subjects,
+        which it can only name while the rows exist)."""
         async with self.uow.store.transaction() as tx:
             return [m.id for m in await tx.mowers.find(account_id=account_id)]
 

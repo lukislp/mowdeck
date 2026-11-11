@@ -188,6 +188,8 @@ The Device-Gateway asks for the registrations of its shard with a core NATS requ
 
 See [ADR 0009](../../docs/adr/0009-command-and-event-envelopes.md).
 
+**Events with a newer version.** `identity.user.created`, `identity.user.disabled` and `identity.user.deleted` are published as version 2 (`USER_CHANGED_VERSION`): `UserChanged` without `username` ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 11: the events stay 30 days in the `EVENTS` stream and no consumer read the name). The field stays in the model, optional, so a version 1 event still decodes. A consumer built before version 2 requires the field and drops a version 2 event: update consumers with or before Identity.
+
 ## Regenerating the JSON Schemas
 
 The test suite compares the committed schemas with a fresh export and fails when a model changed without regenerating them. After changing a model, run from the repository root:

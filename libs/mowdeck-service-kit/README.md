@@ -247,6 +247,19 @@ await plans.require_feature(account_id, "manual_drive")  # 403 feature-not-in-pl
 
 The client asks `entitlements.check` (core NATS) once per account and caches the returned `EntitlementSnapshot` for `MOWDECK_ENTITLEMENTS_CACHE_SECONDS`; `await plans.subscribe()` drops snapshots on `entitlements.plan.changed`. When Entitlements does not answer, `MOWDECK_ENTITLEMENTS_BILLING_ENABLED` decides (off: allowed with plan `unlimited`, on: refused with `entitlements_unavailable`); outages are never cached. `view` and `emergency_stop` are always allowed and never asked. The problem types are `PlanLimitReached` (409 `plan-limit`, `errors` carry `limit` and `current`) and `FeatureNotInPlan` (403 `feature-not-in-plan`); `feature_gate(key)` is a FastAPI dependency for routes, after `install_entitlements(app, plans)`. Tests use `mowdeck_service_kit.testing.FakeEntitlements` (one plan for every account, changeable between requests, records every question).
 
+## What the streams hold
+
+JetStream keeps messages for the retention of their stream (30 days in `EVENTS` and `DEVICE`), so the data of an erased account or a removed mower would outlive its rows there ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 11). `mowdeck_service_kit.bus.StreamStore` is the port that removes it; `JetStreamBus` and `InMemoryBus` implement it. It is not part of `EventBus`: only the service that owns what a message is about uses it (Fleet for the subjects of a mower, Identity for the events of an account or a user), and the NATS permissions allow the calls to nobody else.
+
+| Call | JetStream | For |
+| --- | --- | --- |
+| `purge_subject(subject) -> int` | `STREAM.PURGE` with a subject filter | subjects that name what is removed (`telemetry.mower.<id>`) |
+| `count_subject(subject) -> int` | stream info with a subject filter | the check after a purge |
+| `stored_messages(subject)` (async iterator of `StoredMessage`) | `STREAM.MSG.GET` with `next_by_subj`, one request per message, no consumer | subjects that do not name it (`event.>`): the caller decides per message |
+| `erase_message(message) -> bool` | `STREAM.MSG.DELETE` (the message is overwritten) | removing one of them |
+
+Every call is idempotent and raises `BusError` when the server refused or did not answer; a subject no stream stores raises `ValueError`. A service that starts to use one of them adds the `purge` or `erase` entry in `tools/repo-checks/scripts/nats_auth.py` (the code scan finds the calls), and `tools/repo-checks/tests/test_stream_erasure_registry.py` fails for a new stream or per-mower subject that nobody removes. `InMemoryBus` keeps what its streams hold (with the per-subject limit, without age and size limits), so `last_per_subject` and these calls behave like the server in tests.
+
 ## Account erasure
 
 A service that stores per-account data answers `account.erase.<service>` when Identity deletes an account ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)). `mowdeck_service_kit.erasure` holds what is the same in every service:

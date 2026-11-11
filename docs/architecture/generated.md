@@ -279,6 +279,7 @@ flowchart LR
   c_device_gateway["device-gateway"]
   c_entitlements["entitlements"]
   c_fleet["fleet"]
+  c_identity["identity"]
   c_notifications["notifications"]
   c_realtime["realtime"]
   c_scheduler["scheduler"]
@@ -297,7 +298,8 @@ flowchart LR
   s_EVENTS -->|"event.identity.account.created"| c_billing
   s_EVENTS -->|"event.mower.>"| c_device_gateway
   s_EVENTS -->|"event.identity.account.created"| c_entitlements
-  s_EVENTS -->|"event.identity.account.created<br/>event.identity.user.deleted"| c_fleet
+  s_EVENTS -->|"event.identity.account.created<br/>event.identity.user.deleted<br/>event.mower.removed"| c_fleet
+  s_EVENTS -->|"event.identity.user.deleted"| c_identity
   s_EVENTS -->|"event.identity.><br/>event.mower.><br/>event.telemetry.><br/>+2 more"| c_notifications
   s_EVENTS -->|"event.identity.grants.changed<br/>event.notifications.><br/>event.vision.proposal.>"| c_realtime
   s_EVENTS -->|"event.identity.user.deleted"| c_scheduler
@@ -416,8 +418,9 @@ flowchart LR
 | `event.identity.>` | EVENTS | - | notifications, vision |
 | `event.identity.account.created` | EVENTS | - | billing, entitlements, fleet |
 | `event.identity.grants.changed` | EVENTS | identity | realtime |
-| `event.identity.user.deleted` | EVENTS | - | fleet, scheduler, telemetry |
+| `event.identity.user.deleted` | EVENTS | - | fleet, identity, scheduler, telemetry |
 | `event.mower.>` | EVENTS | - | device-gateway, notifications, telemetry |
+| `event.mower.removed` | EVENTS | - | fleet |
 | `event.notifications.>` | EVENTS | - | realtime, telemetry |
 | `event.presence.accounts` | EVENTS | realtime | - |
 | `event.telemetry.>` | EVENTS | - | notifications |

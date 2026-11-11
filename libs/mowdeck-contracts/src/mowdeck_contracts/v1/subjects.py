@@ -215,6 +215,16 @@ def device_subject(mower_id: UUID, kind: DeviceSnapshotKind) -> str:
     return f"{DEVICE_PREFIX}.{mower_id}.{kind}"
 
 
+def device_wildcard(mower_id: UUID) -> str:
+    """Wildcard for every device snapshot of one mower: ``device.mower.<id>.>``."""
+    return f"{DEVICE_PREFIX}.{mower_id}.>"
+
+
+def camera_wildcard(mower_id: UUID) -> str:
+    """Wildcard for every camera relay event of one mower: ``camera.mower.<id>.>``."""
+    return f"{CAMERA_PREFIX}.{mower_id}.>"
+
+
 def parse_device_subject(subject: str) -> tuple[UUID, str]:
     """Split ``device.mower.<id>.<kind>`` into the mower id and the snapshot kind."""
     parts = subject.split(".")
@@ -521,6 +531,11 @@ CAMERA = StreamSpec(
 
 STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, EVENTS, DEVICE, CAMERA)
 """All streams MowDeck services expect."""
+
+MOWER_STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, DEVICE, CAMERA)
+"""The streams whose subjects carry the mower id (``<kind>.mower.<id>...``): everything they
+hold of one mower can be purged by a subject filter (ADR 0082). ``EVENTS`` is not one of them:
+``event.<domain>.<name>`` names neither a mower nor an account, the envelope does."""
 
 
 def stream_for_subject(subject: str) -> StreamSpec | None:

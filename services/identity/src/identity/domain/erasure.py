@@ -169,6 +169,47 @@ def audit_fields_after_user_scrub(
     return None, None, kept
 
 
+USER_DELETED_EVENT = "identity.user.deleted"
+"""The event that tells the services a user is gone. It carries the opaque user id and no name
+(version 2 of ``UserChanged``), and the services still have to read it, so it is the one event
+about a deleted user that stays in the stream."""
+
+
+def _same_id(value: Any, wanted: UUID) -> bool:
+    return isinstance(value, str) and value.lower() == str(wanted)
+
+
+def event_names_account(event: Mapping[str, Any], account_id: UUID) -> bool:
+    """Whether a stored domain event (the envelope as JSON) belongs to the account: the
+    envelope's ``account_id`` says so, or the payload's (every payload of an account's event
+    carries it). Platform level events (no account) belong to nobody."""
+    payload = event.get("payload")
+    return _same_id(event.get("account_id"), account_id) or (
+        isinstance(payload, Mapping) and _same_id(payload.get("account_id"), account_id)
+    )
+
+
+def event_names_user(event: Mapping[str, Any], user_id: UUID) -> bool:
+    """Whether a stored domain event names the user and must go when the user is deleted.
+
+    An event names a user by ``user_id`` in its payload (the user's notifications, logins from a
+    new device, ``identity.user.created`` with the user name of version 1) or by a principal
+    reference in it (``requested_by``, ``owner``: the subject id next to the display name). The
+    account's other events stay: the account goes on. :data:`USER_DELETED_EVENT` itself stays
+    as long as it carries no name, the services still consume it."""
+    payload = event.get("payload")
+    if not isinstance(payload, Mapping):
+        return False
+    if event.get("type") == USER_DELETED_EVENT and not payload.get("username"):
+        return False
+    if _same_id(payload.get("user_id"), user_id):
+        return True
+    return any(
+        isinstance(value, Mapping) and _same_id(value.get("subject"), user_id)
+        for value in payload.values()
+    )
+
+
 def grace_over(account: Account, now: datetime) -> bool:
     """Whether the grace period of an account scheduled for deletion has passed."""
     return (

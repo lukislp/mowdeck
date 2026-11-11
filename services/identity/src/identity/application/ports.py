@@ -358,6 +358,23 @@ class AccountEraser(Protocol):
         ...
 
 
+class EventLog(Protocol):
+    """The domain events the bus still stores (the ``EVENTS`` stream, 30 days), for the one
+    purpose of removing those of an erased account or a deleted user (ADR 0082). Which event
+    belongs to whom is decided by :func:`identity.domain.erasure.event_names_account` and
+    :func:`~identity.domain.erasure.event_names_user`. Both calls are idempotent and raise when
+    the stream could not be read or changed, so the caller retries.
+    """
+
+    async def forget_account(self, account_id: UUID) -> int:
+        """Erase every stored event of the account; how many were erased."""
+        ...
+
+    async def forget_user(self, user_id: UUID) -> int:
+        """Erase every stored event that names the user; how many were erased."""
+        ...
+
+
 class CeremonyRejected(Exception):  # noqa: N818 - reads like what happened
     """A WebAuthn response failed verification. ``reason`` is internal (logs, audit)."""
 

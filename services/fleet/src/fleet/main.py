@@ -57,6 +57,7 @@ from fleet.adapters.bus.firmware import BusFirmwareCheckGateway
 from fleet.adapters.bus.path_preview import BusPathPreviewGateway
 from fleet.adapters.bus.photo import BusPhotoGateway
 from fleet.adapters.bus.publisher import BusCommandPublisher, BusEventPublisher
+from fleet.adapters.bus.streams import BusMowerStreams
 from fleet.adapters.bus.subscriptions import subscribe_all
 from fleet.adapters.crypto import cipher_from_key
 from fleet.adapters.db.store import SqlStore
@@ -157,6 +158,7 @@ def build_app(
                 active_bus, timeout_seconds=settings.camera_snapshot_timeout_seconds
             ),
             snapshot_min_interval_seconds=settings.camera_snapshot_min_interval_seconds,
+            mower_streams=BusMowerStreams(active_bus),
         )
         app.state.fleet = services
         subscriptions: list[Subscription] = []

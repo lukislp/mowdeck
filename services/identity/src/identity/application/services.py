@@ -29,6 +29,7 @@ from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
 from identity.application.ports import (
     AccountEraser,
+    EventLog,
     OAuthClient,
     PasskeyCeremonies,
     SandboxProvisioner,
@@ -70,9 +71,11 @@ class Services:
     erasure: ErasureService | None = None
     """The purge of deleted accounts (ADR 0082); None where it is not wired (the demo, tests)."""
 
-    def enable_erasure(self, eraser: AccountEraser, config: ErasureConfig) -> None:
+    def enable_erasure(
+        self, eraser: AccountEraser, config: ErasureConfig, events: EventLog
+    ) -> None:
         """Turn on the purge of accounts whose grace period is over."""
-        self.erasure = ErasureService(self.deps, eraser, config)
+        self.erasure = ErasureService(self.deps, eraser, config, events)
 
     def enable_sandboxes(self, provisioner: SandboxProvisioner, config: SandboxConfig) -> None:
         """Turn on the demo sandboxes ("Try the demo" gives every visitor an own account)."""

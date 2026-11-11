@@ -122,6 +122,33 @@ def _overlap(a: str, b: str) -> bool:
     return True
 
 
+PURGES = {"fleet": {"CAMERA", "COMMANDS", "DEVICE", "TELEMETRY"}}
+"""The streams a user may purge by subject filter: Fleet, the streams of the mower subjects."""
+ERASES = {"identity": {"EVENTS"}}
+"""The streams a user may read and delete single messages of: Identity, the domain events."""
+
+
+def test_stored_messages_have_one_remover_per_stream(gen: ModuleType) -> None:
+    """Whoever may remove from a stream can remove anything in it (the server checks the stream,
+    not the filter), so every stream has exactly one such user, and every stream has one: none
+    is left without anybody who removes an erased account's messages (ADR 0082)."""
+    removers: dict[str, set[str]] = {}
+    for user, access in gen.USERS.items():
+        for subject in (*access.purge, *access.erase):
+            removers.setdefault(gen.stream_of(subject), set()).add(user)
+    assert removers == {
+        "CAMERA": {"fleet"},
+        "COMMANDS": {"fleet"},
+        "DEVICE": {"fleet"},
+        "TELEMETRY": {"fleet"},
+        "EVENTS": {"identity"},
+    }
+    assert set(removers) == set(gen.stream_names())
+    assert gen.check_users({"x": gen.Access(purge=("fleet.mowers.list",))}) == [
+        "x: removes fleet.mowers.list, which no stream stores"
+    ]
+
+
 def test_each_event_has_one_publisher(gen: ModuleType) -> None:
     """A domain event comes from exactly one service: no two users may publish one subject."""
     owners = [
@@ -150,7 +177,14 @@ def test_the_permissions_are_least_privilege(gen: ModuleType) -> None:
         # The legacy consumer API (any filter) is never allowed.
         assert "CONSUMER.DURABLE.CREATE" not in block
         assert not re.search(r'"\$JS\.API\.CONSUMER\.CREATE\.[A-Z]+"', block)
-        assert "STREAM.DELETE" not in block and "STREAM.PURGE" not in block
+        # No user deletes a stream. Stored messages are removed by the one owner of what a
+        # stream's messages are about and by nobody else (ADR 0082).
+        assert "STREAM.DELETE" not in block
+        purges = set(re.findall(r'"\$JS\.API\.STREAM\.PURGE\.([A-Z]+)"', block))
+        erases = set(re.findall(r'"\$JS\.API\.STREAM\.MSG\.DELETE\.([A-Z]+)"', block))
+        reads = set(re.findall(r'"\$JS\.API\.STREAM\.MSG\.GET\.([A-Z]+)"', block))
+        assert purges == PURGES.get(user, set()), user
+        assert erases == reads == ERASES.get(user, set()), user
         assert '"$JS.API.>"' not in block and '">"' not in block
         manages = "STREAM.CREATE" in block or "STREAM.UPDATE" in block
         assert manages is (user == gen.STREAMS_USER), user

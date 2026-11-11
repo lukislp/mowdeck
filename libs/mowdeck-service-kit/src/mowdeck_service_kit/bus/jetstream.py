@@ -19,9 +19,10 @@ service's inbox when the service subscribes to it.
 """
 
 import asyncio
+import json
 import secrets
 import ssl
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,6 +56,7 @@ from mowdeck_service_kit.bus.base import (
     Outcome,
     PublishResult,
     RequestTimeoutError,
+    StoredMessage,
     check_acknowledge,
     dispatch,
     encode_payload,
@@ -67,6 +69,8 @@ from mowdeck_service_kit.tls import client_context
 _log = get_logger(__name__)
 
 _STREAM_POLL_SECONDS = 1.0
+_MESSAGE_GONE = frozenset({10037, 10043})
+"""JetStream error codes of a message that is not (or no longer) in the stream."""
 
 
 def nats_tls_context(settings: ServiceSettings) -> ssl.SSLContext | None:
@@ -567,6 +571,83 @@ class JetStreamBus:
 
         subscription = await client.subscribe(subject, queue=queue or "", cb=callback)
         return _NatsSubscriptionHandle(subscription)
+
+    # --- what the streams hold (StreamStore, ADR 0082) ----------------------------------------
+
+    def _stored_in(self, subject: str) -> StreamSpec:
+        stream = self._stream_for(subject.replace("*", "x").replace(">", "x"))
+        if stream is None:
+            msg = f"no stream stores {subject!r}"
+            raise ValueError(msg)
+        return stream
+
+    async def purge_subject(self, subject: str) -> int:
+        """Purge the messages matching ``subject`` from its stream (``$JS.API.STREAM.PURGE`` with
+        a subject filter); the number the server removed."""
+        stream = self._stored_in(subject)
+        api = f"$JS.API.STREAM.PURGE.{stream.name}"
+        try:
+            reply = await self._client().request(
+                api, json.dumps({"filter": subject}).encode(), timeout=self.publish_timeout_seconds
+            )
+            answer = json.loads(reply.data)
+        except (nats.errors.Error, ValueError) as exc:
+            msg = f"purging {subject!r} from {stream.name} failed: {exc!r}"
+            raise BusError(msg) from exc
+        if not isinstance(answer, dict) or not answer.get("success"):
+            error = answer.get("error") if isinstance(answer, dict) else answer
+            msg = f"purging {subject!r} from {stream.name} was refused: {error!r}"
+            raise BusError(msg)
+        return int(answer.get("purged", 0))
+
+    async def count_subject(self, subject: str) -> int:
+        """The number of stored messages matching ``subject`` (stream info with a subject
+        filter)."""
+        stream = self._stored_in(subject)
+        try:
+            info = await self._jetstream().stream_info(stream.name, subjects_filter=subject)
+        except nats.errors.Error as exc:
+            msg = f"counting {subject!r} in {stream.name} failed: {exc!r}"
+            raise BusError(msg) from exc
+        return sum((info.state.subjects or {}).values())
+
+    async def stored_messages(self, subject: str) -> AsyncIterator[StoredMessage]:
+        """Read the messages matching ``subject`` one request at a time (``STREAM.MSG.GET`` with
+        ``next_by_subj``): no consumer, and the reader sets the pace however large the stream."""
+        stream = self._stored_in(subject)
+        js = self._jetstream()
+        sequence = 1
+        while True:
+            try:
+                raw = await js.get_msg(stream.name, seq=sequence, subject=subject, next=True)
+            except nats.js.errors.NotFoundError:
+                return
+            except nats.errors.Error as exc:
+                msg = f"reading {subject!r} from {stream.name} failed: {exc!r}"
+                raise BusError(msg) from exc
+            if raw.seq is None or raw.subject is None:  # pragma: no cover - the server sets both
+                return
+            yield StoredMessage(
+                stream=stream.name,
+                sequence=raw.seq,
+                subject=raw.subject,
+                data=raw.data or b"",
+                headers=dict(raw.headers or {}),
+            )
+            sequence = raw.seq + 1
+
+    async def erase_message(self, message: StoredMessage) -> bool:
+        """Delete one message by its sequence; the server overwrites it (secure erase)."""
+        try:
+            return bool(await self._jetstream().delete_msg(message.stream, message.sequence))
+        except nats.js.errors.APIError as exc:
+            if exc.err_code in _MESSAGE_GONE:
+                return False
+            msg = f"erasing message {message.sequence} of {message.stream} failed: {exc!r}"
+            raise BusError(msg) from exc
+        except nats.errors.Error as exc:
+            msg = f"erasing message {message.sequence} of {message.stream} failed: {exc!r}"
+            raise BusError(msg) from exc
 
     async def request(
         self,
