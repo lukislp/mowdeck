@@ -7,6 +7,7 @@ scrub, restore only before the purge, no purge in the demo, the operator's view.
 
 import asyncio
 import io
+import re
 from contextlib import redirect_stdout
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -26,6 +27,15 @@ from identity.domain.models import AccountStatus
 from identity.runtime import Runtime
 
 DEMO: dict[str, Any] = {"demo_seed_token": "seed", "identity_erasure_enabled": True}
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+"""Colour codes of the console log renderer (on where the output supports colour, as in CI)."""
+
+
+def _plain(captured: Any) -> str:
+    """What ``capsys`` captured, as an operator reads it without colours."""
+    return ANSI.sub("", captured.out + captured.err)
+
+
 NOW_GRACE: dict[str, Any] = {
     "identity_erasure_enabled": True,
     "identity_deletion_grace_days": 0,
@@ -522,7 +532,7 @@ async def test_accounts_past_their_grace_period_are_announced_and_purged_once_it
                 (await tx.accounts.get(id=account.account_id)) for account in (lukas, bob, anna)
             ]
         record = await _record(h, lukas.account_id)
-    off_text, on_text = quiet.out + quiet.err, started.out + started.err
+    off_text, on_text = _plain(quiet), _plain(started)
     assert restored.status_code == 200
     assert "account erasure is switched off" in off_text
     assert "past their deletion grace period" not in off_text
