@@ -7,10 +7,6 @@ from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
-    IDENTITY_USER_CREATED,
-    IDENTITY_USER_DELETED,
-    IDENTITY_USER_DISABLED,
-    USER_CHANGED_VERSION,
     AccessRevoked,
     EventEnvelope,
 )
@@ -21,11 +17,6 @@ from mowdeck_service_kit.correlation import get_correlation_id
 from pydantic import BaseModel
 
 _log = get_logger("identity.events")
-
-EVENT_VERSIONS: dict[str, int] = dict.fromkeys(
-    (IDENTITY_USER_CREATED, IDENTITY_USER_DISABLED, IDENTITY_USER_DELETED), USER_CHANGED_VERSION
-)
-"""Events whose payload is not version 1 any more (``UserChanged`` without the user name)."""
 
 
 class BusEventPublisher:
@@ -42,7 +33,6 @@ class BusEventPublisher:
             return
         values: dict[str, object] = {
             "type": event_type,
-            "version": EVENT_VERSIONS.get(event_type, 1),
             "producer": self.producer,
             "account_id": account_id,
             "payload": payload.model_dump(mode="json"),

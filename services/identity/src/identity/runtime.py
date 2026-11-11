@@ -40,6 +40,7 @@ from identity.adapters.webauthn import PyWebAuthnCeremonies
 from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
+from identity.application.event_erasure import EventErasureService
 from identity.application.keys import KeyManager
 from identity.application.ports import (
     AccountEraser,
@@ -160,6 +161,8 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
+        event_erasure = EventErasureService(deps, self.event_log or BusEventLog(bus))
+        self.services.event_erasure = event_erasure
         if not self.settings.erasure_enabled:
             if not self.settings.demo_mode:
                 _log.info(
@@ -171,7 +174,7 @@ class Runtime:
                 self.eraser
                 or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),
                 self.settings.erasure_config(),
-                self.event_log or BusEventLog(bus),
+                event_erasure,
             )
         if self.settings.sandboxes_enabled:
             self.services.enable_sandboxes(

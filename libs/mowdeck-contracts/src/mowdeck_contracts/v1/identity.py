@@ -64,9 +64,15 @@ IDENTITY_ACCESS_REVOKED: Final = "identity.access.revoked"
 :class:`AccessRevoked`, ADR 0082); every service that verifies tokens keeps the short-lived deny
 list (``mowdeck_auth.revocation``)."""
 
-USER_CHANGED_VERSION: Final = 2
-"""Envelope ``version`` of the three ``identity.user.*`` events since ADR 0082: the payload
-:class:`UserChanged` without ``username``."""
+USER_CHANGED_VERSION: Final = 1
+"""Envelope ``version`` of the three ``identity.user.*`` events. It becomes 2 in the release that
+omits ``UserChanged.username`` (step 2 of the removal described at :class:`UserChanged`)."""
+
+USERNAME_PLACEHOLDER: Final = "-"
+"""What Identity sends as ``UserChanged.username`` instead of the user name (step 1 of the
+removal): one character that is nobody's name, because a consumer of the release before requires
+a non-empty string there. Not a valid user name (those start with a letter or digit and have at
+least three characters), so it cannot be mistaken for one."""
 
 IDENTITY_EVENT_TYPES: Final = (
     IDENTITY_ACCOUNT_CREATED,
@@ -111,19 +117,25 @@ class UserChanged(ContractModel):
     ``account_id`` is the account in which the change happened (None only for platform level
     changes). ``subuser`` is True for users owned by the account.
 
-    **Version 2** (:data:`USER_CHANGED_VERSION`, ADR 0082) carries no ``username``: the events
-    stay in the ``EVENTS`` stream for its retention, no consumer ever read the name, and a deleted
-    user's name must not outlive the user there. The user is named by the opaque ``user_id``
-    alone. The field stays in the model, optional, so that a version 1 event still stored in the
-    stream decodes; producers no longer set it. A consumer built before version 2 requires the
-    field and drops a version 2 event, so consumers are updated with or before Identity (one
-    release ships both).
+    **The user name is no longer sent** (ADR 0082): the events stay in the ``EVENTS`` stream for
+    its retention, no consumer ever read the name, and a deleted user's name must not outlive the
+    user there. The user is named by the opaque ``user_id`` alone. The removal takes two
+    releases, because a consumer of the release before this change requires a ``username`` of at
+    least one character and drops (acknowledges and loses) an event without one, and a rolling
+    update gives no order:
+
+    1. *This release:* the field is optional here, so every consumer accepts an event with or
+       without it, and Identity sends :data:`USERNAME_PLACEHOLDER` in it, which the old model
+       accepts too. The event stays version 1. No event is lost in any update order.
+    2. *A later release,* when no installation runs a consumer of before step 1: Identity omits
+       the field and publishes version 2 (:data:`USER_CHANGED_VERSION`).
     """
 
     user_id: UUID
     account_id: UUID | None = None
     username: str | None = Field(default=None, min_length=1, max_length=64)
-    """Version 1 only (deprecated): the normalized user name. Never set since version 2."""
+    """Deprecated. Events of before ADR 0082 carry the normalized user name here; Identity now
+    sends :data:`USERNAME_PLACEHOLDER` and will omit the field (see above). Do not read it."""
     subuser: bool = False
     reason: str | None = Field(default=None, max_length=200)
 

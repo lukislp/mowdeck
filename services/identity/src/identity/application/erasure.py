@@ -23,8 +23,9 @@ demand:
    longer than ``stall_after`` logs an error on every attempt: the account is locked and its
    data is not gone yet, which an operator has to look at (``python -m identity.cli erasures``).
 4. **Finish.** When the last service confirmed, Identity removes the account's domain events
-   from the message stream (the port :class:`~identity.application.ports.EventLog`: the stream
-   keeps them 30 days and only the envelope names the account), then deletes its own rows and
+   from the message stream (:class:`~identity.application.event_erasure.EventErasureService`,
+   a slice per attempt: the stream keeps them 30 days and only the envelope names the account),
+   then deletes its own rows and
    tuples, scrubs the personal fields of the audit rows (the rows stay), writes
    ``account.erased`` and marks the record erased. An account that is gone from Identity is gone
    from every service and from the streams.
@@ -44,12 +45,14 @@ from mowdeck_service_kit import get_logger
 from identity.application.accounts import account_subjects
 from identity.application.context import SYSTEM
 from identity.application.deps import Deps
-from identity.application.ports import AccountEraser, EventLog
+from identity.application.event_erasure import EventErasureService
+from identity.application.ports import AccountEraser
 from identity.application.sync import platform_tuple
 from identity.application.users import delete_user_rows
 from identity.domain.erasure import (
     AccountErasure,
     ErasureState,
+    EventScope,
     grace_over,
     tokens_expired_at,
 )
@@ -96,7 +99,11 @@ class ErasureService:
     """Starts and carries on the purge of deleted accounts."""
 
     def __init__(
-        self, deps: Deps, eraser: AccountEraser, config: ErasureConfig, events: EventLog
+        self,
+        deps: Deps,
+        eraser: AccountEraser,
+        config: ErasureConfig,
+        events: EventErasureService,
     ) -> None:
         self.deps = deps
         self.eraser = eraser
@@ -240,9 +247,15 @@ class ErasureService:
         try:
             # Every service confirmed, so nothing publishes for the account any more: what the
             # event stream still holds of it goes now, before the rows that prove the purge.
-            events = await self.events.forget_account(erasure.account_id)
+            # One slice per attempt: a long stream neither outlives this attempt's lease nor
+            # keeps the other purges of the sweep waiting. The position is in its own record.
+            events = await self.events.advance(EventScope.ACCOUNT, erasure.account_id)
         except Exception as exc:
             await self._failed(erasure, EVENT_STREAM, exc)
+            return False
+        if events is None:
+            erasure.lease(self.deps.clock(), timedelta(0))  # due again at once: the next slice
+            await self._save(erasure)
             return False
         try:
             await self._erase_identity(erasure, events)

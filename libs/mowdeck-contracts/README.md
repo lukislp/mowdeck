@@ -188,7 +188,7 @@ The Device-Gateway asks for the registrations of its shard with a core NATS requ
 
 See [ADR 0009](../../docs/adr/0009-command-and-event-envelopes.md).
 
-**Events with a newer version.** `identity.user.created`, `identity.user.disabled` and `identity.user.deleted` are published as version 2 (`USER_CHANGED_VERSION`): `UserChanged` without `username` ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 11: the events stay 30 days in the `EVENTS` stream and no consumer read the name). The field stays in the model, optional, so a version 1 event still decodes. A consumer built before version 2 requires the field and drops a version 2 event: update consumers with or before Identity.
+**A field that leaves in two releases.** `UserChanged.username` is being removed ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 11: the events stay 30 days in the `EVENTS` stream and no consumer read the name). A consumer of v0.69.1 or older requires a non-empty `username` and drops an event without one, and a rolling update gives no order. So in this release the field is optional in the model and Identity sends `USERNAME_PLACEHOLDER` (`-`) in it, on version 1; a later release omits it and publishes version 2 (`USER_CHANGED_VERSION`). Do not read the field, and do not remove the placeholder before that release: `services/identity/tests/test_identity_event_log.py` checks what Identity sends against the old model.
 
 ## Regenerating the JSON Schemas
 

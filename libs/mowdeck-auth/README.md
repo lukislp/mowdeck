@@ -45,7 +45,7 @@ In this order; the first failure raises `TokenError` (reason for logs only) and 
 2. `alg` in the allow list: only `EdDSA` (RFC 8037). `none` and HMAC are refused, also in the constructor, so the public key can never act as an HMAC secret. PyJWT 2.15.1 does not implement the fully specified `Ed25519` name of RFC 9864 (checked); it is not accepted until it does.
 3. `typ` is `at+jwt` (RFC 9068), a `kid` is present.
 4. The key for `kid` is known and is an OKP Ed25519 key.
-5. Signature, `iss`, `aud`, `exp`, `nbf`, `iat` (leeway 30 s); `sub`, `kind`, `iss`, `aud`, `iat`, `exp`, `jti` are required.
+5. Signature, `iss`, `aud`, `exp`, `nbf`, `iat` (leeway 30 s, `MOWDECK_AUTH_LEEWAY_SECONDS`; a larger value is refused at start-up, because Identity waits only the token lifetime plus twice that before it erases a deleted account, ADR 0082); `sub`, `kind`, `iss`, `aud`, `iat`, `exp`, `jti` are required.
 6. The claims map to a valid `Principal`: `sub` to `subject`, `acc` to `account_id`, `kind`, `name` to `display_name`, `roles`, `perms` to `permissions`, `plan`, `jti` to `token_id`, `sid` to `session_id`.
 
 7. Neither the subject nor the account of the token is on the deny list (below).

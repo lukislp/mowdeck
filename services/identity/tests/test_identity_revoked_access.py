@@ -22,6 +22,7 @@ from typing import Any
 from uuid import UUID
 
 from identity_support import API, PASSWORD, Harness, bearer, harness
+from mowdeck_auth.settings import MAX_LEEWAY_SECONDS
 from mowdeck_contracts.v1 import (
     IDENTITY_ACCESS_REVOKED,
     IDENTITY_USER_DELETED,
@@ -53,7 +54,8 @@ def revocations(h: Harness) -> list[tuple[str, AccessRevoked, dict[str, Any]]]:
 
 
 def test_tokens_have_expired_one_lifetime_and_the_skew_after_the_access_ended() -> None:
-    assert timedelta(seconds=60) == TOKEN_SKEW
+    # The verifiers' leeway and as much again for clocks; a verifier refuses a larger leeway.
+    assert timedelta(seconds=2 * MAX_LEEWAY_SECONDS) == TOKEN_SKEW == timedelta(seconds=60)
     assert tokens_expired_at(T0, TEN) == T0 + timedelta(minutes=11)
     assert tokens_expired_at(T0, timedelta(minutes=1)) == T0 + timedelta(minutes=2)
     assert tokens_expired_at(T0, TEN, timedelta(0)) == T0 + TEN

@@ -33,7 +33,12 @@ from mowdeck_auth.issuer import ACCESS_TOKEN_TYPE
 from mowdeck_auth.jwks import JwksCache, KeySource
 from mowdeck_auth.keys import ALLOWED_ALGORITHMS
 from mowdeck_auth.revocation import RevocationList
-from mowdeck_auth.settings import DEFAULT_AUDIENCE, DEFAULT_ISSUER, AuthSettings
+from mowdeck_auth.settings import (
+    DEFAULT_AUDIENCE,
+    DEFAULT_ISSUER,
+    AuthSettings,
+    check_leeway,
+)
 
 MAX_TOKEN_LENGTH = 8192
 """Longer bearer values are rejected before any parsing."""
@@ -77,6 +82,7 @@ class JwtVerifier:
         if unsafe:
             msg = f"refusing unsafe algorithms {sorted(unsafe)}"
             raise ValueError(msg)
+        check_leeway(leeway.total_seconds())
         self.keys = keys
         self.issuer = issuer
         self.audience = audience

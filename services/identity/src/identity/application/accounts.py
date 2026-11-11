@@ -13,6 +13,7 @@ from mowdeck_contracts.v1 import (
     IDENTITY_ACCOUNT_CREATED,
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_USER_CREATED,
+    USERNAME_PLACEHOLDER,
     AccountCreated,
     AccountKind,
     ApiTokenRevoked,
@@ -236,7 +237,7 @@ class AccountService:
             work.emit(
                 IDENTITY_USER_CREATED,
                 account_id,
-                UserChanged(user_id=user_id, account_id=account_id),
+                UserChanged(user_id=user_id, account_id=account_id, username=USERNAME_PLACEHOLDER),
             )
         return Registered(account_id, user_id)
 

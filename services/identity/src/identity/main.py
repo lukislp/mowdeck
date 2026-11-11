@@ -121,7 +121,7 @@ def build_app(
         authz: Any = services.deps.authorizer
         cache = authz if hasattr(authz, "invalidate_subject") else None
         app.state.subscriptions = (
-            await subscribe_all(active_bus, cache, runtime.event_log) if active_bus else []
+            await subscribe_all(active_bus, cache, services.event_erasure) if active_bus else []
         )
         if isinstance(runtime.entitlements, EntitlementsClient):
             plan_events = await runtime.entitlements.subscribe()
@@ -209,6 +209,9 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
                 name="sandbox-sweep",
             )
         )
+    events = services.event_erasure
+    if events is not None:  # the stored events of deleted users (ADR 0082)
+        tasks.append(asyncio.create_task(events.run(), name="event-erasure"))
     erasure = services.erasure
     if erasure is not None:  # the purge of deleted accounts (ADR 0082)
         tasks.append(

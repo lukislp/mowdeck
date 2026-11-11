@@ -171,8 +171,48 @@ def audit_fields_after_user_scrub(
 
 USER_DELETED_EVENT = "identity.user.deleted"
 """The event that tells the services a user is gone. It carries the opaque user id and no name
-(version 2 of ``UserChanged``), and the services still have to read it, so it is the one event
+(:data:`NO_USERNAME` at most), and the services still have to read it, so it is the one event
 about a deleted user that stays in the stream."""
+
+NO_USERNAME = "-"
+"""What Identity sends in place of the user name (``USERNAME_PLACEHOLDER`` of the contracts; a
+test keeps both equal)."""
+
+EVENT_FILTERS: tuple[str, ...] = (
+    "event.billing.>",
+    "event.fleet.>",
+    "event.identity.account.created",
+    "event.identity.session.new_device",
+    "event.identity.user.created",
+    "event.identity.user.deleted",
+    "event.identity.user.disabled",
+    "event.mower.>",
+    "event.notifications.>",
+    "event.scheduler.>",
+    "event.telemetry.>",
+    "event.tracking.>",
+    "event.vision.>",
+)
+"""The subjects of the ``EVENTS`` stream whose events can name an account or a user with more
+than an id (names, texts, positions, a device): what is read when an account or a user is erased.
+Together with :data:`OPAQUE_EVENTS` it covers every event type of the contracts; a repository
+check fails for a new event that is in neither."""
+
+OPAQUE_EVENTS: Mapping[str, str] = {
+    "event.identity.grants.changed": "the account id and subject ids (user:<uuid>)",
+    "event.identity.api_token.revoked": "the token id, the account id and a fixed reason",
+    "event.identity.access.revoked.*": "the revoked id and two times (the deny list)",
+    "event.entitlements.plan.changed": "the account id and a plan key",
+}
+"""Events that are not read: they carry random ids and nothing that names anybody once the rows
+are gone, and they are the bulk of the stream. They leave with the stream's retention."""
+
+
+class EventScope(StrEnum):
+    """Whose stored events are removed."""
+
+    ACCOUNT = "account"
+    USER = "user"
 
 
 def _same_id(value: Any, wanted: UUID) -> bool:
@@ -200,7 +240,7 @@ def event_names_user(event: Mapping[str, Any], user_id: UUID) -> bool:
     payload = event.get("payload")
     if not isinstance(payload, Mapping):
         return False
-    if event.get("type") == USER_DELETED_EVENT and not payload.get("username"):
+    if event.get("type") == USER_DELETED_EVENT and payload.get("username") in (None, NO_USERNAME):
         return False
     if _same_id(payload.get("user_id"), user_id):
         return True
@@ -212,8 +252,10 @@ def event_names_user(event: Mapping[str, Any], user_id: UUID) -> bool:
 
 TOKEN_SKEW = timedelta(seconds=60)
 """How much longer than its lifetime an access token may be accepted somewhere: the leeway a
-verifier allows on ``exp`` (``MOWDECK_AUTH_LEEWAY_SECONDS``, default 30 s) plus as much again
-for clocks that differ between hosts. A verifier leeway above this would break the rule below."""
+verifier allows on ``exp`` (``MOWDECK_AUTH_LEEWAY_SECONDS``, at most
+``mowdeck_auth.settings.MAX_LEEWAY_SECONDS`` = 30 s) plus as much again for clocks that differ
+between hosts. The two are tied: every verifier refuses to start with a larger leeway, and a
+test keeps this constant at twice that maximum."""
 
 
 def tokens_expired_at(
@@ -248,6 +290,60 @@ def deletion_scheduled(account: Account) -> bool:
 def retry_delay(attempts: int, maximum: timedelta) -> timedelta:
     """Wait before the next attempt after ``attempts`` failures: 30 s, 60 s, ... capped."""
     return min(maximum, timedelta(seconds=RETRY_BASE_SECONDS * 2 ** min(max(attempts, 1), 10)))
+
+
+@dataclass(slots=True)
+class EventErasure:
+    """The progress of removing one account's or one user's stored events from the stream.
+
+    The stream is read filter by filter (:data:`EVENT_FILTERS`), in slices. The record remembers
+    where the stream ended when the work began, so the work ends although events keep arriving,
+    and how far it read, so a restart continues instead of starting over. It holds ids and
+    counters and is deleted when the work is done.
+    """
+
+    subject_id: UUID
+    """The account or the user."""
+    scope: str
+    requested_at: datetime
+    last_sequence: int
+    """The newest sequence of the stream when the work began; nothing above it is read."""
+    filter_index: int = 0
+    scanned_sequence: int = 0
+    """The last sequence read with the current filter."""
+    erased: int = 0
+
+    @classmethod
+    def begin(
+        cls, scope: "EventScope", subject_id: UUID, now: datetime, last_sequence: int
+    ) -> "EventErasure":
+        """The record of work that starts now and reads up to ``last_sequence``."""
+        return cls(subject_id, EventScope(scope).value, now, max(0, last_sequence))
+
+    @property
+    def finished(self) -> bool:
+        """Every filter was read to the bound."""
+        return self.filter_index >= len(EVENT_FILTERS)
+
+    @property
+    def filter(self) -> str:
+        """The subject filter being read."""
+        return EVENT_FILTERS[self.filter_index]
+
+    def names(self, event: Mapping[str, Any]) -> bool:
+        """Whether a stored event belongs to the account, or names the user."""
+        if self.scope == EventScope.ACCOUNT.value:
+            return event_names_account(event, self.subject_id)
+        return event_names_user(event, self.subject_id)
+
+    def scanned(self, sequence: int) -> None:
+        """A message of the current filter was handled."""
+        self.scanned_sequence = max(self.scanned_sequence, sequence)
+
+    def next_filter(self) -> None:
+        """The current filter was read to the bound."""
+        self.filter_index += 1
+        self.scanned_sequence = 0
 
 
 class ErasureState(StrEnum):

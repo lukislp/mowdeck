@@ -256,7 +256,8 @@ JetStream keeps messages for the retention of their stream (30 days in `EVENTS` 
 | --- | --- | --- |
 | `purge_subject(subject) -> int` | `STREAM.PURGE` with a subject filter | subjects that name what is removed (`telemetry.mower.<id>`) |
 | `count_subject(subject) -> int` | stream info with a subject filter | the check after a purge |
-| `stored_messages(subject)` (async iterator of `StoredMessage`) | `STREAM.MSG.GET` with `next_by_subj`, one request per message, no consumer | subjects that do not name it (`event.>`): the caller decides per message |
+| `stored_messages(subject, after=0, until=None)` (async iterator of `StoredMessage`) | a batched `DIRECT.GET` with `next_by_subj` (500 per request, no consumer; one `STREAM.MSG.GET` per message while the stream does not allow direct gets) | subjects that do not name it (`event.>`): the caller decides per message |
+| `last_sequence(subject) -> int` | stream info | the bound of a read that must end under live traffic (`until`); `after` continues a read that was cut into pieces |
 | `erase_message(message) -> bool` | `STREAM.MSG.DELETE` (the message is overwritten) | removing one of them |
 
 Every call is idempotent and raises `BusError` when the server refused or did not answer; a subject no stream stores raises `ValueError`. A service that starts to use one of them adds the `purge` or `erase` entry in `tools/repo-checks/scripts/nats_auth.py` (the code scan finds the calls), and `tools/repo-checks/tests/test_stream_erasure_registry.py` fails for a new stream or per-mower subject that nobody removes. `InMemoryBus` keeps what its streams hold (with the per-subject limit, without age and size limits), so `last_per_subject` and these calls behave like the server in tests.

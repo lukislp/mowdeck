@@ -29,6 +29,7 @@ from mowdeck_contracts.v1 import (
     IDENTITY_USER_CREATED,
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
+    USERNAME_PLACEHOLDER,
     AccessRevoked,
     AccessScope,
     ApiTokenRevoked,
@@ -219,7 +220,12 @@ class UserService:
             work.emit(
                 IDENTITY_USER_CREATED,
                 account_id,
-                UserChanged(user_id=created.id, account_id=account_id, subuser=True),
+                UserChanged(
+                    user_id=created.id,
+                    account_id=account_id,
+                    username=USERNAME_PLACEHOLDER,
+                    subuser=True,
+                ),
             )
         return MemberView(created, membership, assignments)
 
@@ -319,6 +325,7 @@ class UserService:
                     UserChanged(
                         user_id=user_id,
                         account_id=account_id,
+                        username=USERNAME_PLACEHOLDER,
                         subuser=owned,
                     ),
                 )
@@ -488,6 +495,7 @@ def _emit_deleted(
         UserChanged(
             user_id=found.id,
             account_id=account_id,
+            username=USERNAME_PLACEHOLDER,
             subuser=owned,
             reason=reason,
         ),

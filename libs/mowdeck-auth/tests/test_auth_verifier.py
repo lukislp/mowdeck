@@ -85,12 +85,12 @@ async def test_header_names_the_key_and_the_access_token_type() -> None:
 
 
 async def test_expired_token_is_rejected_but_leeway_is_honoured() -> None:
-    past = datetime.now(UTC) - timedelta(minutes=20)
+    past = datetime.now(UTC) - timedelta(minutes=10, seconds=15)
     keys = TestKeys(clock=lambda: past)
-    expired = keys.mint(principal(), ttl=timedelta(minutes=10))
+    expired = keys.mint(principal(), ttl=timedelta(minutes=10))  # ran out 15 s ago
     with pytest.raises(TokenError, match="ExpiredSignature"):
-        await static_verifier(keys).verify(expired)
-    lenient = static_verifier(keys, leeway=timedelta(minutes=15))
+        await static_verifier(keys, leeway=timedelta(seconds=5)).verify(expired)
+    lenient = static_verifier(keys, leeway=timedelta(seconds=30))  # the most a verifier allows
     assert (await lenient.verify(expired)).kind is PrincipalKind.SUBUSER
 
 

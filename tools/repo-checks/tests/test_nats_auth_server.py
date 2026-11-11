@@ -281,6 +281,10 @@ async def test_identity_erases_single_events_and_nobody_else_can(streams: None) 
         assert await identity.erase_message(mine[0]) is False
         left = [m async for m in identity.stored_messages("event.>") if marker.encode() in m.data]
         assert left == []
+        # The read can be bounded and resumed (a batched direct get on the stream).
+        end = await identity.last_sequence("event.>")
+        bounded = [m async for m in identity.stored_messages("event.>", after=end - 1, until=end)]
+        assert len(bounded) <= 1 and end >= mine[-1].sequence
         # Identity purges no stream as a whole, and reads no other stream.
         with pytest.raises(BusError):
             await identity.purge_subject("event.>")
@@ -297,6 +301,9 @@ async def test_identity_erases_single_events_and_nobody_else_can(streams: None) 
         with pytest.raises(nats.errors.TimeoutError):
             await client.nc.request("$JS.API.STREAM.MSG.DELETE.EVENTS", b'{"seq": 1}', 1)
         assert await client.violation("$js.api.stream.msg.delete.events")
+        with pytest.raises(nats.errors.TimeoutError):
+            await client.nc.request("$JS.API.DIRECT.GET.EVENTS", b'{"seq": 1}', 1)
+        assert await client.violation("$js.api.direct.get.events")
 
 
 async def test_every_token_verifier_hears_a_revocation_and_only_identity_sends_one(

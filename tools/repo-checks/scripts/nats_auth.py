@@ -30,8 +30,9 @@ From that the generator derives the server permissions, least privilege by const
   filter (the subject based API: the server checks the filter in the API subject against the
   request), ``$JS.API.CONSUMER.INFO.<stream>.*`` and ``$JS.ACK.<stream>.>`` of the consumed
   streams; ``streams`` alone may create and update the streams; ``$JS.API.STREAM.PURGE.<stream>``
-  for the streams of the ``purge`` filters, and ``$JS.API.STREAM.MSG.GET.<stream>`` plus
-  ``$JS.API.STREAM.MSG.DELETE.<stream>`` for the streams of the ``erase`` filters. The server
+  for the streams of the ``purge`` filters, and ``$JS.API.DIRECT.GET.<stream>`` (the batched
+  read), ``$JS.API.STREAM.MSG.GET.<stream>`` plus ``$JS.API.STREAM.MSG.DELETE.<stream>`` for the
+  streams of the ``erase`` filters. The server
   checks these three per stream only (the filter of a purge and the sequence of a delete are in
   the request body), so they are given to the one owner of what the stream's messages are about
   and to nobody else; the filters listed here are what its code may pass, kept in step by the
@@ -368,7 +369,11 @@ def permissions(user: str, access: Access) -> tuple[list[str], list[str]]:
     for name in sorted({stream_of(subject) for subject in access.purge}):
         publish.append(f"$JS.API.STREAM.PURGE.{name}")
     for name in sorted({stream_of(subject) for subject in access.erase}):
-        publish += [f"$JS.API.STREAM.MSG.GET.{name}", f"$JS.API.STREAM.MSG.DELETE.{name}"]
+        publish += [
+            f"$JS.API.DIRECT.GET.{name}",
+            f"$JS.API.STREAM.MSG.GET.{name}",
+            f"$JS.API.STREAM.MSG.DELETE.{name}",
+        ]
     subscribe = [f"_INBOX.{user}.>", *sorted(access.serve)]
     return publish, subscribe
 
@@ -445,8 +450,8 @@ _REQUEST = {"request", "_request"}
 _PUBLISH = {"publish", "_publish", "emit", "connection_event", "_connection_event"}
 _PURGE = {"purge_subject", "count_subject"}
 """``StreamStore`` calls on a subject filter that is purged as a whole (and counted for it)."""
-_ERASE = {"stored_messages"}
-"""``StreamStore`` call that reads a subject filter to delete single messages."""
+_ERASE = {"stored_messages", "last_sequence"}
+"""``StreamStore`` calls of a service that reads a stream to delete single messages from it."""
 _CORE = {"account", "fleet", "gateway", "entitlements", "tracks", "relay", "presence"}
 """First tokens of the core NATS subjects (request/reply, and ``presence.accounts``)."""
 _SUBJECT = re.compile(r"[a-z_][a-z0-9_*>-]*(\.[a-z0-9_*>-]+)+")

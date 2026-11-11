@@ -463,6 +463,9 @@ class StreamSpec:
         max_bytes: Total size limit in bytes, ``-1`` for unlimited.
         duplicate_window_seconds: Window in which a repeated ``Nats-Msg-Id`` is dropped.
         discard: Which messages to drop when a limit is hit.
+        allow_direct: The stream answers direct gets (``$JS.API.DIRECT.GET``), which read
+            stored messages in batches without a consumer. Only where a service has to read a
+            stream to remove single messages from it (``EVENTS``, ADR 0082).
     """
 
     name: str
@@ -475,6 +478,7 @@ class StreamSpec:
     max_bytes: int = -1
     duplicate_window_seconds: int = 120
     discard: Literal["old", "new"] = "old"
+    allow_direct: bool = False
 
     def captures(self, subject: str) -> bool:
         """Return True if ``subject`` is stored by this stream."""
@@ -508,6 +512,7 @@ EVENTS = StreamSpec(
     max_age_seconds=30 * 24 * 3600,
     max_bytes=1024 * 1024 * 1024,
     duplicate_window_seconds=120,
+    allow_direct=True,
 )
 
 DEVICE = StreamSpec(

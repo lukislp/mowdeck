@@ -184,7 +184,8 @@ def test_the_permissions_are_least_privilege(gen: ModuleType) -> None:
         erases = set(re.findall(r'"\$JS\.API\.STREAM\.MSG\.DELETE\.([A-Z]+)"', block))
         reads = set(re.findall(r'"\$JS\.API\.STREAM\.MSG\.GET\.([A-Z]+)"', block))
         assert purges == PURGES.get(user, set()), user
-        assert erases == reads == ERASES.get(user, set()), user
+        direct = set(re.findall(r'"\$JS\.API\.DIRECT\.GET\.([A-Z]+)"', block))
+        assert erases == reads == direct == ERASES.get(user, set()), user
         assert '"$JS.API.>"' not in block and '">"' not in block
         manages = "STREAM.CREATE" in block or "STREAM.UPDATE" in block
         assert manages is (user == gen.STREAMS_USER), user

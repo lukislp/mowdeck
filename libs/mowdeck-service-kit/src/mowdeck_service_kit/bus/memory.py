@@ -247,13 +247,24 @@ class InMemoryBus:
         _, held = self._held(subject)
         return sum(1 for m in held.values() if subject_matches(subject, m.subject))
 
-    async def stored_messages(self, subject: str) -> AsyncIterator[StoredMessage]:
-        """The stored messages matching ``subject``, oldest first."""
+    async def stored_messages(
+        self, subject: str, *, after: int = 0, until: int | None = None
+    ) -> AsyncIterator[StoredMessage]:
+        """The stored messages matching ``subject`` above ``after`` and up to ``until``, oldest
+        first."""
         self._ensure_open()
         name, held = self._held(subject)
         for seq, message in sorted(held.items()):
+            if seq <= after or (until is not None and seq > until):
+                continue
             if seq in held and subject_matches(subject, message.subject):
                 yield StoredMessage(name, seq, message.subject, message.data, dict(message.headers))
+
+    async def last_sequence(self, subject: str) -> int:
+        """The newest sequence of the stream of ``subject`` (0 when nothing was published)."""
+        self._ensure_open()
+        name, _ = self._held(subject)
+        return self._sequences.get(name, 0)
 
     async def erase_message(self, message: StoredMessage) -> bool:
         """Remove one stored message; False when it was gone."""

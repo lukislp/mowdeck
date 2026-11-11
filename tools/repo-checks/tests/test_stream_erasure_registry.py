@@ -20,6 +20,8 @@ The test fails for:
 * an owner whose NATS permissions do not allow the removal;
 * a stream in :data:`PENDING` that an owner removes from already (delete the entry: the list
   only shrinks);
+* an **event type** of the contracts that Identity neither reads when it removes an account's
+  events (``EVENT_FILTERS``) nor lists as carrying ids only (``OPAQUE_EVENTS``, with the reason);
 * a **key-value bucket or object store** in the code: none exists today, and one that holds
   account data needs an owner and a purge like a stream does.
 """
@@ -30,7 +32,9 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from mowdeck_contracts.v1.subjects import MOWER_STREAMS, STREAMS
+from mowdeck_contracts.v1.subjects import EVENTS, MOWER_STREAMS, STREAMS, event_subject_for_type
+
+from identity.domain.erasure import EVENT_FILTERS, OPAQUE_EVENTS
 
 MOWER_OWNER = "fleet"
 """Fleet owns the mowers and purges the subjects that carry a mower id."""
@@ -118,3 +122,33 @@ def test_no_bucket_or_object_store_exists_without_an_owner(repo_root: Path) -> N
         if _BUCKETS.search(path.read_text(encoding="utf-8"))
     ]
     assert found == []
+
+
+def test_every_event_type_is_read_or_known_to_carry_ids_only(gen: ModuleType) -> None:
+    """Identity does not read the whole ``EVENTS`` stream for an erased account: it skips the
+    events that carry ids only (they are most of the stream). A new event type must be put on
+    one of the two lists, so that one with a name or a text in it cannot be skipped unnoticed."""
+    read, skipped = EVENT_FILTERS, tuple(OPAQUE_EVENTS)
+    assert all(EVENTS.captures(s.replace("*", "x").replace(">", "x")) for s in (*read, *skipped))
+    published = [
+        pattern
+        for access in gen.USERS.values()
+        for pattern in access.publish
+        if pattern.startswith("event.")
+    ]
+    unassigned = []
+    for event_type in sorted(gen.event_types()):
+        subject = event_subject_for_type(event_type)
+        if not any(gen.covers(pattern, subject) for pattern in published):
+            continue  # not an event on EVENTS (camera relay events, core subjects)
+        is_read = any(gen.covers(pattern, subject) for pattern in read)
+        is_skipped = any(
+            gen.covers(pattern, subject) or gen.covers(pattern, f"{subject}.*")
+            for pattern in skipped
+        )
+        if is_read == is_skipped:
+            unassigned.append(event_type)
+    assert unassigned == []
+    # Whatever is read, Identity may read: its ``erase`` permission covers every filter.
+    erased = gen.USERS[BY_ENVELOPE["EVENTS"]].erase
+    assert all(any(gen.covers(pattern, subject) for pattern in erased) for subject in read)

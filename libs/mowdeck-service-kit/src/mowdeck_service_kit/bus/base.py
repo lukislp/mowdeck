@@ -245,7 +245,10 @@ class StreamStore(Protocol):
       subjects that name what is removed (``telemetry.mower.<id>``).
     * :meth:`stored_messages` and :meth:`erase_message` read a subject filter message by message
       and remove single ones. For subjects that do not name it (``event.<domain>.<name>``: the
-      account is in the envelope), where the caller decides per message.
+      account is in the envelope), where the caller decides per message. The read is paced by
+      the reader and can be cut into pieces: ``after`` continues behind a sequence that was
+      already read, ``until`` (:meth:`last_sequence` when the work began) ends it although
+      messages keep arriving.
 
     Every call is idempotent: purging or erasing what is gone removes nothing. All subjects must
     belong to a stream (``ValueError`` otherwise).
@@ -260,9 +263,17 @@ class StreamStore(Protocol):
         """How many stored messages match ``subject`` (a cheap server side count)."""
         ...
 
-    def stored_messages(self, subject: str) -> AsyncIterator[StoredMessage]:
-        """The stored messages matching ``subject``, oldest first, as they are now (messages
+    def stored_messages(
+        self, subject: str, *, after: int = 0, until: int | None = None
+    ) -> AsyncIterator[StoredMessage]:
+        """The stored messages matching ``subject`` with a sequence above ``after`` and, when
+        given, up to ``until``, oldest first, as they are now (without ``until`` messages
         published while reading may or may not be seen)."""
+        ...
+
+    async def last_sequence(self, subject: str) -> int:
+        """The newest sequence of the stream that stores ``subject`` (0 for an empty stream):
+        the bound of a read that must end under live traffic."""
         ...
 
     async def erase_message(self, message: StoredMessage) -> bool:

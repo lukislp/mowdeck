@@ -14,8 +14,10 @@ import os
 from collections.abc import AsyncIterator
 from uuid import uuid4
 
+import nats
 import pytest
 from mowdeck_contracts.v1.subjects import (
+    StreamSpec,
     camera_wildcard,
     command_result_subject,
     command_subject,
@@ -167,3 +169,65 @@ async def test_the_memory_bus_keeps_one_message_per_subject_in_a_last_value_stre
     await bus.publish(device_subject(mower_id, "map"), b"new")
     stored: list[StoredMessage] = [m async for m in bus.stored_messages(device_wildcard(mower_id))]
     assert [m.data for m in stored] == [b"new"]
+
+
+async def test_a_read_continues_behind_a_sequence_and_ends_at_a_bound(bus: Bus) -> None:
+    """A long read is cut into pieces: ``after`` resumes, ``until`` ends it under live traffic."""
+    domain = "t" + uuid4().hex[:12]
+    subject = f"event.{domain}.n"
+    for index in range(6):
+        await bus.publish(subject, str(index).encode())
+    everything = [m async for m in bus.stored_messages(subject)]
+    bound = await bus.last_sequence(subject)
+    assert bound >= everything[-1].sequence
+    await bus.publish(subject, b"published while the read was running")
+
+    first = [m async for m in bus.stored_messages(subject, until=everything[2].sequence)]
+    rest = [
+        m async for m in bus.stored_messages(subject, after=everything[2].sequence, until=bound)
+    ]
+
+    assert [m.data for m in first] == [b"0", b"1", b"2"]
+    assert [m.data for m in rest] == [b"3", b"4", b"5"]  # not the late one
+    assert [m async for m in bus.stored_messages(subject, after=bound, until=bound)] == []
+    assert await bus.last_sequence(subject) > bound
+
+
+async def test_more_messages_than_one_batch_are_all_read_in_order(bus: Bus) -> None:
+    domain = "t" + uuid4().hex[:12]
+    other = "t" + uuid4().hex[:12]
+    for index in range(1203):
+        await bus.publish(f"event.{domain}.n", str(index).encode())
+        if index % 100 == 0:
+            await bus.publish(f"event.{other}.n", b"somebody else's")
+    seen = [int(m.data) async for m in bus.stored_messages(f"event.{domain}.>")]
+    assert seen == list(range(1203))
+
+
+@pytest.mark.skipif(not NATS_URL, reason="needs MOWDECK_TEST_NATS_URL")
+async def test_a_stream_without_direct_access_is_read_message_by_message() -> None:
+    """A stream created before direct access was switched on keeps working until the
+    ``nats-streams`` job updated it: the read falls back to one request per message."""
+    assert NATS_URL is not None
+    name = "OLD" + uuid4().hex[:8].upper()
+    prefix = name.lower()
+    nc = await nats.connect(NATS_URL)
+    await nc.jetstream().add_stream(name=name, subjects=[f"{prefix}.>"])  # no allow_direct
+    declared = StreamSpec(name=name, subjects=(f"{prefix}.>",), description="d", allow_direct=True)
+    plain = StreamSpec(name=name, subjects=(f"{prefix}.>",), description="d")
+    try:
+        for spec in (declared, plain):
+            instance = JetStreamBus(NATS_URL, streams=[spec], manage_streams=False)
+            await instance.connect()
+            try:
+                if spec is declared:
+                    for index in range(5):
+                        await instance.publish(f"{prefix}.n", str(index).encode())
+                read = [m.data async for m in instance.stored_messages(f"{prefix}.>", after=2)]
+                assert read == [b"2", b"3", b"4"]
+                assert await instance.last_sequence(f"{prefix}.n") == 5
+            finally:
+                await instance.close()
+    finally:
+        await nc.jetstream().delete_stream(name)
+        await nc.close()

@@ -12,11 +12,14 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import Depends, FastAPI
 from mowdeck_auth import (
+    AuthSettings,
     JwtPrincipalResolver,
+    JwtVerifier,
     RevocationList,
     TokenError,
     subscribe_revocations,
 )
+from mowdeck_auth.settings import MAX_LEEWAY_SECONDS
 from mowdeck_auth.testing import TestKeys, bearer
 from mowdeck_contracts.v1 import (
     IDENTITY_ACCESS_REVOKED,
@@ -225,3 +228,22 @@ async def test_without_a_bus_tokens_are_accepted_as_before() -> None:
     async with lifespan_client(_app(keys, None)) as client:
         response = await client.put("/preferences", headers=bearer(keys.mint(anna)))
     assert response.status_code == 200
+
+
+# --- the leeway is bounded: Identity's wait depends on it ------------------------------------
+
+
+def test_a_leeway_above_the_bound_is_refused_at_start_up() -> None:
+    """Identity asks the services to erase an account once every token has expired, the
+    verifiers' leeway included. A verifier that accepts tokens for longer would break that, so
+    it does not start (ADR 0082)."""
+    assert MAX_LEEWAY_SECONDS == 30.0
+    assert AuthSettings(jwks_url="http://identity/jwks.json").leeway_seconds == 30.0
+    env = {"MOWDECK_AUTH_JWKS_URL": "http://identity/jwks.json"}
+    assert AuthSettings.from_env({**env, "MOWDECK_AUTH_LEEWAY_SECONDS": "30"}) is not None
+    for bad in ("31", "120"):
+        with pytest.raises(ValueError, match="MOWDECK_AUTH_LEEWAY_SECONDS"):
+            AuthSettings.from_env({**env, "MOWDECK_AUTH_LEEWAY_SECONDS": bad})
+    with pytest.raises(ValueError, match="between 0 and 30 s"):
+        JwtVerifier(TestKeys().cache(), leeway=timedelta(seconds=45))
+    assert JwtVerifier(TestKeys().cache(), leeway=timedelta(0)).leeway == timedelta(0)
