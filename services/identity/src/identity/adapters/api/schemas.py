@@ -160,6 +160,15 @@ class MembershipOut(BaseModel):
     is_owner: bool
     is_admin: bool
     status: str
+    self_deletion: Literal["account", "user"] | None = Field(
+        default=None,
+        description=(
+            "What `DELETE /me` does for the caller while signed in to this account, so a client "
+            "can say so before the call: `user` deletes the caller alone, at once; `account` "
+            "schedules the deletion of the whole account (the caller owns it); null means the "
+            "call is refused with 409 (the caller owns or belongs to another account as well)."
+        ),
+    )
 
 
 class MeOut(BaseModel):
@@ -202,6 +211,7 @@ class MeOut(BaseModel):
                     is_owner=m.is_owner,
                     is_admin=m.is_admin,
                     status=m.status,
+                    self_deletion=m.self_deletion.value if m.self_deletion else None,
                 )
                 for m in view.memberships
             ],

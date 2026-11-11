@@ -4,7 +4,9 @@
 """ "Delete me" (ADR 0082): one request for whoever is signed in, the policy by role.
 
 ``DELETE /identity/me`` does not ask the client which operation applies. The rule is
-:func:`identity.domain.erasure.self_deletion`:
+:func:`identity.domain.erasure.self_deletion`, decided over all memberships of the person (a
+person who owns or belongs to another account as well is refused with 409: deleting a user
+removes them everywhere):
 
 * the **owner** deletes the account: the request is the account deletion of
   :meth:`AccountService.request_deletion`, with everything that holds there (409 while other
@@ -18,6 +20,7 @@ looked up. This use case holds the policy and the confirmation; the two operatio
 they are, so there is one account deletion and one user deletion in the code base.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -30,8 +33,9 @@ from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.reauth import Reauthenticator
 from identity.application.users import UserService
-from identity.domain.erasure import SelfDeletion, self_deletion
-from identity.domain.errors import ForbiddenError
+from identity.domain.erasure import SelfDeletion, self_deletion, self_deletion_blocker
+from identity.domain.errors import ConflictError, ForbiddenError
+from identity.domain.models import Membership
 
 _INTERACTIVE = (PrincipalKind.USER, PrincipalKind.SUBUSER)
 
@@ -91,8 +95,19 @@ class SelfDeletionService:
 
     async def _operation(self, account_id: UUID, user_id: UUID) -> SelfDeletion:
         async with self.deps.store.transaction() as tx:
-            membership = await tx.memberships.get(account_id=account_id, user_id=user_id)
-        if membership is None:
+            memberships = await tx.memberships.find(user_id=user_id)
+        if not any(m.account_id == account_id for m in memberships):
             msg = "you are not a member of this account"
             raise ForbiddenError(msg)
-        return self_deletion(membership)
+        return decide(memberships, account_id)
+
+
+def decide(memberships: Sequence[Membership], account_id: UUID) -> SelfDeletion:
+    """The operation for a member of ``account_id``, or 409 with the reason nothing applies (the
+    person owns or belongs to another account; see ``self_deletion_blocker``)."""
+    operation = self_deletion(memberships, account_id)
+    if operation is None:
+        raise ConflictError(
+            self_deletion_blocker(memberships, account_id) or "you cannot be deleted here"
+        )
+    return operation

@@ -1372,6 +1372,7 @@ A membership in `GET /me`.
 | `account_status` | string | yes |  |
 | `is_admin` | boolean | yes |  |
 | `is_owner` | boolean | yes |  |
+| `self_deletion` | `"account"` \| `"user"` or null | no | What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well). |
 | `status` | string | yes |  |
 
 ### MeOut

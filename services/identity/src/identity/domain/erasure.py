@@ -93,11 +93,45 @@ class SelfDeletion(StrEnum):
     """Every other member, sub-users included: the user alone, at once; the account stays."""
 
 
-def self_deletion(membership: Membership) -> SelfDeletion:
-    """Which operation deletes this member. The owner cannot leave an account behind without an
-    owner (there is no hand-over), so the owner's own deletion is the account's; everybody else
-    deletes only themselves."""
-    return SelfDeletion.ACCOUNT if membership.is_owner else SelfDeletion.USER
+OWNS_ANOTHER_ACCOUNT = (
+    "you own another account: delete that account first; "
+    "deleting you here would leave it without an owner"
+)
+MEMBER_OF_ANOTHER_ACCOUNT = (
+    "you are a member of another account as well: leave that account first; "
+    "deleting you here would remove you there too"
+)
+
+
+def self_deletion_blocker(memberships: Iterable[Membership], account_id: UUID) -> str | None:
+    """Why this person cannot delete themselves from ``account_id``, or None.
+
+    Deleting a user removes the person everywhere: the user row and with it every membership.
+    Today a user has exactly one membership (a membership is only ever created together with its
+    user: a registration or a new sub-user), so this never blocks. The rule still looks at all
+    memberships, so that a later way into a second account (invitations) cannot silently reach
+    the deletion: owning another account would leave that account without an owner, and a
+    membership elsewhere would be removed without that account being told."""
+    elsewhere = [m for m in memberships if m.account_id != account_id]
+    if any(m.is_owner for m in elsewhere):
+        return OWNS_ANOTHER_ACCOUNT
+    if elsewhere:
+        return MEMBER_OF_ANOTHER_ACCOUNT
+    return None
+
+
+def self_deletion(memberships: Iterable[Membership], account_id: UUID) -> SelfDeletion | None:
+    """Which operation deletes the person signed in to ``account_id``, decided over all of their
+    ``memberships``; None when none applies (:func:`self_deletion_blocker` says why, or the
+    person is not a member of the account).
+
+    The owner cannot leave an account behind without an owner (there is no hand-over), so the
+    owner's own deletion is the account's; everybody else deletes only themselves."""
+    all_of_them = list(memberships)
+    own = next((m for m in all_of_them if m.account_id == account_id), None)
+    if own is None or self_deletion_blocker(all_of_them, account_id) is not None:
+        return None
+    return SelfDeletion.ACCOUNT if own.is_owner else SelfDeletion.USER
 
 
 def user_subject(user_id: UUID) -> str:

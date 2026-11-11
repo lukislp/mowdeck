@@ -41,7 +41,7 @@ from identity.application.ports import Tx
 from identity.application.roles import AssignmentSpec, assign_role
 from identity.application.work import Work
 from identity.domain.credentials import normalize_email, validate_password, validate_username
-from identity.domain.erasure import SelfDeletion, self_deletion
+from identity.domain.erasure import SelfDeletion, self_deletion, self_deletion_blocker
 from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
 from identity.domain.models import (
     ApiToken,
@@ -417,12 +417,18 @@ class UserService:
         async with self.deps.uow() as work:
             work.account_id = account_id
             tx = work.tx
-            membership = await tx.memberships.get(account_id=account_id, user_id=actor.subject)
-            found = await tx.users.get(id=actor.subject) if membership else None
-            if membership is None or found is None:
+            memberships = await tx.memberships.find(user_id=actor.subject)
+            member = any(m.account_id == account_id for m in memberships)
+            found = await tx.users.get(id=actor.subject) if member else None
+            if found is None:
                 msg = "user not found"
                 raise NotFoundError(msg)
-            if self_deletion(membership) is not SelfDeletion.USER:
+            # The whole rule again, in the transaction that deletes: the person is removed
+            # everywhere, so every membership counts, not only the one of this account.
+            blocker = self_deletion_blocker(memberships, account_id)
+            if blocker is not None:
+                raise ConflictError(blocker)
+            if self_deletion(memberships, account_id) is not SelfDeletion.USER:
                 raise ConflictError(OWNER_DELETES_THE_ACCOUNT)
             owned = found.kind is UserKind.SUBUSER and found.owner_account_id == account_id
             await self._cascade(work, account_id, found.id, "user deleted", all_sessions=True)

@@ -17,7 +17,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_identity_db import migrate, needs_db, store_of, temporary_database
 
-from identity.adapters.db.store import SqlStore
+from identity.adapters.db.store import SqlStore, SqlTx
 from identity.adapters.db.tables import metadata
 from identity.domain.erasure import audit_fields_after_user_scrub
 
@@ -262,3 +262,46 @@ async def test_a_member_is_deleted_on_postgres(monkeypatch: pytest.MonkeyPatch) 
     assert created.actor_name == "lukas"  # the admin's name stays on the admin's row
     assert again == 0
     assert relogin.status_code == 401
+
+
+@needs_db
+@pytest.mark.parametrize("scrubbed", [True, False], ids=["as shipped", "without the scrub"])
+async def test_the_row_of_the_deletion_itself_keeps_no_name_and_no_address(
+    scrubbed: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``user.self_deleted`` is written with the caller as the actor (name and address) and the
+    scrub runs after it in the same transaction, so the committed row has neither. The second
+    run takes the scrub away and finds both in the row: it is the scrub that removes them, and
+    the row is in the table before the scrub runs, not queued until the commit."""
+    from identity_support import PASSWORD, bearer, harness
+
+    async def no_scrub(self: SqlTx, user_id: object) -> int:
+        del self, user_id
+        return 0
+
+    if not scrubbed:
+        monkeypatch.setattr(SqlTx, "scrub_user_audit", no_scrub)
+    async with store_of("postgres", monkeypatch) as store, harness(store=store) as h:
+        lukas = await h.register("lukas")
+        anna_id, anna = await h.subuser(lukas, "anna")
+        response = await h.client.request(
+            "DELETE", "/api/v1/identity/me", headers=bearer(anna), json={"password": PASSWORD}
+        )
+        assert isinstance(store, SqlStore)
+        async with store.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT actor_subject, actor_name, ip, target_id, details "
+                        "FROM audit_log WHERE action = 'user.self_deleted'"
+                    )
+                )
+            ).all()
+    assert response.status_code == 200, response.text
+    [row] = rows
+    assert (row.actor_subject, row.target_id) == (f"user:{anna_id}", str(anna_id))
+    assert row.details == {"subuser": True}
+    if scrubbed:
+        assert (row.actor_name, row.ip) == (None, None)
+    else:
+        assert row.actor_name == "anna" and row.ip is not None

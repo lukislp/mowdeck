@@ -60,6 +60,7 @@ from identity.domain.credentials import (
     validate_password,
     verifier_matches,
 )
+from identity.domain.erasure import SelfDeletion, self_deletion
 from identity.domain.errors import AuthenticationFailed, ForbiddenError, NotFoundError, RateLimited
 from identity.domain.models import (
     Account,
@@ -102,6 +103,10 @@ class MembershipView:
     is_owner: bool
     is_admin: bool
     status: str
+    self_deletion: SelfDeletion | None = None
+    """What ``DELETE /me`` would do for the caller in this account (ADR 0082): ``user`` (the
+    caller alone, at once), ``account`` (the caller owns it: the account is scheduled for
+    deletion), or None (refused: the caller owns or belongs to another account as well)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1074,10 +1079,12 @@ class SessionService:
                 msg = "user not found"
                 raise NotFoundError(msg)
             views = []
-            for membership in await tx.memberships.find(user_id=found.id, order_by="created_at"):
+            memberships = await tx.memberships.find(user_id=found.id, order_by="created_at")
+            for membership in memberships:
                 acct = await tx.accounts.get(id=membership.account_id)
                 if acct is None:
                     continue
+                operation = self_deletion(memberships, acct.id)
                 views.append(
                     MembershipView(
                         acct.id,
@@ -1086,6 +1093,7 @@ class SessionService:
                         membership.is_owner,
                         membership.is_admin,
                         membership.status.value,
+                        operation,
                     )
                 )
         return MeView(principal, user=found, memberships=views)

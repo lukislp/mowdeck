@@ -8,6 +8,7 @@ owner's request is the account deletion. Who may ask, what stays with the accoun
 
 import dataclasses
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -25,10 +26,12 @@ from mowdeck_authz.testing import InMemoryAuthorizer
 from mowdeck_contracts.v1 import EventEnvelope, Principal, PrincipalKind, UserChanged
 from mowdeck_service_kit.demo import DEMO_SEED_HEADER
 
+import identity
 from identity.application.context import SYSTEM, RequestContext
 from identity.application.users import OWNER_DELETES_THE_ACCOUNT
+from identity.domain.erasure import MEMBER_OF_ANOTHER_ACCOUNT, OWNS_ANOTHER_ACCOUNT
 from identity.domain.errors import ConflictError, ForbiddenError, NotFoundError
-from identity.domain.models import AccountStatus, KnownDevice, Passkey
+from identity.domain.models import AccountStatus, KnownDevice, Membership, Passkey, Status
 
 ME = f"{API}/me"
 REAUTH = "urn:mowdeck:problem:reauth-required"
@@ -335,6 +338,111 @@ async def test_the_role_decides_not_the_kind_of_user() -> None:
     assert owner.status_code == 202 and owner.json()["operation"] == "account"
     assert refused.value.message == OWNER_DELETES_THE_ACCOUNT
     assert "users" in _rows_of_user(h, anna_id)
+
+
+# --- one person, one account -------------------------------------------------------------------
+
+
+async def test_me_says_in_advance_which_deletion_applies() -> None:
+    """The client shows the right dialog before the call: ``GET /me`` names the operation."""
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        _, anna = await h.subuser(lukas, "anna")
+        owner = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"]
+        member = (await h.client.get(ME, headers=bearer(anna))).json()["memberships"]
+        deleted = await _delete_me(h, anna)
+        scheduled = await _delete_me(h, lukas.token)
+        deleting = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"]
+    assert [(m["is_owner"], m["self_deletion"]) for m in owner] == [(True, "account")]
+    assert [(m["is_owner"], m["self_deletion"]) for m in member] == [(False, "user")]
+    # The answers of the call match what was announced.
+    assert (deleted.json()["operation"], scheduled.json()["operation"]) == ("user", "account")
+    assert deleting[0]["account_status"] == AccountStatus.DELETING.value
+
+
+async def test_every_user_has_exactly_one_membership() -> None:
+    """The invariant the deletion relies on: a membership is only ever created together with its
+    user (a registration, a new sub-user), so nobody is in two accounts. Every way a user or a
+    membership comes to be is walked here; the source is pinned too, so a new place that adds a
+    membership (invitations) fails this test and has to look at ``self_deletion_blocker``."""
+    async with harness() as h:
+        lukas, bob = await h.register("lukas"), await h.register("bob")
+        await h.subuser(lukas, "anna")
+        await _admin(h, bob, "ada")
+        await h.app.state.identity.accounts.promote_owner(lukas.account_id, "anna", SYSTEM)
+        async with h.store.transaction() as tx:
+            users = await tx.users.find()
+            per_user = [len(await tx.memberships.find(user_id=user.id)) for user in users]
+    assert len(users) == 4 and per_user == [1, 1, 1, 1]
+    source = Path(identity.__file__).parent
+    adding = sorted(
+        str(path.relative_to(source)).replace("\\", "/")
+        for path in source.rglob("*.py")
+        if "memberships.add(" in path.read_text("utf-8")
+    )
+    assert adding == ["application/accounts.py", "application/users.py"]
+
+
+async def _join(h: Harness, user_id: UUID, account_id: UUID, *, owner: bool = False) -> None:
+    """A second membership, written straight into the store: no use case creates one."""
+    async with h.store.transaction() as tx:
+        await tx.memberships.add(
+            Membership(uuid4(), account_id, user_id, Status.ACTIVE, h.clock(), is_owner=owner)
+        )
+
+
+def _signed_in(user_id: UUID, account_id: UUID, h: Harness) -> RequestContext:
+    return RequestContext(
+        principal=Principal(
+            subject=user_id, account_id=account_id, kind=PrincipalKind.USER, auth_time=h.clock()
+        )
+    )
+
+
+async def test_an_owner_of_another_account_is_not_deleted_as_a_member_here() -> None:
+    """If a person ever owns account A and is a plain member of account B: "delete me" in B
+    would delete the user and leave A without an owner, never purged. Refused, in the use case
+    that decides and again in the transaction that deletes; nothing is removed."""
+    async with harness() as h:
+        lukas, bob = await h.register("lukas"), await h.register("bob")
+        await _join(h, lukas.user_id, bob.account_id)
+        before = _rows_of_user(h, lukas.user_id)
+        in_b = _signed_in(lukas.user_id, bob.account_id, h)
+        with pytest.raises(ConflictError) as decided:
+            await h.app.state.identity.self_deletion.delete_me(PASSWORD, in_b)
+        with pytest.raises(ConflictError) as in_transaction:
+            await h.app.state.identity.users.delete_self(bob.account_id, in_b)
+        # Signed in to the account they own: its deletion would erase the user, and with the
+        # user the membership in the other account. Refused as well.
+        as_owner = await _delete_me(h, lukas.token)
+        directly = await h.client.request(
+            "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
+        )
+        me = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"]
+        account = (await h.client.get(lukas.url(), headers=lukas.headers)).json()
+        events = h.bus.messages(DELETED)
+    assert decided.value.message == OWNS_ANOTHER_ACCOUNT
+    assert in_transaction.value.message == OWNS_ANOTHER_ACCOUNT
+    assert as_owner.status_code == 409 and as_owner.json()["detail"] == MEMBER_OF_ANOTHER_ACCOUNT
+    assert directly.status_code == 409 and directly.json()["detail"] == MEMBER_OF_ANOTHER_ACCOUNT
+    assert [m["self_deletion"] for m in me] == [None, None]  # the client knows in advance
+    assert _rows_of_user(h, lukas.user_id) == before and before["memberships"] == 2
+    assert account["status"] == AccountStatus.ACTIVE.value and events == []
+
+
+async def test_a_member_of_two_accounts_is_not_deleted_from_one() -> None:
+    async with harness() as h:
+        lukas, bob = await h.register("lukas"), await h.register("bob")
+        anna_id, anna = await h.subuser(lukas, "anna")
+        await _join(h, anna_id, bob.account_id)
+        response = await _delete_me(h, anna)
+        with pytest.raises(ConflictError) as in_transaction:
+            await h.app.state.identity.users.delete_self(
+                lukas.account_id, _signed_in(anna_id, lukas.account_id, h)
+            )
+    assert response.status_code == 409 and response.json()["detail"] == MEMBER_OF_ANOTHER_ACCOUNT
+    assert in_transaction.value.message == MEMBER_OF_ANOTHER_ACCOUNT
+    assert _rows_of_user(h, anna_id)["memberships"] == 2
 
 
 # --- tokens ------------------------------------------------------------------------------------

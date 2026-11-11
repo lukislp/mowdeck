@@ -30,7 +30,11 @@ from identity.domain.credentials import (
     validate_password,
     validate_username,
 )
-from identity.domain.erasure import deletion_blocked_by, deletion_scheduled
+from identity.domain.erasure import (
+    deletion_blocked_by,
+    deletion_scheduled,
+    self_deletion_blocker,
+)
 from identity.domain.errors import (
     AuthenticationFailed,
     ConflictError,
@@ -319,6 +323,13 @@ class AccountService:
                     "a deletion never removes people implicitly"
                 )
                 raise ConflictError(msg)
+            # The purge deletes the owner's user row, so the owner must be in no other account
+            # (nobody is today; the rule holds if that ever changes).
+            elsewhere = self_deletion_blocker(
+                await tx.memberships.find(user_id=ctx.principal.subject), account_id
+            )
+            if elsewhere is not None:
+                raise ConflictError(elsewhere)
             acct.status = AccountStatus.DELETING
             acct.delete_after = now + self.deps.config.deletion_grace
             await tx.accounts.update(acct)

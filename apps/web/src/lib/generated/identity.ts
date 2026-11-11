@@ -1783,6 +1783,11 @@ export type components = {
             is_admin: boolean;
             /** Is Owner */
             is_owner: boolean;
+            /**
+             * Self Deletion
+             * @description What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well).
+             */
+            self_deletion?: ("account" | "user") | null;
             /** Status */
             status: string;
         };

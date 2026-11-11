@@ -12,6 +12,8 @@ import pytest
 
 from identity.domain.erasure import (
     AUDIT_DETAILS_KEPT,
+    MEMBER_OF_ANOTHER_ACCOUNT,
+    OWNS_ANOTHER_ACCOUNT,
     AccountErasure,
     ErasureState,
     SelfDeletion,
@@ -22,6 +24,7 @@ from identity.domain.erasure import (
     other_members,
     retry_delay,
     self_deletion,
+    self_deletion_blocker,
 )
 from identity.domain.models import Account, AccountStatus, Membership, Status
 
@@ -132,12 +135,44 @@ def test_no_personal_key_is_kept() -> None:
 
 
 def test_the_owner_deletes_the_account_and_everybody_else_themselves() -> None:
-    assert self_deletion(_member(uuid4(), owner=True)) is SelfDeletion.ACCOUNT
-    assert self_deletion(_member(uuid4())) is SelfDeletion.USER
+    def decide(member: Membership) -> SelfDeletion | None:
+        return self_deletion([member], member.account_id)
+
+    assert decide(_member(uuid4(), owner=True)) is SelfDeletion.ACCOUNT
+    assert decide(_member(uuid4())) is SelfDeletion.USER
     admin = _member(uuid4())
     admin.is_admin = True
-    assert self_deletion(admin) is SelfDeletion.USER  # an admin is not the owner
-    assert self_deletion(_member(uuid4(), status=Status.DISABLED)) is SelfDeletion.USER
+    assert decide(admin) is SelfDeletion.USER  # an admin is not the owner
+    assert decide(_member(uuid4(), status=Status.DISABLED)) is SelfDeletion.USER
+    assert self_deletion([], uuid4()) is None  # not a member at all
+    assert self_deletion([_member(uuid4())], uuid4()) is None  # a member of another account only
+
+
+def test_a_person_in_more_than_one_account_is_never_deleted_from_one_of_them() -> None:
+    """Deleting a user removes the person everywhere, so every membership counts. Nothing
+    creates a second membership today; the rule refuses anyway, so nothing ever can silently."""
+    user_id = uuid4()
+    here, owned, joined = _member(user_id), _member(user_id, owner=True), _member(user_id)
+    alone = [here]
+    owner_elsewhere = [here, owned]
+    member_elsewhere = [here, joined]
+    assert self_deletion_blocker(alone, here.account_id) is None
+    # Owning another account: it would be left without an owner and never purged.
+    assert self_deletion_blocker(owner_elsewhere, here.account_id) == OWNS_ANOTHER_ACCOUNT
+    assert self_deletion(owner_elsewhere, here.account_id) is None
+    # The owner of this account who is a member elsewhere: the account deletion would erase the
+    # user row, and with it the membership in the other account.
+    assert self_deletion_blocker(owner_elsewhere, owned.account_id) == MEMBER_OF_ANOTHER_ACCOUNT
+    assert self_deletion(owner_elsewhere, owned.account_id) is None
+    assert self_deletion_blocker(member_elsewhere, here.account_id) == MEMBER_OF_ANOTHER_ACCOUNT
+    assert self_deletion(member_elsewhere, here.account_id) is None
+    # Owning two accounts: the owned one elsewhere is the reason given.
+    assert self_deletion_blocker([owned, _member(user_id, owner=True)], owned.account_id) == (
+        OWNS_ANOTHER_ACCOUNT
+    )
+    # The texts say what to do and name nobody and no account.
+    for text in (OWNS_ANOTHER_ACCOUNT, MEMBER_OF_ANOTHER_ACCOUNT):
+        assert "first" in text and str(user_id) not in text
 
 
 def test_an_audit_row_concerns_a_user_as_actor_or_as_target() -> None:
