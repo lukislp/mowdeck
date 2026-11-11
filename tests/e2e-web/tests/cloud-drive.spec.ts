@@ -19,7 +19,15 @@
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
-import { RUN, actor, loginByUi, registerByApi, watchCsp, type Actor } from './support';
+import {
+  RUN,
+  actor,
+  loginByUi,
+  registerByApi,
+  watchCsp,
+  type Actor,
+  acknowledgeSafety,
+} from './support';
 
 const FLEET = '/api/v1/fleet';
 const FAKE_PASSWORD = 'fake-cloud-password';
@@ -143,6 +151,7 @@ test('cloud drive: owner account forwards only and the drive page; a shared acco
     await expect(page.getByTestId('drive-pad')).toHaveAttribute('data-reverse', 'false');
     await expect(page.getByTestId('drive-no-reverse')).toBeVisible();
     await page.getByTestId('drive-start').click();
+    await acknowledgeSafety(page);
     await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
     const pad = page.getByTestId('joystick');
     await expect(pad).toHaveAttribute('aria-disabled', 'false');

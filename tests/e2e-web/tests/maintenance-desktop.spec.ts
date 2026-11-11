@@ -20,6 +20,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 async function commandKinds(
@@ -135,6 +136,8 @@ test('maintenance: confirm, run, results and the safety rules', async ({ page, r
   await page.getByTestId('maint-leave_dock-open').click();
   await expect(page.getByTestId('maint-confirm-body')).toContainText('Station');
   await page.getByTestId('maint-confirm-go').click();
+  // Leaving the dock moves the mower: the safety acknowledgement comes after the sheet.
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('maint-leave_dock-result')).toHaveAttribute(
     'data-status',
     'accepted',

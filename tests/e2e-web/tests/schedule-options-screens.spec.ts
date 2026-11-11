@@ -12,7 +12,14 @@ import { fileURLToPath } from 'node:url';
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { actor, createMowerByApi, loginByUi, registerByApi, waitForMap } from './support';
+import {
+  actor,
+  createMowerByApi,
+  loginByUi,
+  registerByApi,
+  waitForMap,
+  acknowledgeSafety,
+} from './support';
 
 const OUT = fileURLToPath(new URL('../../../apps/web/screenshots/', import.meta.url));
 const SIZES = {
@@ -66,6 +73,7 @@ for (const size of Object.keys(SIZES) as (keyof typeof SIZES)[]) {
       (r) => r.url().endsWith('/api/v1/scheduler/schedules') && r.request().method() === 'POST',
     );
     await page.getByTestId('sched-save').click();
+    await acknowledgeSafety(page);
     expect((await saved).status()).toBe(201);
     await page.waitForURL(/\/schedules$/);
     await expect(page.getByTestId('schedule-mow')).toContainText('Diagonal');
