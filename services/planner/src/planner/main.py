@@ -39,6 +39,7 @@ from mowdeck_service_kit.entitlements import (
 from planner.adapters.api.demo_routes import router as demo_router
 from planner.adapters.api.deps import install_error_mapping
 from planner.adapters.api.routes import router
+from planner.adapters.bus.erasure import subscribe_erasure
 from planner.adapters.bus.subscriptions import subscribe_all
 from planner.adapters.bus.telemetry import BusTrackSource
 from planner.adapters.db.store import SqlStore
@@ -106,6 +107,7 @@ def build_app(
             subscriptions = await subscribe_all(
                 active_bus, services.ingest, as_cache(active_authorizer)
             )
+            subscriptions.append(await subscribe_erasure(active_bus, services.erasure))
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             plan_events = await plans.subscribe()

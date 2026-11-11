@@ -24,6 +24,7 @@ from mowdeck_contracts.v1 import (
     PhotoRequest,
 )
 from mowdeck_service_kit.entitlements import Entitlements
+from mowdeck_service_kit.erasure import AccountErasure
 
 from fleet.adapters.crypto import DisabledCipher
 from fleet.application.access import Access
@@ -34,6 +35,7 @@ from fleet.application.commands import CommandService
 from fleet.application.context import FleetConfig
 from fleet.application.demo_purge import AccountPurge
 from fleet.application.drive import DriveService
+from fleet.application.erasure import account_erasure
 from fleet.application.groups import GroupService
 from fleet.application.linked_accounts import CredentialVault, LinkedAccountService
 from fleet.application.links import LinkService
@@ -77,6 +79,8 @@ class Services:
     access: Access
     writer: TupleWriter
     purge: AccountPurge
+    erasure: AccountErasure
+    """Answers ``account.erase.fleet`` (ADR 0082)."""
 
 
 def build_services(
@@ -120,6 +124,8 @@ def build_services(
         photos=photo_gateway or _NoPhotoGateway(),
         snapshot_min_interval_seconds=snapshot_min_interval_seconds,
     )
+    throttle = LoginThrottle(clock)
+    purge = AccountPurge(uow, camera, throttle)
     return Services(
         sites=sites,
         groups=GroupService(uow, store, access, clock, entitlements),
@@ -138,7 +144,7 @@ def build_services(
             vault,
             discovery,
             clock,
-            LoginThrottle(clock),
+            throttle,
             catalog,
         ),
         links=LinkService(
@@ -155,7 +161,8 @@ def build_services(
         ),
         access=access,
         writer=writer,
-        purge=AccountPurge(uow, camera),
+        purge=purge,
+        erasure=account_erasure(purge, store),
     )
 
 

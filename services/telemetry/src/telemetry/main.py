@@ -42,6 +42,7 @@ from telemetry.adapters.api.error_routes import router as error_router
 from telemetry.adapters.api.routes import router
 from telemetry.adapters.api.tracking_routes import router as tracking_router
 from telemetry.adapters.api.zone_routes import router as zone_router
+from telemetry.adapters.bus.erasure import subscribe_erasure
 from telemetry.adapters.bus.errors import BusErrorLexicons
 from telemetry.adapters.bus.fleet import seed_directory
 from telemetry.adapters.bus.health_events import BusHealthEvents
@@ -59,6 +60,7 @@ from telemetry.adapters.memory_zones import MemoryZoneStore
 from telemetry.adapters.metrics import PrometheusRetentionObserver
 from telemetry.application.aerial import TileCache, TileSource
 from telemetry.application.demo import DemoPurge
+from telemetry.application.erasure import account_erasure
 from telemetry.application.errors import ErrorExplanations, ErrorLexiconGateway
 from telemetry.application.ports import Clock, Store
 from telemetry.application.services import Services, build_services
@@ -181,7 +183,20 @@ def build_app(
         demo = DemoPurge(
             store_ref, zones_ref, tracking_store, forget=[services.aerial.forget_account]
         )
-        services = dataclasses.replace(services, tracking=tracking, errors=explanations, demo=demo)
+        erasure = account_erasure(
+            demo,
+            store_ref,
+            zones_ref,
+            tracking_store,
+            drop_caches=[
+                services.widget.clear_cache,
+                *([services.zones.clear_shapes] if services.zones is not None else []),
+                *([tracking.clear_areas] if tracking is not None else []),
+            ],
+        )
+        services = dataclasses.replace(
+            services, tracking=tracking, errors=explanations, demo=demo, erasure=erasure
+        )
         app.state.telemetry = services
         app.state.directory_seeded = False
         subscriptions: list[Subscription] = []
@@ -196,6 +211,8 @@ def build_app(
             )
         if active_bus is not None and tracking is not None:
             subscriptions.append(await subscribe_notifications(active_bus, tracking))
+        if active_bus is not None:
+            subscriptions.append(await subscribe_erasure(active_bus, erasure))
         app.state.subscriptions = subscriptions
         if background_tasks:
             tasks.extend(

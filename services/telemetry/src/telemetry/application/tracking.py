@@ -759,6 +759,11 @@ class Tracking:
         self._areas[session.id] = (now, area)
         return area
 
+    def clear_areas(self) -> None:
+        """Drop the remembered map areas of the sessions (an account is being deleted, ADR 0082:
+        they are keyed by session, not by account, and hold where the mower was)."""
+        self._areas.clear()
+
     # --- report -------------------------------------------------------------------------------
 
     async def report(

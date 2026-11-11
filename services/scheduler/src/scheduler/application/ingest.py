@@ -90,6 +90,12 @@ class Ingest:
         self._written[state.mower_id] = status
         return stored
 
+    def forget_account(self, account_id: UUID) -> None:
+        """Drop the remembered statuses of the account's mowers (they hold the last position);
+        the account is being deleted (ADR 0082)."""
+        for mower_id in [m for m, s in self._written.items() if s.account_id == account_id]:
+            del self._written[mower_id]
+
     async def on_capabilities(self, snapshot: MowerCapabilitiesSnapshot) -> bool:
         """Store the capabilities unless newer ones are stored; True if stored."""
         async with self.store.transaction() as tx:

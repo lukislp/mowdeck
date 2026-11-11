@@ -59,8 +59,19 @@ Permission `planner.view` (an account key implied by `mower.view`; the API check
 | --- | --- | --- | --- | --- |
 | consumed | `device.mower.>` | JetStream `DEVICE`, durable and queue `planner-device`, newest per subject first | `MowerMapSnapshot`, `MowerCapabilitiesSnapshot` | the snapshot directory (`mower_facts`); an older snapshot never replaces a newer one |
 | request | `tracks.positions.query` | core NATS (Telemetry) | `PositionTrackRequest` / `PositionTrackReply` | the encoded position track for coverage |
+| reply | `account.erase.planner` | core NATS, queue `planner-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | consumed | `event.identity.grants.changed` | JetStream, every instance | `GrantsChanged` | drops cached authorization decisions |
 | consumed | `event.entitlements.plan.changed` | JetStream | `PlanChanged` | drops the cached plan snapshot (kit client) |
+
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.planner` (core NATS, internal, no principal) and the Planner deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted:** the account's templates and the map and capability facts of its mowers (`templates`, `mower_facts`), in one transaction.
+- **In memory:** nothing of an account is kept.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
 
 ## Execution
 

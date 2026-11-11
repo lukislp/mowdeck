@@ -247,6 +247,26 @@ await plans.require_feature(account_id, "manual_drive")  # 403 feature-not-in-pl
 
 The client asks `entitlements.check` (core NATS) once per account and caches the returned `EntitlementSnapshot` for `MOWDECK_ENTITLEMENTS_CACHE_SECONDS`; `await plans.subscribe()` drops snapshots on `entitlements.plan.changed`. When Entitlements does not answer, `MOWDECK_ENTITLEMENTS_BILLING_ENABLED` decides (off: allowed with plan `unlimited`, on: refused with `entitlements_unavailable`); outages are never cached. `view` and `emergency_stop` are always allowed and never asked. The problem types are `PlanLimitReached` (409 `plan-limit`, `errors` carry `limit` and `current`) and `FeatureNotInPlan` (403 `feature-not-in-plan`); `feature_gate(key)` is a FastAPI dependency for routes, after `install_entitlements(app, plans)`. Tests use `mowdeck_service_kit.testing.FakeEntitlements` (one plan for every account, changeable between requests, records every question).
 
+## Account erasure
+
+A service that stores per-account data answers `account.erase.<service>` when Identity deletes an account ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)). `mowdeck_service_kit.erasure` holds what is the same in every service:
+
+- `AccountErasure(purge, leftovers, forget=())`, the use case. `purge(account_id) -> int` deletes everything of the account (idempotent), `leftovers(account_id) -> {table: rows}` counts what is still there, each `forget(account_id)` drops what a use case keeps in memory. `erase` runs purge, forget and the count in that order and raises `ErasureIncomplete` while rows are left: a service never reports an account as gone that it still holds.
+- `erasure_handler(service, erasure.erase)`, the bus handler: decodes the `AccountEraseRequest` and always answers with an `AccountEraseReply`. `ok=false` for an invalid request, a purge that raised (the error names the exception class, the detail stays in the log) and for leftovers (the error names the tables and counts).
+- `mowdeck_service_kit.db.account_tables(metadata)` and `account_row_counts(conn, tables, account_id)` (extra `db`): the tables with an `account_id` column, read from the schema, and the rows of one account in them. A store implements its `leftovers` with them, so a table added later is counted without anybody listing it.
+
+The service subscribes in its own bus adapter, so the subject is visible to the repository's subject scans (NATS permissions, architecture diagrams):
+
+```python
+await bus.subscribe(
+    account_erase_subject("fleet"),
+    erasure_handler("fleet", services.erasure.erase),
+    queue="fleet-erasure",
+)
+```
+
+A new service adds the `serve` entry in `tools/repo-checks/scripts/nats_auth.py`; `tools/repo-checks/tests/test_erasure_registry.py` fails while a service with tables does not answer.
+
 ## Testing utilities
 
 `mowdeck_service_kit.testing` (extra `testing`) provides `make_test_app(...)` (in-memory bus, static principal, settings independent of the environment), `make_test_settings`, `make_test_descriptor`, `make_principal`, `StaticPrincipalResolver` and `lifespan_client(app)`, an `httpx.AsyncClient` that also runs startup and shutdown hooks.

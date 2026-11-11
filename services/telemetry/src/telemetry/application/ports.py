@@ -304,3 +304,8 @@ class Store(Protocol):
         totals, day rows, blade changes and the thinning watermarks of its mowers. Returns the
         number of rows removed (0 when nothing was left)."""
         ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in this store's tables, by table name; tables without one
+        are left out (account erasure, ADR 0082)."""
+        ...

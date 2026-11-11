@@ -9,12 +9,14 @@ before the service starts. Every account-scoped query filters by
 """
 
 import weakref
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
+from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import MetaData, Table, func, select, text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -132,3 +134,31 @@ def session_dependency(
                 await session.commit()
 
     return get_session
+
+
+ACCOUNT_COLUMN = "account_id"
+"""The column that names the account a row belongs to, in every service's schema."""
+
+
+def account_tables(metadata: MetaData) -> tuple[Table, ...]:
+    """The tables of ``metadata`` with an :data:`ACCOUNT_COLUMN`, in dependency order.
+
+    Read from the schema, not from a hand-kept list: a table added later is included without
+    anybody remembering it (the account erasure, ADR 0082, counts what is left with it)."""
+    return tuple(table for table in metadata.sorted_tables if ACCOUNT_COLUMN in table.c)
+
+
+async def account_row_counts(
+    conn: AsyncConnection, tables: Iterable[Table], account_id: UUID
+) -> dict[str, int]:
+    """The rows of ``account_id`` in each of ``tables`` (every one needs an
+    :data:`ACCOUNT_COLUMN`), by table name; tables without such a row are left out."""
+    counts: dict[str, int] = {}
+    for table in tables:
+        statement = (
+            select(func.count()).select_from(table).where(table.c[ACCOUNT_COLUMN] == account_id)
+        )
+        found = int((await conn.execute(statement)).scalar_one())
+        if found:
+            counts[table.name] = found
+    return counts

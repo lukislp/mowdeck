@@ -171,6 +171,12 @@ class Widget:
         self._cache: OrderedDict[str, tuple[Any, RenderedMap]] = OrderedDict()
         self._slots = asyncio.Semaphore(MAX_RENDERS)
 
+    def clear_cache(self) -> None:
+        """Drop every rendered map (an account is being deleted, ADR 0082: the cache is keyed by
+        content, so the maps of one account cannot be picked out; the next request renders
+        again)."""
+        self._cache.clear()
+
     async def state(
         self,
         account_id: UUID,
