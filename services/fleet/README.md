@@ -240,6 +240,7 @@ Permissions `mower.view`, `mower.control`, `mower.drive`, `fleet.manage`, `fleet
 | reply | `fleet.drive.stop` | core NATS, queue `fleet` (internal) | `DriveStopRequest` / `DriveStopReply` | closes it |
 | reply | `fleet.targets.resolve` | core NATS, queue `fleet` (internal) | `ResolveTargetRequest` / `ResolveTargetReply` | the mowers of a mower or group target of one account with the time zone and coordinates of their sites and their saved mowing defaults (`mow_pattern`); `timezone` is the target's (a cross-site group: the default site) |
 | reply | `account.erase.fleet` | core NATS, queue `fleet-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
+| consumed | `event.identity.user.deleted` | JetStream, durable and deliver group `fleet-users` | `EventEnvelope[UserChanged]` | a user was deleted: their name goes from the command and drive session records, see [A deleted user](#a-deleted-user) |
 | request | `gateway.mower.<id>.camera.session` | core NATS (internal) | `CameraSessionRequest` / `CameraSessionReply` | a live camera session from the Device-Gateway that holds the mower (`transport` `direct`, and the fallback of `auto`) |
 | request | `relay.camera.attach`, `relay.camera.renew`, `relay.camera.detach` | core NATS (internal, queue `camera-relay`) | `RelayAttachRequest` / `RelayAttachReply`, `RelayRenewRequest` / `RelayRenewReply`, `RelayDetachRequest` / `RelayDetachReply` | leases on the camera relay (ADR 0045) |
 | request | `gateway.cloud.providers` | core NATS (internal; any gateway instance answers) | `CloudProvidersRequest` / `CloudProvidersReply` | the enabled cloud providers and their credential fields (ADR 0066) |
@@ -265,6 +266,18 @@ When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-dele
 - **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again. Fleet is asked first, so the other services see no further states of the account's mowers.
 
 Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
+
+### A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"), Identity publishes `identity.user.deleted`. The account goes on, so Fleet deletes nothing: the sites, groups and mowers the user created, the commands they sent and their drive sessions are the account's record and stay.
+
+- **Scrubbed:** the person's name. Fleet copied it in two places as part of a `PrincipalRef`: `commands.issued_by` and `drive_sessions.started_by`. The `display_name` key goes; the reference keeps its subject id and kind, so the record still says that one subject did it and nothing about who that is.
+- **Kept as they are:** the plain ids (`created_by`, `updated_by`, `issued_by_subject`, `started_by_subject`) and the audit log's `actor_subject`. Once Identity's user row is gone they name nobody (ADR 0082, section 6). The audit log stores no name.
+- **No rows of a user:** no table has a `user_id` column. Nothing of a user is kept in memory.
+
+Which columns hold a name is read from the schema (`mowdeck_service_kit.db.principal_ref_columns`: JSON columns named `owner` or `<verb>_by`), for the scrub and for the count afterwards; a name that is still there fails the event, so JetStream delivers it again. The use case is idempotent. `tests/test_fleet_user_erasure.py` pins the list of columns and that no table is a user's own, so a column added later needs a decision here.
+
+Layers: `adapters/bus/user_erasure.py` subscribes (durable `fleet-users`) and hands the event to the kit's handler; the use case is `application/user_erasure.py` (the kit's `UserErasure` over `Tx.forget_user` and `Tx.user_names`).
 
 ## Consistency with OpenFGA
 

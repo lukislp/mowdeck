@@ -14,6 +14,8 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
+from mowdeck_service_kit.user_erasure import named_refs, scrub_refs
+
 from fleet.application.ports import Gt, In, Lt
 from fleet.domain.errors import ConflictError
 from fleet.domain.models import (
@@ -221,6 +223,21 @@ class MemoryTx:
             if found:
                 counts[field.name] = found
         return counts
+
+    def _all_rows(self) -> list[Any]:
+        return [
+            row
+            for field in dataclasses.fields(self._tables)
+            for row in getattr(self._tables, field.name).rows.values()
+        ]
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Scrubbed in every principal reference of every memory table."""
+        return scrub_refs(self._all_rows(), user_id, account_id)
+
+    async def user_names(self, user_id: UUID) -> dict[str, int]:
+        """Counted over every principal reference of every memory table."""
+        return named_refs(self._all_rows(), user_id)
 
 
 class MemoryStore:

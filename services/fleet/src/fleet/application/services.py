@@ -25,6 +25,7 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_service_kit.entitlements import Entitlements
 from mowdeck_service_kit.erasure import AccountErasure
+from mowdeck_service_kit.user_erasure import UserErasure
 
 from fleet.adapters.crypto import DisabledCipher
 from fleet.application.access import Access
@@ -58,6 +59,7 @@ from fleet.application.ports import (
 from fleet.application.providers import ProviderCatalog
 from fleet.application.sites import SiteService
 from fleet.application.throttle import LoginThrottle
+from fleet.application.user_erasure import user_erasure
 from fleet.application.work import UnitOfWork
 
 
@@ -81,6 +83,8 @@ class Services:
     purge: AccountPurge
     erasure: AccountErasure
     """Answers ``account.erase.fleet`` (ADR 0082)."""
+    user_erasure: UserErasure
+    """Forgets a deleted user (``identity.user.deleted``, ADR 0082)."""
 
 
 def build_services(
@@ -163,6 +167,7 @@ def build_services(
         writer=writer,
         purge=purge,
         erasure=account_erasure(purge, store),
+        user_erasure=user_erasure(store),
     )
 
 

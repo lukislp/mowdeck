@@ -18,7 +18,13 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import MowerCapabilities
-from mowdeck_service_kit.db import account_row_counts, account_tables
+from mowdeck_service_kit.db import (
+    account_row_counts,
+    account_tables,
+    named_principal_refs,
+    principal_ref_columns,
+    scrub_principal_refs,
+)
 from pydantic import ValidationError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -284,6 +290,17 @@ class SqlTx:
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         """Counted over every table of the schema that has an ``account_id`` column."""
         return await account_row_counts(self._conn, account_tables(tables.metadata), account_id)
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Scrubbed in every column of the schema that stores a principal reference."""
+        columns = principal_ref_columns(tables.metadata)
+        return await scrub_principal_refs(self._conn, columns, user_id, account_id)
+
+    async def user_names(self, user_id: UUID) -> dict[str, int]:
+        """Counted over every column of the schema that stores a principal reference."""
+        return await named_principal_refs(
+            self._conn, principal_ref_columns(tables.metadata), user_id
+        )
 
     async def try_lock(self, key: int) -> bool:
         result = await self._conn.execute(

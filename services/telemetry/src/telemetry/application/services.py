@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 
 from mowdeck_service_kit.erasure import AccountErasure
+from mowdeck_service_kit.user_erasure import UserErasure
 
 from telemetry.application.aerial import Aerial, AerialConfig, TileCache, TileSource
 from telemetry.application.context import TelemetryConfig
@@ -43,6 +44,8 @@ class Services:
     """The demo sandbox purge (ADR 0076), wired at startup."""
     erasure: AccountErasure | None = None
     """Answers ``account.erase.telemetry`` (ADR 0082), wired at startup."""
+    user_erasure: UserErasure | None = None
+    """Forgets a deleted user (``identity.user.deleted``, ADR 0082), wired at startup."""
     demo_history: DemoHistory | None = None
     """Past mowing days for demo mowers from daily templates (ADR 0068, ADR 0079)."""
 

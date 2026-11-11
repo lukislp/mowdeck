@@ -13,7 +13,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import UUID
 
-from mowdeck_service_kit.db import account_row_counts, account_tables
+from mowdeck_service_kit.db import (
+    account_row_counts,
+    account_tables,
+    named_principal_refs,
+    principal_ref_columns,
+    scrub_principal_refs,
+)
 from sqlalchemy import ColumnElement, Table, delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -227,6 +233,17 @@ class SqlTx:
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         """Counted over every table of the schema that has an ``account_id`` column."""
         return await account_row_counts(self.conn, account_tables(tables.metadata), account_id)
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Scrubbed in every column of the schema that stores a principal reference."""
+        columns = principal_ref_columns(tables.metadata)
+        return await scrub_principal_refs(self.conn, columns, user_id, account_id)
+
+    async def user_names(self, user_id: UUID) -> dict[str, int]:
+        """Counted over every column of the schema that stores a principal reference."""
+        return await named_principal_refs(
+            self.conn, principal_ref_columns(tables.metadata), user_id
+        )
 
 
 class SqlStore:

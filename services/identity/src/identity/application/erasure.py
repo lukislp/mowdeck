@@ -36,6 +36,7 @@ from identity.application.context import SYSTEM
 from identity.application.deps import Deps
 from identity.application.ports import AccountEraser
 from identity.application.sync import platform_tuple
+from identity.application.users import delete_user_rows
 from identity.domain.erasure import AccountErasure, ErasureState, grace_over
 from identity.domain.models import AccountStatus
 
@@ -235,23 +236,12 @@ class ErasureService:
             user_ids = [m.user_id for m in members]
             for user_id in user_ids:
                 found = await tx.users.get(id=user_id)
-                await tx.sessions.delete(user_id=user_id)
-                await tx.onboarding.delete(user_id=user_id)
-                await tx.known_devices.delete(user_id=user_id)
-                await tx.passkeys.delete(user_id=user_id)
-                await tx.webauthn_challenges.delete(user_id=user_id)
-                await tx.app_login_codes.delete(user_id=user_id)
-                await tx.external_identities.delete(user_id=user_id)
-                await tx.oauth_states.delete(user_id=user_id)
-                await tx.assignments.delete(subject_type="user", subject_id=user_id)
                 if found is not None:
-                    await tx.login_attempts.delete(username_norm=found.username_norm)
+                    await delete_user_rows(tx, found)
             await tx.api_tokens.delete(account_id=account_id)
             await tx.assignments.delete(account_id=account_id)
             await tx.memberships.delete(account_id=account_id)
             await tx.roles.delete(account_id=account_id)
-            for user_id in user_ids:
-                await tx.users.delete(id=user_id)
             scrubbed = await tx.scrub_audit(account_id)
             await tx.accounts.delete(id=account_id)
             now = self.deps.clock()
