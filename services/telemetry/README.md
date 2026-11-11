@@ -73,6 +73,7 @@ Permission defined by this service (module descriptor): `telemetry.view`, an acc
 | request | `gateway.errors.explain`, `gateway.errors.lexicons` (core NATS) | per API request, answers cached an hour | the error lexicons of the adapters installed at the Device-Gateway (see [Error lexicon](#error-lexicon)) |
 | answered | `tracks.positions.query` (core NATS, `PositionTrackRequest` / `PositionTrackReply`) | queue group `telemetry-track` | the position track of one mower of one account for a time range (at most 50 000 points, the range limit of the HTTP queries) as an encoded polyline, for the Planner's coverage and gaps ([ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)); an invalid range is answered with `error` |
 | answered | `account.erase.telemetry` (core NATS, `AccountEraseRequest` / `AccountEraseReply`, internal, Identity only) | queue group `telemetry-erasure` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
+| consumed | `event.identity.user.deleted` (`UserChanged`, stream `EVENTS`) | durable and queue group `telemetry-users` | a user was deleted: the tracking share links they created are revoked, see [A deleted user](#a-deleted-user) |
 | produced | `event.telemetry.blade_hours.threshold` (`telemetry.blade_hours.threshold`, `BladeHoursThreshold`, stream `EVENTS`) | Notifications | the blade hours since the last blade change crossed the mower's threshold (its own, else `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD`); published once per blade change, after the commit (a failed publish is logged, not retried) |
 
 Handler rules: malformed payloads, payloads whose subject names another mower and states of a foreign account are dropped with a warning (never redelivered). A command result for a mower missing from the directory is redelivered and dropped with a warning on the `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS`-th delivery. A snapshot whose account differs from the directory entry of its mower is dropped with a warning; an older snapshot never replaces a newer one. Manual drive frames (ten per second) produce command results whose correlation id starts with `drive:`; their `accepted` results are not stored, so they do not flood the timeline (rejected, failed and expired ones are).
@@ -86,6 +87,16 @@ When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-dele
 - **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again. An account with months of history can take longer to delete than Identity waits for one request (`MOWDECK_IDENTITY_ERASURE_TIMEOUT_SECONDS`); the purge finishes anyway and the next attempt confirms it.
 
 Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
+
+### A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"), Identity publishes `identity.user.deleted`. Telemetry stores no name and no row that is a user's own: `blade_changes.changed_by`, `tracking_sessions.started_by`, `tracking_links.created_by` and `virtual_zones.created_by` are plain subject ids, which name nobody once Identity's user row is gone. The blade changes, zones and tracking sessions stay with the account.
+
+- **Revoked:** the share links of theft tracking sessions the user created (`tracking_links.created_by`). A link shows the mower's position to whoever has its token, without signing in, until it expires; a person who is gone must not keep one. The rows stay (`revoked_at` is set), the session goes on, and the other members create new links.
+
+The use case counts the user's links that still work afterwards; one that does fails the event, so JetStream delivers it again. `tests/test_telemetry_user_erasure.py` holds against the schema that no column stores a principal reference and no table has a `user_id` column.
+
+Layers: `adapters/bus/user_erasure.py` subscribes (durable `telemetry-users`); the use case is `application/user_erasure.py` (the kit's `UserErasure` over `TrackingStore.revoke_links_of_creator`).
 
 ### Batched ingestion
 

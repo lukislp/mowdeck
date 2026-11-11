@@ -15,6 +15,7 @@ from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import MowerCapabilities
+from mowdeck_service_kit.user_erasure import named_refs, scrub_refs
 
 from scheduler.domain.models import MowerPlace, MowerStatus, Schedule, ScheduleRun
 from scheduler.domain.rotation import AreaAngle, MowerRotation
@@ -193,6 +194,16 @@ class MemoryTx:
             deleted += data.capabilities.pop(mower_id, None) is not None
         deleted += _drop(data.angles, lambda a: a.account_id == account_id)
         return deleted + _drop(data.rotation, lambda r: r.account_id == account_id)
+
+    def _rows_with_references(self) -> list[Any]:
+        """The rows that can hold a principal reference: schedules and their runs."""
+        return [*self._data.schedules.values(), *self._data.runs.values()]
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        return scrub_refs(self._rows_with_references(), user_id, account_id)
+
+    async def user_names(self, user_id: UUID) -> dict[str, int]:
+        return named_refs(self._rows_with_references(), user_id)
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         data = self._data

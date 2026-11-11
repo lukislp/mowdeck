@@ -82,6 +82,17 @@ class TrackingStore(Protocol):
         """Revoke a link of an account; False when none matched or it was revoked already."""
         ...
 
+    async def revoke_links_of_creator(
+        self, user_id: UUID, account_id: UUID | None, now: datetime
+    ) -> int:
+        """Revoke every link ``user_id`` created that is not revoked yet (a deleted user,
+        ADR 0082); with ``account_id`` only that account's. Returns how many were revoked."""
+        ...
+
+    async def usable_links_of_creator(self, user_id: UUID, now: datetime) -> int:
+        """How many links ``user_id`` created still work (neither revoked nor expired)."""
+        ...
+
     async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
         """Mark the link as used now; ``counted`` also counts a view (``uses``)."""
         ...

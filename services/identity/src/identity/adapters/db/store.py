@@ -211,6 +211,13 @@ class SqlTx:
         result = await self.audit.conn.execute(select(func.audit_log_scrub(account_id)))
         return int(result.scalar_one())
 
+    async def scrub_user_audit(self, user_id: UUID) -> int:
+        """The personal fields of the audit rows about one deleted user, rows kept: the
+        database function ``audit_log_scrub_user`` (migration 0012), the same sanctioned path
+        as :meth:`scrub_audit` (ADR 0082)."""
+        result = await self.audit.conn.execute(select(func.audit_log_scrub_user(user_id)))
+        return int(result.scalar_one())
+
     @classmethod
     def bind(cls, conn: AsyncConnection) -> "SqlTx":
         """Tables on ``conn``."""

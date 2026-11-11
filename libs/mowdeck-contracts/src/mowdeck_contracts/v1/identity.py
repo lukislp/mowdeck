@@ -12,7 +12,8 @@ Event type                      Payload                 Meaning
 ``identity.account.created``    :class:`AccountCreated`  a new account with its owner exists
 ``identity.user.created``       :class:`UserChanged`     a user was created (registration, sub-user)
 ``identity.user.disabled``      :class:`UserChanged`     a user or a membership was disabled
-``identity.user.deleted``       :class:`UserChanged`     a sub-user was deleted or a member removed
+``identity.user.deleted``       :class:`UserChanged`     a sub-user was deleted, a member removed or
+                                                        deleted themselves (ADR 0082)
 ``identity.grants.changed``     :class:`GrantsChanged`   authorization tuples of subjects changed
 ``identity.api_token.revoked``  :class:`ApiTokenRevoked`  an API token was revoked
 ``identity.session.new_device``  :class:`NewDeviceLogin`  a login came from a device the user had

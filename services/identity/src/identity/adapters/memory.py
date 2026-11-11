@@ -15,7 +15,12 @@ from typing import Any
 from uuid import UUID
 
 from identity.application.ports import Ge, Gt, In, Lt
-from identity.domain.erasure import AUDIT_DETAILS_KEPT, AccountErasure
+from identity.domain.erasure import (
+    AUDIT_DETAILS_KEPT,
+    AccountErasure,
+    audit_fields_after_user_scrub,
+    concerns_user,
+)
 from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
@@ -186,6 +191,30 @@ class MemoryTx:
             if entry.actor_name is None and entry.ip is None and kept == entry.details:
                 continue
             entry.actor_name, entry.ip, entry.details = None, None, kept
+            changed += 1
+        return changed
+
+    async def scrub_user_audit(self, user_id: UUID) -> int:
+        """The personal fields of the audit rows about one deleted user (ADR 0082), rows kept."""
+        changed = 0
+        for entry in self.audit.rows.values():
+            if not concerns_user(
+                user_id,
+                actor_subject=entry.actor_subject,
+                target_type=entry.target_type,
+                target_id=entry.target_id,
+            ):
+                continue
+            after = audit_fields_after_user_scrub(
+                user_id,
+                actor_subject=entry.actor_subject,
+                actor_name=entry.actor_name,
+                ip=entry.ip,
+                details=entry.details,
+            )
+            if after == (entry.actor_name, entry.ip, entry.details):
+                continue
+            entry.actor_name, entry.ip, entry.details = after
             changed += 1
         return changed
 

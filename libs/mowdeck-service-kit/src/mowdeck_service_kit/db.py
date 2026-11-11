@@ -14,7 +14,8 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID
 
-from sqlalchemy import MetaData, Table, func, select, text
+from sqlalchemy import Column, MetaData, String, Table, func, literal, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
@@ -27,6 +28,7 @@ from sqlalchemy.pool import NullPool
 from mowdeck_service_kit.health import ReadinessCheck
 from mowdeck_service_kit.settings import ServiceSettings
 from mowdeck_service_kit.tls import client_context
+from mowdeck_service_kit.user_erasure import REF_NAME, REF_SUBJECT, is_ref_name
 
 _DRIVERLESS_SCHEMES = {"postgresql": "postgresql+asyncpg", "postgres": "postgresql+asyncpg"}
 
@@ -161,4 +163,75 @@ async def account_row_counts(
         found = int((await conn.execute(statement)).scalar_one())
         if found:
             counts[table.name] = found
+    return counts
+
+
+USER_COLUMN = "user_id"
+"""The column that names the user a row belongs to (the user's own rows)."""
+
+
+def user_tables(metadata: MetaData) -> tuple[Table, ...]:
+    """The tables of ``metadata`` with a :data:`USER_COLUMN`: rows that are one user's own and
+    go when the user is deleted (ADR 0082). Read from the schema, in dependency order."""
+    return tuple(table for table in metadata.sorted_tables if USER_COLUMN in table.c)
+
+
+def is_principal_ref_column(column: Column[Any]) -> bool:
+    """Whether a column stores a ``PrincipalRef`` as JSON. The convention of every schema: a
+    JSONB column named ``owner`` or ``<verb>_by`` (``issued_by``, ``started_by``). A plain id of
+    the same name (``created_by`` as a UUID) is opaque and not a reference with a name."""
+    return isinstance(column.type, JSONB) and is_ref_name(column.name)
+
+
+def principal_ref_columns(metadata: MetaData) -> tuple[Column[Any], ...]:
+    """Every column of ``metadata`` that stores a ``PrincipalRef`` (so a person's name), read
+    from the schema: a column added later is scrubbed and counted without anybody listing it."""
+    return tuple(
+        column
+        for table in metadata.sorted_tables
+        for column in table.columns
+        if is_principal_ref_column(column)
+    )
+
+
+def _names(column: Column[Any], user_id: UUID) -> Any:
+    """The rows whose reference in ``column`` is ``user_id`` and still carries a name."""
+    return (column[REF_SUBJECT].astext == str(user_id)) & column[REF_NAME].astext.is_not(None)
+
+
+async def scrub_principal_refs(
+    conn: AsyncConnection,
+    columns: Iterable[Column[Any]],
+    user_id: UUID,
+    account_id: UUID | None = None,
+) -> int:
+    """Remove the name of ``user_id`` from the references in ``columns`` and keep the rows
+    (ADR 0082): the ``display_name`` key goes, the subject id and everything else stay. With
+    ``account_id`` only in that account's rows (tables with an :data:`ACCOUNT_COLUMN`).
+    Idempotent; returns how many references changed."""
+    changed = 0
+    for column in columns:
+        table = column.table
+        condition = _names(column, user_id)
+        if account_id is not None and ACCOUNT_COLUMN in table.c:
+            condition &= table.c[ACCOUNT_COLUMN] == account_id
+        without_name = column.op("-", return_type=JSONB)(literal(REF_NAME, String))
+        result = await conn.execute(
+            update(table).where(condition).values({column.name: without_name})
+        )
+        changed += int(result.rowcount)
+    return changed
+
+
+async def named_principal_refs(
+    conn: AsyncConnection, columns: Iterable[Column[Any]], user_id: UUID
+) -> dict[str, int]:
+    """The references in ``columns`` that still carry the name of ``user_id``, by
+    ``table.column``; places without one are left out."""
+    counts: dict[str, int] = {}
+    for column in columns:
+        statement = select(func.count()).select_from(column.table).where(_names(column, user_id))
+        found = int((await conn.execute(statement)).scalar_one())
+        if found:
+            counts[f"{column.table.name}.{column.name}"] = found
     return counts
