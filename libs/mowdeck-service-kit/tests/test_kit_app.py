@@ -202,6 +202,19 @@ def test_run_uses_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     assert captured["port"] == 8123
     assert captured["log_config"] is None
     assert captured["timeout_graceful_shutdown"] == 7
+    assert captured["access_log"] is True
+
+
+def test_run_writes_no_access_log_in_the_demo(monkeypatch: pytest.MonkeyPatch) -> None:
+    # uvicorn's access log line carries the client address; the public demo keeps none.
+    captured: dict[str, Any] = {}
+
+    import uvicorn
+
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: captured.update(kwargs))
+    settings = make_test_settings(demo_mode=True)
+    run(make_test_app(settings=settings), settings)
+    assert captured["access_log"] is False
 
 
 # --- db extra ---------------------------------------------------------------------------------
