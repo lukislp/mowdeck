@@ -1,7 +1,7 @@
+// swift-tools-version: 5.9
 // SPDX-FileCopyrightText: 2026 Lukas Körber
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// swift-tools-version: 5.9
 import PackageDescription
 
 // The logic of the MowDeck widgets and the Live Activity (ADR 0059) as a package, so it can be
