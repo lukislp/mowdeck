@@ -65,8 +65,8 @@ async def remember_device(
     """Record the device of a login of ``user`` and decide about the alert."""
     presented = ctx.extra.get(DEVICE_KEY) or ""
     token = presented if _TOKEN.fullmatch(presented) else new_device_token()
-    info = describe_user_agent(ctx.user_agent)
-    prefix, network = ip_prefix(ctx.ip)
+    info = describe_user_agent(ctx.stored_user_agent)
+    prefix, network = ip_prefix(ctx.stored_ip)
     token_hash = sha256_hex(token)
     known = await tx.known_devices.get(user_id=user.id, token_hash=token_hash)
     if known is not None:
