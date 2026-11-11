@@ -11,12 +11,14 @@ Runs with ``MOWDECK_TEST_DATABASE_URL`` like ``test_identity_db.py`` (CI has the
 from uuid import uuid4
 
 import pytest
-from mowdeck_service_kit.db import async_database_url
-from sqlalchemy import text
+from mowdeck_service_kit.db import async_database_url, user_tables
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_identity_db import migrate, needs_db, store_of, temporary_database
 
+from identity.adapters.db.store import SqlStore
+from identity.adapters.db.tables import metadata
 from identity.domain.erasure import audit_fields_after_user_scrub
 
 SCRUB_FLAG = "SELECT set_config('mowdeck.audit_scrub', 'on', true)"
@@ -235,11 +237,23 @@ async def test_a_member_is_deleted_on_postgres(monkeypatch: pytest.MonkeyPatch) 
             about = await tx.audit.find(target_type="user", target_id=str(anna_id))
             own = await tx.audit.find(actor_subject=f"user:{anna_id}")
             again = await tx.scrub_user_audit(anna_id)
+        # Read from the schema: no table with a user_id column holds a row of the user.
+        assert isinstance(store, SqlStore)
+        async with store.engine.connect() as conn:
+            left = {
+                table.name: (
+                    await conn.execute(
+                        select(func.count()).select_from(table).where(table.c.user_id == anna_id)
+                    )
+                ).scalar_one()
+                for table in user_tables(metadata)
+            }
         relogin = await h.client.post(
             "/api/v1/identity/session", json={"username": "anna", "password": PASSWORD}
         )
     assert response.status_code == 200, response.text
     assert gone == (None, [], [], [], [], [])
+    assert len(left) >= 8 and not any(left.values()), left
     assert all(row is not None for row in kept)
     assert {"user.created", "session.login", "user.self_deleted"} <= {e.action for e in about}
     assert own and all((e.actor_name, e.ip) == (None, None) for e in own)

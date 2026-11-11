@@ -2371,6 +2371,66 @@
         "title": "SecurityOverviewOut",
         "type": "object"
       },
+      "SelfDeletionIn": {
+        "additionalProperties": false,
+        "description": "``DELETE /me``: the caller's password, or none after a step-up confirmation.",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "title": "SelfDeletionIn",
+        "type": "object"
+      },
+      "SelfDeletionOut": {
+        "description": "``DELETE /me``: which of the two deletions the caller's role meant, and its state.",
+        "properties": {
+          "account_id": {
+            "description": "The account the caller was signed in to.",
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "delete_after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`account` only: when the grace period ends and the purge starts; until then the owner can call `POST /accounts/{id}/restore`. Null for `user` (nothing to restore).",
+            "title": "Delete After"
+          },
+          "operation": {
+            "description": "`user`: the caller was a member without the owner relation and is deleted now; the account stays. `account`: the caller owns the account, which is now scheduled for deletion (`DELETE /accounts/{id}`).",
+            "enum": [
+              "account",
+              "user"
+            ],
+            "title": "Operation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "account_id"
+        ],
+        "title": "SelfDeletionOut",
+        "type": "object"
+      },
       "SessionOut": {
         "description": "One of the caller's live login sessions (a browser or an app installation).",
         "properties": {
@@ -4853,6 +4913,63 @@
       }
     },
     "/api/v1/identity/me": {
+      "delete": {
+        "description": "Delete yourself (ADR 0082). The server applies the operation of the caller's role, so a\nclient needs one call:\n\n* a member **without the owner relation** (sub-users included) is deleted at once and for\n  good: **200** with `operation: \"user\"`. The user, every sign-in method, session and\n  personal token go, the roles and permissions are removed, the other services drop the\n  user's own data; what the user created in the account stays with the account, without\n  their name. The account goes on. There is no grace period and no way back;\n* the **owner** deletes the account: **202** with `operation: \"account\"` and `delete_after`,\n  exactly `DELETE /accounts/{id}` (409 while the account has other members or is already\n  scheduled; the owner cancels with `POST /accounts/{id}/restore`).\n\nNeeds a login session and the password in the body or, without it, a recent step-up\nconfirmation (401 `reauth-required`); API tokens and service identities get 403\n`step-up-unavailable`. Refused in the public demo (403 `demo-mode`).",
+        "operationId": "delete_me_api_v1_identity_me_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SelfDeletionIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfDeletionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfDeletionOut"
+                }
+              }
+            },
+            "description": "The caller owns the account: it is scheduled for deletion."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Me",
+        "tags": [
+          "identity: sessions"
+        ]
+      },
       "get": {
         "description": "The caller: claims of the current token, user data and memberships.",
         "operationId": "me_api_v1_identity_me_get",
