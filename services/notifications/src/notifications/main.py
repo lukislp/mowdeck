@@ -55,6 +55,7 @@ from notifications.adapters.api.demo import router as demo_router
 from notifications.adapters.api.deps import install_error_mapping
 from notifications.adapters.api.routes import router
 from notifications.adapters.authz import AuthzViewChecker
+from notifications.adapters.bus.erasure import subscribe_erasure
 from notifications.adapters.bus.errors import BusErrorExplainer
 from notifications.adapters.bus.fleet import seed_directory
 from notifications.adapters.bus.photo import BusPhotoSource
@@ -237,6 +238,8 @@ def build_app(
                 batch_max=settings.notifications_state_batch_max,
                 batch_wait_seconds=settings.notifications_state_batch_wait_seconds,
             )
+            if services.erasure is not None:
+                subscriptions.append(await subscribe_erasure(active_bus, services.erasure))
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             plan_events = await plans.subscribe()

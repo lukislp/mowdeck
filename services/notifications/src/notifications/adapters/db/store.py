@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import NotificationKind, NotificationSeverity
+from mowdeck_service_kit.db import account_row_counts, account_tables
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -1131,6 +1132,11 @@ class SqlStore:
                 else:
                     removed += (await conn.execute(statement)).rowcount
         return AccountPurge(deleted=removed, mower_ids=frozenset(mowers))
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every table of the schema that has an ``account_id`` column."""
+        async with self.engine.connect() as conn:
+            return await account_row_counts(conn, account_tables(tables.metadata), account_id)
 
     async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
         async with self.engine.begin() as conn:
