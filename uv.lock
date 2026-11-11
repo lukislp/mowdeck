@@ -1892,7 +1892,7 @@ requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
     { name = "packaging", specifier = ">=24.0" },
-    { name = "pymammotion", specifier = "==0.10.13" },
+    { name = "pymammotion", specifier = "==0.10.14" },
 ]
 provides-extras = ["esphome"]
 
@@ -2807,7 +2807,7 @@ wheels = [
 
 [[package]]
 name = "pymammotion"
-version = "0.10.13"
+version = "0.10.14"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2832,9 +2832,9 @@ dependencies = [
     { name = "webrtc-models" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/76/03/90edadf36ae5bdd2821cbd123b4d95d2a4ec8bd216d97cdd2bbd141a4877/pymammotion-0.10.13.tar.gz", hash = "sha256:b75b815d19a7e897195a0a9ca5431ba8fbf3cbbfbb92ef15ce5840760ae30949", size = 754052, upload-time = "2026-10-26T23:23:39.551Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/fc/5117a35676e47402fbc6ee7eb9f3a59cb3eea77d412dabe04d629b4844bb/pymammotion-0.10.14.tar.gz", hash = "sha256:35da0305dc543cd3527700539c98a41335e851eb6578b5794ec043b4290a5260", size = 757613, upload-time = "2026-11-08T00:31:59.97Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/0e/136330afbdca66071a86e688f6247b87f4940e63813686e3c72e04eb165b/pymammotion-0.10.13-py3-none-any.whl", hash = "sha256:f269e5ff17548cba443a185b23d50b7296d139df9a0ff5d05d29fc5411fea0de", size = 838845, upload-time = "2026-10-26T23:23:37.546Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/ae/f30bcfa2b55b7aed6b816a1fdafaf5571b020731a528fc13f6fec5b182f1/pymammotion-0.10.14-py3-none-any.whl", hash = "sha256:1b0c6b52707350cf56c5439c390deb5b852fb3ba7a628e4d57df366ee5fd087c", size = 842956, upload-time = "2026-11-08T00:31:57.962Z" },
 ]
 
 [[package]]
