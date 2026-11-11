@@ -74,17 +74,17 @@ describe('anonymised access log of the demo', () => {
 });
 
 describe.skipIf(!hasSh)('access-log.conf', () => {
-  it.each([{ MOWDECK_WEB_DEMO_MODE: 'true' }, { MOWDECK_WEB_DEMO_MODE: 'ON' }])(
-    'switches the demo to the anonymised log (%o)',
-    (env) => {
-      const lines = accessLogConf(env)
-        .split('\n')
-        .filter((line) => line && !line.startsWith('#'));
-      expect(lines).toEqual(['access_log /dev/stdout mowdeck_demo;']);
-    },
-  );
+  it.each<Record<string, string>>([
+    { MOWDECK_WEB_DEMO_MODE: 'true' },
+    { MOWDECK_WEB_DEMO_MODE: 'ON' },
+  ])('switches the demo to the anonymised log (%o)', (env) => {
+    const lines = accessLogConf(env)
+      .split('\n')
+      .filter((line) => line && !line.startsWith('#'));
+    expect(lines).toEqual(['access_log /dev/stdout mowdeck_demo;']);
+  });
 
-  it.each([{}, { MOWDECK_WEB_DEMO_MODE: 'false' }])(
+  it.each<Record<string, string>>([{}, { MOWDECK_WEB_DEMO_MODE: 'false' }])(
     'leaves the default access log of other installations alone (%o)',
     (env) => {
       const lines = accessLogConf(env)
