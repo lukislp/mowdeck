@@ -12,6 +12,7 @@ from mowdeck_contracts.v1 import AccountKind, PlainText, UiAreaDef
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 
 from identity.application.security import SecurityOverview, SessionView
+from identity.application.self_deletion import SelfDeleted
 from identity.application.sessions import MeView, TokenPair
 from identity.application.users import MemberView
 from identity.domain.devices import ip_prefix
@@ -159,6 +160,15 @@ class MembershipOut(BaseModel):
     is_owner: bool
     is_admin: bool
     status: str
+    self_deletion: Literal["account", "user"] | None = Field(
+        default=None,
+        description=(
+            "What `DELETE /me` does for the caller while signed in to this account, so a client "
+            "can say so before the call: `user` deletes the caller alone, at once; `account` "
+            "schedules the deletion of the whole account (the caller owns it); null means the "
+            "call is refused with 409 (the caller owns or belongs to another account as well)."
+        ),
+    )
 
 
 class MeOut(BaseModel):
@@ -201,6 +211,7 @@ class MeOut(BaseModel):
                     is_owner=m.is_owner,
                     is_admin=m.is_admin,
                     status=m.status,
+                    self_deletion=m.self_deletion.value if m.self_deletion else None,
                 )
                 for m in view.memberships
             ],
@@ -267,6 +278,41 @@ class AccountDeleteIn(In):
     """``DELETE /accounts/{id}``: the owner's password, or none after a step-up confirmation."""
 
     password: Password | None = None
+
+
+class SelfDeletionIn(In):
+    """``DELETE /me``: the caller's password, or none after a step-up confirmation."""
+
+    password: Password | None = None
+
+
+class SelfDeletionOut(BaseModel):
+    """``DELETE /me``: which of the two deletions the caller's role meant, and its state."""
+
+    operation: Literal["account", "user"] = Field(
+        description=(
+            "`user`: the caller was a member without the owner relation and is deleted now; "
+            "the account stays. `account`: the caller owns the account, which is now scheduled "
+            "for deletion (`DELETE /accounts/{id}`)."
+        )
+    )
+    account_id: UUID = Field(description="The account the caller was signed in to.")
+    delete_after: datetime | None = Field(
+        default=None,
+        description=(
+            "`account` only: when the grace period ends and the purge starts; until then the "
+            "owner can call `POST /accounts/{id}/restore`. Null for `user` (nothing to restore)."
+        ),
+    )
+
+    @classmethod
+    def of(cls, done: SelfDeleted) -> "SelfDeletionOut":
+        """From the use case's result."""
+        return cls(
+            operation=done.operation.value,
+            account_id=done.account_id,
+            delete_after=done.delete_after,
+        )
 
 
 class LevelIn(In):

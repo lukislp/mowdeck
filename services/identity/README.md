@@ -75,6 +75,7 @@ The account in the path must be the account of the token, otherwise 404. Then Op
 | GET | `/accounts/{account_id}` | `member` | |
 | PATCH | `/accounts/{account_id}` | `can_manage_users` | Name |
 | DELETE | `/accounts/{account_id}` | `can_manage_account` (owner) | `{password}` or a recent step-up; 202, status `deleting` with `delete_after`; API tokens revoked, the owner keeps every permission. 409 while the account has other members (remove them first) or is already scheduled |
+| DELETE | `/me` | a login session (not an API token) | "Delete me": `{password}` or a recent step-up. A member without the owner relation is deleted at once (200, `operation: "user"`); the owner's request is the account deletion above (202, `operation: "account"`, `delete_after`). See [Delete me](#delete-me-adr-0082) |
 | POST | `/accounts/{account_id}/restore` | `can_manage_account` | Undo within the grace period; 409 once the purge started |
 | POST | `/accounts/{account_id}/reconcile` | `can_manage_users` | Make OpenFGA match the database for every subject of the account |
 | GET | `/accounts/{account_id}/permissions` | `member` | Permission catalogue |
@@ -142,7 +143,7 @@ Produced on JetStream `EVENTS`, payloads in `mowdeck_contracts.v1.identity` (JSO
 | `event.identity.account.created` | `AccountCreated` | registration |
 | `event.identity.user.created` | `UserChanged` | registration, new sub-user |
 | `event.identity.user.disabled` | `UserChanged` | user or membership disabled |
-| `event.identity.user.deleted` | `UserChanged` | sub-user deleted, person removed |
+| `event.identity.user.deleted` | `UserChanged` | sub-user deleted, person removed, a member deleted themselves (`reason: "self"`); Fleet, Scheduler, Telemetry, Notifications and Vision drop what is the user's ([Delete me](#delete-me-adr-0082)) |
 | `event.identity.grants.changed` | `GrantsChanged` | tuples of subjects changed: drop cached decisions (`mowdeck_authz.events.subscribe_cache_invalidation`) |
 | `event.identity.api_token.revoked` | `ApiTokenRevoked` | token revoked (also by disable, removal, account deletion) |
 | `event.identity.session.new_device` | `NewDeviceLogin` | a login from a device the user had not used before, alerts on (ADR 0065) |
@@ -162,6 +163,30 @@ The database is the source of truth; OpenFGA is a projection per subject. Every 
 3. After the last confirmation Identity deletes its own rows and tuples, scrubs the personal fields of the audit rows of the account (`audit_log_scrub`, migration 0011; the rows stay), writes `account.erased` and marks the record erased.
 
 `python -m identity.cli erasures [--all]` shows the open purges (and with `--all` the finished ones): services confirmed, attempts, the last error. A purge older than `MOWDECK_IDENTITY_ERASURE_STALL_HOURS` logs an error on every attempt. Until every service answers `account.erase.<service>` (follow-up steps of the ADR) the switch stays off and an account scheduled for deletion stays `deleting`; with the switch on and a service missing it stays `purging`. The public demo runs no erasure (its sandboxes have their own purge).
+
+## Delete me (ADR 0082)
+
+`DELETE /api/v1/identity/me` deletes the caller. The client sends one request; `SelfDeletionService` (`application/self_deletion.py`) applies the operation of the caller's role (`self_deletion` in `domain/erasure.py`):
+
+- **A member without the owner relation** (sub-users and admins included) is deleted at once and for good, `UserService.delete_self`. There is no grace period: nothing of the account is lost, so there is nothing to restore. **200** `{"operation": "user", "account_id", "delete_after": null}`, and the refresh cookie is dropped.
+- **The owner** deletes the account: the call is `AccountService.request_deletion`, with everything that holds for `DELETE /accounts/{account_id}` (409 while other members exist or the account is already scheduled, the grace period, restore). **202** `{"operation": "account", "account_id", "delete_after"}`. An owner is never deleted as a user: an account without an owner cannot exist and there is no hand-over.
+
+`GET /me` says in advance which of the two applies: `memberships[].self_deletion` is `user`, `account` or null, from the same rule. Null means the call answers 409: the rule (`self_deletion_blocker`) looks at all memberships of the person and refuses when there is one in another account, because deleting a user removes the person everywhere. Nobody is in two accounts today (a membership is only created together with its user; `tests/test_identity_self_deletion.py` pins that), so this is a guard for a later invitation feature; `DELETE /accounts/{account_id}` applies it too.
+
+Who may call: a login session, confirmed with `password` in the body or a recent step-up (401 `reauth-required` without either). A wrong password counts as a failed login of the user (throttled, audited as `user.reauth_failed`). API tokens and service identities get 403 `step-up-unavailable`. The public demo refuses the call (403 `demo-mode`).
+
+What goes with a deleted member, in one transaction:
+
+| What | How |
+| --- | --- |
+| The user row (username, display name, e-mail, password hash) | deleted; the username and the address are free again |
+| Sessions and refresh tokens, passkeys and open ceremonies, linked providers (GitHub, Apple), app login codes, known devices, the tour progress, the login attempts under the username | deleted (`delete_user_rows`, the one list of a user's rows, shared with the removal of a sub-user and the account erasure) |
+| Membership and role assignments | deleted; the tuples of the subject are reconciled away before the commit (503 and nothing deleted while OpenFGA is down) |
+| Personal access tokens and iOS widget credentials | revoked (`api_token.revoked`) and deleted |
+| API tokens the user created for the account | revoked, the row stays with the account (as when an admin removes the user) |
+| Audit rows about the user | stay; `audit_log_scrub_user` (migration 0012) removes the personal `details` keys, and the name and address where they are the user's. A row somebody else wrote about the user keeps that person's name and address. The last row is `user.self_deleted` |
+
+Every access token of the user is refused by Identity at once (`session_ended` treats a session whose user is gone as ended); other services accept it until it expires (at most the access token lifetime) and then find no permission, because the tuples are gone. After the commit `identity.user.deleted` goes out and the other services drop what is the user's: their own rows (Notifications, Vision), their name in records that stay with the account (Fleet, Scheduler), the tracking share links they created (Telemetry). What the user created (mowers, schedules, zones) belongs to the account and stays.
 
 ## Settings
 

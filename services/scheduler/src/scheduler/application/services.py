@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from mowdeck_authz import Authorizer
 from mowdeck_service_kit.entitlements import Entitlements
 from mowdeck_service_kit.erasure import AccountErasure
+from mowdeck_service_kit.user_erasure import UserErasure
 
 from scheduler.application.access import Access
 from scheduler.application.angles import AngleService
@@ -25,6 +26,7 @@ from scheduler.application.ports import (
 )
 from scheduler.application.runner import Runner
 from scheduler.application.schedules import ScheduleService
+from scheduler.application.user_erasure import user_erasure
 from scheduler.application.weather import WeatherService
 
 
@@ -42,6 +44,8 @@ class Services:
     purge: AccountPurge
     erasure: AccountErasure
     """Answers ``account.erase.scheduler`` (ADR 0082)."""
+    user_erasure: UserErasure
+    """Forgets a deleted user (``identity.user.deleted``, ADR 0082)."""
 
 
 def build_services(
@@ -71,4 +75,5 @@ def build_services(
         angles=AngleService(store, clock),
         purge=purge,
         erasure=account_erasure(purge, store, ingest),
+        user_erasure=user_erasure(store),
     )

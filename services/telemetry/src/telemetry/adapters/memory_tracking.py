@@ -134,6 +134,25 @@ class MemoryTrackingStore:
         self.links[link_id] = replace(link, revoked_at=now)
         return True
 
+    async def revoke_links_of_creator(
+        self, user_id: UUID, account_id: UUID | None, now: datetime
+    ) -> int:
+        mine = [
+            link
+            for link in self.links.values()
+            if link.created_by == user_id
+            and link.revoked_at is None
+            and account_id in (None, link.account_id)
+        ]
+        for link in mine:
+            self.links[link.id] = replace(link, revoked_at=now)
+        return len(mine)
+
+    async def usable_links_of_creator(self, user_id: UUID, now: datetime) -> int:
+        return sum(
+            1 for link in self.links.values() if link.created_by == user_id and link.usable(now)
+        )
+
     async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
         link = self.links.get(link_id)
         if link is not None:

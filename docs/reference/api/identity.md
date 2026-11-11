@@ -865,6 +865,24 @@ The caller: claims of the current token, user data and memberships.
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` [MeOut](#meout) |
 
+#### DELETE /api/v1/identity/me
+
+**Delete Me**
+
+Delete yourself (ADR 0082). The server applies the operation of the caller's role, so a client needs one call:
+
+* a member **without the owner relation** (sub-users included) is deleted at once and for good: **200** with `operation: "user"`. The user, every sign-in method, session and personal token go, the roles and permissions are removed, the other services drop the user's own data; what the user created in the account stays with the account, without their name. The account goes on. There is no grace period and no way back; * the **owner** deletes the account: **202** with `operation: "account"` and `delete_after`, exactly `DELETE /accounts/{id}` (409 while the account has other members or is already scheduled; the owner cancels with `POST /accounts/{id}/restore`).
+
+Needs a login session and the password in the body or, without it, a recent step-up confirmation (401 `reauth-required`); API tokens and service identities get 403 `step-up-unavailable`. Refused in the public demo (403 `demo-mode`).
+
+**Request body**: `application/json` [SelfDeletionIn](#selfdeletionin) or null
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [SelfDeletionOut](#selfdeletionout) |
+| 202 | The caller owns the account: it is scheduled for deletion. | `application/json` [SelfDeletionOut](#selfdeletionout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### GET /api/v1/identity/me/api-tokens
 
 **List Personal Tokens**
@@ -1354,6 +1372,7 @@ A membership in `GET /me`.
 | `account_status` | string | yes |  |
 | `is_admin` | boolean | yes |  |
 | `is_owner` | boolean | yes |  |
+| `self_deletion` | `"account"` \| `"user"` or null | no | What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well). |
 | `status` | string | yes |  |
 
 ### MeOut
@@ -1727,6 +1746,24 @@ The top of the security page: password status, alert setting and counts.
 | `personal_tokens` | integer | yes | Active personal access tokens in this account |
 | `providers` | array of string | yes | Linked login providers (`github`, `apple`) |
 | `sessions` | integer | yes | Live login sessions in all accounts |
+
+### SelfDeletionIn
+
+`DELETE /me`: the caller's password, or none after a step-up confirmation.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `password` | string or null | no |  |
+
+### SelfDeletionOut
+
+`DELETE /me`: which of the two deletions the caller's role meant, and its state.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `account_id` | string (uuid) | yes | The account the caller was signed in to. |
+| `delete_after` | string (date-time) or null | no | `account` only: when the grace period ends and the purge starts; until then the owner can call `POST /accounts/{id}/restore`. Null for `user` (nothing to restore). |
+| `operation` | `"account"` \| `"user"` | yes | `user`: the caller was a member without the owner relation and is deleted now; the account stays. `account`: the caller owns the account, which is now scheduled for deletion (`DELETE /accounts/{id}`). |
 
 ### SessionOut
 
