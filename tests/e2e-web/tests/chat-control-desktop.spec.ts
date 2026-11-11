@@ -24,6 +24,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 const ASSISTANT_AREA = {
@@ -97,6 +98,8 @@ test('chat control: a typed request becomes a work order that runs only after co
   expect(await schedulesOf(request, owner, mowerId)).toEqual([]);
 
   await page.getByTestId('chat-confirm').click();
+  // A schedule starts the mower unattended: the safety acknowledgement before it is created.
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('chat-order')).toBeHidden();
   await expect.poll(async () => (await schedulesOf(request, owner, mowerId)).length).toBe(1);
   const [schedule] = await schedulesOf(request, owner, mowerId);
@@ -125,6 +128,7 @@ test('chat control: a typed request becomes a work order that runs only after co
 
   await ask(page, 'Mäh jetzt vorne');
   await page.getByTestId('chat-confirm').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('chat-order')).toBeHidden();
   await expect
     .poll(async () =>

@@ -19,6 +19,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 interface LiveState {
@@ -81,6 +82,7 @@ test('drive: a session moves the mower and it stops after the stick is released'
 
   // Start the session.
   await page.getByTestId('drive-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   await expect(page.getByTestId('drive-session-id')).not.toHaveText('—');
   const pad = page.getByTestId('joystick');

@@ -9,6 +9,8 @@
  */
 import { asProblem, type ApiProblem } from '#lib/api/problem.js';
 import { DECLINED, consent, type ConsentGuard } from '#lib/consent/consent.svelte.js';
+import { safety } from '#lib/safety/gate.svelte.js';
+import type { SafetyKind } from '#lib/safety/rule.js';
 
 import {
   VISION_PROBLEMS,
@@ -22,6 +24,20 @@ import {
 } from './api';
 
 export const POLL_MS = 1_000;
+
+/** What approving each action asks the safety rule: a maneuver and a resume move the mower. */
+export function safetyKindOfAssist(action: Proposal['action']): SafetyKind | null {
+  switch (action) {
+    case 'resume':
+      return 'resume_mow';
+    case 'return_to_dock':
+      return 'return_to_dock';
+    case 'drive':
+      return 'assist_drive';
+    case 'none':
+      return null;
+  }
+}
 
 /** What the sheet shows. */
 export type AssistView =
@@ -92,6 +108,7 @@ export class AssistStore {
   #api: VisionApi;
   #timers: AssistTimers;
   #consent: ConsentGuard;
+  #acknowledge: (kind: SafetyKind) => Promise<boolean>;
   #timer: unknown = null;
   /** Bumped by open/close so answers for an earlier mower or proposal are dropped. */
   #generation = 0;
@@ -100,10 +117,12 @@ export class AssistStore {
     api: VisionApi = visionCalls(),
     timers: AssistTimers = browserTimers,
     guard: ConsentGuard = consent,
+    acknowledge: (kind: SafetyKind) => Promise<boolean> = (kind) => safety.ask(kind),
   ) {
     this.#api = api;
     this.#timers = timers;
     this.#consent = guard;
+    this.#acknowledge = acknowledge;
   }
 
   /**
@@ -197,9 +216,17 @@ export class AssistStore {
 
   /** Approve the proposal; `option` picks one when it offers two (default: its `action`). */
   approve(option?: ApprovalOption): Promise<void> {
-    return this.#decide('approve', (id) =>
-      option ? this.#api.approve(id, option) : this.#api.approve(id),
-    );
+    const proposal = this.proposal;
+    const picked = proposal?.options?.find((o) => (option ? o.option === option : o.default));
+    // What the approval runs: the picked (else default) option's action, else the proposal's.
+    const action = picked?.action ?? proposal?.action ?? 'drive';
+    return this.#decide('approve', async (id) => {
+      // A maneuver or a resume moves the mower: the safety check first; a dock is not asked.
+      // Declining sends nothing and leaves the proposal waiting.
+      const kind = safetyKindOfAssist(action);
+      if (kind && !(await this.#acknowledge(kind))) return null;
+      return option ? this.#api.approve(id, option) : this.#api.approve(id);
+    });
   }
 
   /** Reject a proposal, or cancel the running maneuver. */

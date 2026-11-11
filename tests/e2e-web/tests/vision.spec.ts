@@ -35,6 +35,7 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import {
   PLATFORM_ADMIN_ENABLED,
   RUN,
+  acknowledgeSafety,
   actor,
   commandByApi,
   fleetAuditCount,
@@ -159,6 +160,7 @@ test('vision: fake provider set up, a stuck mower recovered by an approved AI ma
 
   // Approve: the mower drives the steps with the blades off and is free again.
   await sheet.getByRole('button', { name: 'Zustimmen und fahren (Messer aus)' }).click();
+  await acknowledgeSafety(page);
   await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
     timeout: 30_000,
   });
@@ -313,6 +315,7 @@ test('vision: a mower stuck in a two-area job continues it after an approved res
 
   // Approve: the short maneuver (blades off), then the job continues.
   await sheet.getByRole('button', { name: 'Freigeben und Auftrag fortsetzen' }).click();
+  await acknowledgeSafety(page);
   await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
     timeout: 45_000,
   });
@@ -386,6 +389,7 @@ test('vision: an unsure resume is offered next to the dock fallback and the owne
   await model.getByRole('radio').check();
   await expect(sheet.getByTestId('assist-resume-plan')).toContainText('Back lawn');
   await sheet.getByRole('button', { name: 'Freigeben und Auftrag fortsetzen' }).click();
+  await acknowledgeSafety(page);
   await expect(sheet.getByTestId('assist-state')).toHaveAttribute('data-value', 'recovered', {
     timeout: 45_000,
   });

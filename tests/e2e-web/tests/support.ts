@@ -157,6 +157,19 @@ export function grantPlatformAdmin(who: Actor): void {
   expect(output).toContain('operator admin');
 }
 
+/**
+ * Confirm the safety acknowledgement ("the area is clear of people, children and animals") that
+ * every user-initiated start of the mower asks for: tick the box, confirm, wait until the sheet
+ * is gone. Call it right after the click that starts mowing, a spot run, a drive session, a
+ * calibration, leaving the dock, or an enabled schedule.
+ */
+export async function acknowledgeSafety(page: Page): Promise<void> {
+  const sheet = page.getByTestId('safety-sheet');
+  await sheet.getByTestId('safety-check-box').check();
+  await sheet.getByTestId('safety-confirm').click();
+  await expect(sheet).toBeHidden();
+}
+
 export async function loginByUi(page: Page, who: Actor): Promise<void> {
   await page.goto('/login');
   await page.locator('#username').fill(who.username);

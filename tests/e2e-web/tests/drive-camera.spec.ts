@@ -35,6 +35,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 const OUT =
@@ -339,6 +340,7 @@ test('drive view: camera in three layouts, freeze holds the mower, one camera se
 
   // Start and drive with the camera on screen.
   await page.getByTestId('drive-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   await expectInViewport(page, page.getByTestId('drive-stop'), 'session stop');
   // The light switches while the session is open; the session stays and the stick drives after.

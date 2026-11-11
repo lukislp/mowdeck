@@ -136,7 +136,10 @@
         },
         Date.now(),
       );
-      if (result.failedAt === null) {
+      if (result.cancelled) {
+        // Declined at the safety check: nothing was sent, the order stays to confirm again.
+        error = m.chat_cancelled();
+      } else if (result.failedAt === null) {
         toasts.push('ok', m.chat_done({ mower: order.mower_name }));
         proposal = null;
         text = '';

@@ -471,6 +471,7 @@ describe('calibration flow', () => {
   function setup(overrides: Partial<DriveCalibrationDeps> = {}) {
     let live: DriveCalibrationStatus | null = null;
     const deps: DriveCalibrationDeps = {
+      acknowledge: vi.fn(async () => true),
       command: vi.fn(async () => true),
       save: vi.fn(async (input) => ({ ...input })),
       remove: vi.fn(async () => undefined),
@@ -498,6 +499,16 @@ describe('calibration flow', () => {
     expect(flow.roomConfirmed).toBe(false);
     expect(flow.launching(Date.now())).toBe(true);
     expect(flow.launching(Date.now() + 60_000)).toBe(false);
+  });
+
+  it('sends nothing when the safety acknowledgement is declined and keeps the room confirmation', async () => {
+    const { flow, deps } = setup({ acknowledge: vi.fn(async () => false) });
+    flow.roomConfirmed = true;
+    await flow.start();
+    expect(deps.acknowledge).toHaveBeenCalledTimes(1);
+    expect(deps.command).not.toHaveBeenCalled();
+    expect(flow.roomConfirmed).toBe(true);
+    expect(flow.starting).toBe(false);
   });
 
   it('keeps the confirmation when the command did not go out', async () => {

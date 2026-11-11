@@ -21,6 +21,7 @@ import {
   watchCsp,
   type Actor,
   type SpotCaps,
+  acknowledgeSafety,
 } from './support';
 
 /** A simulated mower in real time (the stack's default time scale would race the steps). */
@@ -98,6 +99,7 @@ test('drive calibration: a finished run leaves the page with a single vertical s
   await page.goto(`/mowers/${mowerId}/drive`);
   await expect(page.getByTestId('drive-state')).toHaveText('Startklar');
   await page.getByTestId('drive-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   const pad = page.getByTestId('joystick');
   await expect(pad).toHaveAttribute('aria-disabled', 'false');
@@ -150,6 +152,7 @@ test('drive calibration: a finished run leaves the page with a single vertical s
   await expect(conditions.locator('li[data-condition="signal"]')).toHaveCount(0);
   await page.getByTestId('calib-room-check').check();
   await page.getByTestId('calib-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('calib-live')).toBeVisible();
 
   // The run ends (done, or aborted when the lawn ahead runs out) with its step table.
