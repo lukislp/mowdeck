@@ -44,6 +44,16 @@
             <span id="hint" class="hint" data-t="hint"></span>
           </label>
           <p id="message" class="message" role="alert" hidden></p>
+          <div id="confirm" class="confirm" role="group" aria-labelledby="confirm-title" hidden>
+            <p id="confirm-title" class="confirm-title"></p>
+            <p id="confirm-body" class="hint"></p>
+            <div class="actions">
+              <button id="confirm-ok" class="primary" type="button"></button>
+              <button id="confirm-cancel" class="secondary" type="button" data-t="cancel">
+                Cancel
+              </button>
+            </div>
+          </div>
           <div class="actions">
             <button id="submit" class="primary" type="submit" data-t="connect">Connect</button>
             <button id="anyway" class="secondary" type="button" data-t="useAnyway" hidden>
