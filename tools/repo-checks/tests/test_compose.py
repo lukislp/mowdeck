@@ -371,6 +371,22 @@ def test_openfga_log_level_is_configurable_and_warn_in_the_demo(repo_root: Path)
     assert values["openfga"]["log"]["level"] == "info"
 
 
+def test_demo_gateway_writes_no_access_log(repo_root: Path) -> None:
+    """The demo promises that it stores no visitor address (docs/ops/demo.md, "What the demo
+    stores about a visitor"). Traefik's access log, which names the client address, is off unless
+    a flag or a TRAEFIK_ variable turns it on: neither stack file may do that for the gateway, and
+    the demo may not attach a log filter or format that would only make sense with a log."""
+    compose_dir = _compose_dir(repo_root)
+    for name in ("docker-compose.yml", "docker-compose.demo.yml"):
+        text = (compose_dir / name).read_text("utf-8")
+        gateway = yaml.load(text, Loader=_ComposeLoader)["services"]["traefik"]  # noqa: S506
+        command = gateway.get("command", [])
+        assert isinstance(command, list), name
+        assert not [flag for flag in command if "accesslog" in str(flag).lower()], name
+        env = gateway.get("environment") or {}
+        assert not [key for key in env if str(key).upper().startswith("TRAEFIK_")], name
+
+
 def test_demo_simulator_state_period_is_off_unless_set(repo_root: Path) -> None:
     """The demo's simulated mowers report once a simulation step unless
     DEMO_SIM_STATE_PERIOD_SECONDS asks for fewer reports (docs/ops/load-testing.md)."""
