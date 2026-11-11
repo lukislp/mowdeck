@@ -9,19 +9,23 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from mowdeck_contracts.v1 import ERASURE_SERVICES
 
 from identity.domain.erasure import (
+    ASK_ORDER,
     AUDIT_DETAILS_KEPT,
     MEMBER_OF_ANOTHER_ACCOUNT,
     OWNS_ANOTHER_ACCOUNT,
     AccountErasure,
     ErasureState,
     SelfDeletion,
+    ask_order,
     audit_fields_after_user_scrub,
     concerns_user,
     deletion_blocked_by,
     grace_over,
     other_members,
+    required_services,
     retry_delay,
     self_deletion,
     self_deletion_blocker,
@@ -77,6 +81,52 @@ def test_a_purge_starts_due_with_the_services_once_each() -> None:
     assert erasure.state is ErasureState.PURGING
     assert erasure.due(NOW) and erasure.open_services == ["fleet", "scheduler"]
     assert not erasure.all_confirmed
+
+
+def test_the_order_asked_is_the_contracts_and_has_its_two_rules() -> None:
+    assert ASK_ORDER == ERASURE_SERVICES
+    assert ASK_ORDER[0] == "fleet"  # the mowers go first
+    # Billing sets plans in Entitlements: it is done before Entitlements erases.
+    assert ASK_ORDER.index("billing") < ASK_ORDER.index("entitlements")
+
+
+def test_services_are_asked_in_that_order_whatever_order_they_come_in() -> None:
+    assert ask_order(["entitlements", "billing", "fleet"]) == ["fleet", "billing", "entitlements"]
+    assert ask_order(reversed(ASK_ORDER)) == list(ASK_ORDER)
+    assert ask_order(["planner", "fleet", "planner"]) == ["fleet", "planner"]
+    # A name the order does not know is asked last, in the order given.
+    assert ask_order(["later", "entitlements", "addon", "fleet"]) == [
+        "fleet",
+        "entitlements",
+        "later",
+        "addon",
+    ]
+    assert ask_order([]) == []
+
+
+def test_the_required_services_are_the_listed_ones_and_the_deployed_optional_ones() -> None:
+    core = ["fleet", "entitlements"]
+    assert required_services(core, []) == ("fleet", "entitlements")
+    assert required_services(core, ["billing"]) == ("fleet", "billing", "entitlements")
+    # Optional parts that keep nothing of an account are not asked.
+    assert required_services(core, ["assistant", "relay", "matter"]) == ("fleet", "entitlements")
+    assert required_services(["billing", *core], ["billing"]) == (
+        "fleet",
+        "billing",
+        "entitlements",
+    )
+
+
+def test_a_record_stored_in_another_order_is_still_asked_in_the_right_one() -> None:
+    """A purge that began before the order was a rule (its services are stored as listed)."""
+    erasure = AccountErasure(uuid4(), NOW, ["entitlements", "billing", "fleet"])
+    assert erasure.open_services == ["fleet", "billing", "entitlements"]
+    erasure.confirm("fleet", 1, NOW, wait=timedelta(0))
+    assert erasure.open_services == ["billing", "entitlements"]
+    assert AccountErasure.begin(uuid4(), ["entitlements", "billing"], NOW).required == [
+        "billing",
+        "entitlements",
+    ]
 
 
 def test_confirming_is_idempotent_and_orders_the_open_services() -> None:

@@ -1,8 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""In-memory store for tests and the OpenAPI export (same behaviour as the SQL store)."""
+"""In-memory store for tests and the OpenAPI export (same behaviour as the SQL store).
 
+One transaction at a time: where the SQL store holds a row lock (``lock_customer``), this one
+holds the whole store, which gives the same order between an event that is being applied and
+the erasure of its account.
+"""
+
+import asyncio
 import copy
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -58,6 +64,13 @@ class MemoryTx:
                 return replace(customer)
         return None
 
+    async def lock_customer(self, provider: str, provider_customer_id: str) -> Customer | None:
+        return await self.find_customer(provider, provider_customer_id)
+
+    async def customers_of(self, account_id: UUID) -> list[Customer]:
+        found = [replace(c) for c in self.data.customers.values() if c.account_id == account_id]
+        return sorted(found, key=lambda c: c.provider)
+
     async def save_customer(self, customer: Customer) -> None:
         key = (customer.account_id, customer.provider)
         taken = await self.find_customer(customer.provider, customer.provider_customer_id)
@@ -112,13 +125,17 @@ class MemoryTx:
         event.attempts += 1
         return True
 
+    async def attribute_event(self, provider: str, event_id: str, account_id: UUID) -> None:
+        event = self.data.events.get((provider, event_id))
+        if event is not None:
+            event.account_id = account_id
+
     async def finish_event(
         self,
         provider: str,
         event_id: str,
         outcome: EventOutcome,
         processed_at: datetime | None,
-        account_id: UUID | None,
     ) -> None:
         event = self.data.events.get((provider, event_id))
         if event is None:
@@ -127,23 +144,51 @@ class MemoryTx:
         event.processed_at = processed_at
         if processed_at is None:
             event.claimed_at = None
-        if account_id is not None:
-            event.account_id = account_id
 
     async def get_event(self, provider: str, event_id: str) -> WebhookEvent | None:
         found = self.data.events.get((provider, event_id))
         return replace(found) if found else None
 
+    async def purge_account(self, account_id: UUID) -> int:
+        removed = sum(self._account_rows(account_id).values())
+        data = self.data
+        data.accounts.pop(account_id, None)
+        data.customers = {k: v for k, v in data.customers.items() if v.account_id != account_id}
+        data.subscriptions = {
+            k: v for k, v in data.subscriptions.items() if v.account_id != account_id
+        }
+        data.invoices = {k: v for k, v in data.invoices.items() if v.account_id != account_id}
+        data.events = {k: v for k, v in data.events.items() if v.account_id != account_id}
+        return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        return {table: found for table, found in self._account_rows(account_id).items() if found}
+
+    def _account_rows(self, account_id: UUID) -> dict[str, int]:
+        data = self.data
+        return {
+            "accounts": int(account_id in data.accounts),
+            "customers": sum(1 for c in data.customers.values() if c.account_id == account_id),
+            "subscriptions": sum(
+                1 for s in data.subscriptions.values() if s.account_id == account_id
+            ),
+            "invoices": sum(1 for i in data.invoices.values() if i.account_id == account_id),
+            "webhook_events": sum(1 for e in data.events.values() if e.account_id == account_id),
+        }
+
 
 class MemoryStore:
-    """Implements ``Store`` in memory; a transaction works on a copy and commits on success."""
+    """Implements ``Store`` in memory; a transaction works on a copy and commits on success.
+    One transaction at a time, like the row locks of the SQL store but coarser."""
 
     def __init__(self) -> None:
         self.data = _Data()
+        self._lock = asyncio.Lock()
 
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[MemoryTx]:
         """Copy, yield, and keep the copy unless the block raised."""
-        working = copy.deepcopy(self.data)
-        yield MemoryTx(working)
-        self.data = working
+        async with self._lock:
+            working = copy.deepcopy(self.data)
+            yield MemoryTx(working)
+            self.data = working

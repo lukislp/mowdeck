@@ -7,7 +7,10 @@ plan in Entitlements (Compose services billing and billing-migrate, profile "bil
 Off by default (services.billing.enabled=false): then nothing of it is rendered, which is what
 billing.enabled=false means. The price file is the ConfigMap <fullname>-billing-prices, built
 from files/prices.yaml (an identical copy of infra/billing/prices.yaml, checked by
-tools/repo-checks/tests/test_helm.py); config.BILLING_PRICE_IDS overrides it. */ -}}
+tools/repo-checks/tests/test_helm.py); config.BILLING_PRICE_IDS overrides it.
+MOWDECK_BILLING_OPTIONAL_SERVICES is what Identity gets as MOWDECK_IDENTITY_OPTIONAL_SERVICES when
+Billing is enabled (identity.yaml): Billing refuses to start where Identity would not ask it to
+erase a deleted account (ADR 0082). */ -}}
 {{- $c := .Values.config }}
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.jwksEnv" . | fromJson) (dict
   "MOWDECK_BILLING_PROVIDER" $c.BILLING_PROVIDER
@@ -16,7 +19,8 @@ tools/repo-checks/tests/test_helm.py); config.BILLING_PRICE_IDS overrides it. */
   "MOWDECK_BILLING_PRICE_IDS" $c.BILLING_PRICE_IDS
   "MOWDECK_BILLING_GRACE_DAYS" (toString $c.BILLING_GRACE_DAYS)
   "MOWDECK_BILLING_APP_URL" (default (include "mowdeck.publicOrigin" .) $c.BILLING_APP_URL)
-  "MOWDECK_BILLING_ENTITLEMENTS_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "entitlements"))) }}
+  "MOWDECK_BILLING_ENTITLEMENTS_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "entitlements"))
+  "MOWDECK_BILLING_OPTIONAL_SERVICES" "billing") }}
 {{- if .Values.services.billing.enabled }}
 ---
 apiVersion: v1

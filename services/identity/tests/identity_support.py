@@ -227,14 +227,15 @@ async def harness(
     apple_transport: httpx.AsyncBaseTransport | None = None,
     provisioner: Any = None,
     eraser: Any = None,
+    bus: InMemoryBus | None = None,
     **overrides: Any,
 ) -> AsyncIterator[Harness]:
     """The app with fakes, inside its lifespan. ``backend`` replaces the tuple backend;
     ``github_transport`` answers for GitHub (``github_support.FakeGitHub``), ``apple_transport``
-    for Apple (``apple_support.FakeApple``)."""
+    for Apple (``apple_support.FakeApple``); ``bus`` is a bus other services' apps share."""
     memory = store or MemoryStore()
     authz = authz or InMemoryAuthorizer()
-    bus = InMemoryBus()
+    bus = bus or InMemoryBus()
     clock = MutableClock()
     fake_modules = modules or FakeModules(GATEWAY)
     app = build_app(

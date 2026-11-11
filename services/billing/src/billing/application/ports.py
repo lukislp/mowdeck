@@ -73,8 +73,21 @@ class PaymentProvider(Protocol):
         """The current state of a subscription at the provider."""
         ...
 
-    async def cancel_subscription(self, subscription_id: str) -> ProviderSubscription:
-        """Cancel a subscription now (e.g. when an account is deleted)."""
+    async def cancel_subscription(self, subscription_id: str) -> None:
+        """End a subscription now, for an account that is erased (ADR 0082): at once and not at
+        the period end, without a final invoice, a proration or a refund. Idempotent: a
+        subscription that has ended already, or that the provider does not know, is a success.
+        Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later) while
+        the provider has not confirmed that the subscription is over."""
+        ...
+
+    async def delete_customer(self, customer_id: str) -> None:
+        """Delete the provider's customer object of an erased account (ADR 0082), with what the
+        provider stores on it (name, e-mail, addresses, payment methods). What the provider
+        must keep by law (invoices) stays with the provider. Idempotent: a customer that is
+        deleted already, or that the provider does not know, is a success. Raises
+        ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later) while the
+        provider has not confirmed that the customer is gone."""
         ...
 
     async def fetch_price(self, plan_key: str, price_id: str) -> PlanPrice:
@@ -99,6 +112,17 @@ class Tx(Protocol):
 
     async def find_customer(self, provider: str, provider_customer_id: str) -> Customer | None:
         """The customer row with this provider id."""
+        ...
+
+    async def lock_customer(self, provider: str, provider_customer_id: str) -> Customer | None:
+        """The customer row with this provider id, held until the transaction ends: whoever
+        applies a provider event to an account does it under this lock, and the erasure of the
+        account deletes the row under it. So an event is applied completely before the rows go,
+        or finds no customer and is dropped (ADR 0082)."""
+        ...
+
+    async def customers_of(self, account_id: UUID) -> list[Customer]:
+        """The customers of an account at every provider."""
         ...
 
     async def save_customer(self, customer: Customer) -> None:
@@ -138,19 +162,36 @@ class Tx(Protocol):
         Counts the attempt. False when it is processed or claimed by another delivery."""
         ...
 
+    async def attribute_event(self, provider: str, event_id: str, account_id: UUID) -> None:
+        """Note the account an event belongs to. Called under :meth:`lock_customer`, so the
+        ledger never names an account whose rows were erased meanwhile."""
+        ...
+
     async def finish_event(
         self,
         provider: str,
         event_id: str,
         outcome: EventOutcome,
         processed_at: datetime | None,
-        account_id: UUID | None,
     ) -> None:
         """Store the outcome; ``processed_at=None`` releases the claim for a retry."""
         ...
 
     async def get_event(self, provider: str, event_id: str) -> WebhookEvent | None:
         """One ledger row."""
+        ...
+
+    async def purge_account(self, account_id: UUID) -> int:
+        """Delete every row of the account (account erasure, ADR 0082): the customer rows
+        first, under their lock (see :meth:`lock_customer`), then subscriptions, invoice
+        references, the account's ledger rows and the account itself. The number of rows
+        removed; idempotent."""
+        ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows the store still holds of the account, per table: counted over every table
+        with an ``account_id`` column, not over the list :meth:`purge_account` deletes. Empty
+        when it holds none."""
         ...
 
 

@@ -398,6 +398,7 @@ flowchart LR
 | Subject | Stream | Publishes or requests | Subscribes or answers |
 |---|---|---|---|
 | `account.erase.*` | core | identity | - |
+| `account.erase.billing` | core | - | billing |
 | `account.erase.entitlements` | core | - | entitlements |
 | `account.erase.fleet` | core | - | fleet |
 | `account.erase.notifications` | core | - | notifications |

@@ -71,10 +71,12 @@ config:
   IDENTITY_REGISTRATION: open
   # rfc9106_low (64 MiB, t=3, p=4) or owasp_min (19 MiB, t=2, p=1) for small nodes.
   IDENTITY_ARGON2_PROFILE: rfc9106_low
-  # Purge accounts whose deletion grace period is over (ADR 0082). Off until every service
-  # answers the erasure request; while false an account scheduled for deletion stays locked
-  # and restorable.
-  IDENTITY_ERASURE_ENABLED: false
+  # Purge accounts whose deletion grace period (7 days) is over (ADR 0082): every service
+  # deletes the account's data, then Identity its own rows; no way back once the purge of an
+  # account has begun. false: nothing is purged, an account scheduled for deletion stays as
+  # it is and restorable. Billing is asked too when services.billing.enabled (nothing to set
+  # here). Before the first upgrade with true: docs/ops/helm.md, "Account erasure".
+  IDENTITY_ERASURE_ENABLED: true
   # The refresh cookie is sent over HTTPS only. Keep true behind TLS (the normal case);
   # false only for plain HTTP tests (kind with a port-forward).
   IDENTITY_REFRESH_COOKIE_SECURE: "true"

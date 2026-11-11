@@ -30,3 +30,8 @@ class InvalidSignature(BillingError):  # noqa: N818 - reads like the HTTP status
 
 class ProviderError(BillingError):
     """The payment provider failed or is not configured (503)."""
+
+
+class ProviderUnavailable(ProviderError):  # noqa: N818 - reads like the state it reports
+    """The payment provider could not be reached or asked to slow down (a rate limit, a timeout,
+    an error on its side): the same call can succeed later."""

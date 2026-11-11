@@ -21,6 +21,7 @@ from identity.adapters.crypto import DEV_KEK, parse_kek
 from identity.application.context import AppleLogin, GitHubLogin, IdentityConfig, RegistrationMode
 from identity.application.erasure import ErasureConfig
 from identity.application.sandboxes import SandboxConfig
+from identity.domain.erasure import required_services
 from identity.domain.models import RelyingParty, oauth_callback_url
 
 _log = get_logger("identity.settings")
@@ -232,21 +233,29 @@ class Settings(ServiceSettings):
     identity_demo_sandbox_sweep_seconds: float = Field(default=60, ge=1)
     """Interval of the sweep that deletes idle and expired sandboxes."""
 
-    identity_erasure_enabled: bool = False
-    """Account erasure (ADR 0082): purge accounts whose deletion grace period is over. **Off by
-    default** until every service answers ``account.erase.<service>`` (the follow-up steps of the
-    ADR; the default turns true with the last one). While off nothing starts a purge: an account
-    scheduled for deletion stays ``deleting`` and restorable, also after ``delete_after``, exactly
-    as before. Never on in the public demo."""
+    identity_erasure_enabled: bool = True
+    """Account erasure (ADR 0082): purge accounts whose deletion grace period is over. **On by
+    default** since every service answers ``account.erase.<service>``. Set it to false and
+    nothing starts a purge: an account scheduled for deletion stays ``deleting`` and restorable,
+    also after ``delete_after``, and no data is deleted. Never on in the public demo."""
 
     identity_erasure_services: str = (
         "fleet,scheduler,telemetry,notifications,vision,planner,entitlements"
     )
-    """Account erasure (ADR 0082): the services, comma separated and in the order they are asked,
-    that must confirm before Identity deletes an account's own rows. An installation that runs
-    Billing adds ``billing`` (Compose profile ``billing``). Listing a service that is not
-    deployed holds every purge back (an unanswered request is retried forever), so the list names
-    what the installation runs. Fleet comes first."""
+    """Account erasure (ADR 0082): the services, comma separated, that must confirm before
+    Identity deletes an account's own rows: the ones every installation runs. Optional services
+    are not listed here, the deployment names them in ``identity_optional_services``. Listing a
+    service that is not deployed holds every purge back (an unanswered request is retried
+    forever). The order written here does not matter: the services are asked in the order of
+    ``identity.domain.erasure.ASK_ORDER`` (Fleet first, Billing before Entitlements)."""
+
+    identity_optional_services: str = ""
+    """The optional parts this installation runs, comma separated: Compose passes its
+    ``COMPOSE_PROFILES``, the chart the optional services that are enabled. Those of them that
+    keep data of an account must confirm an account erasure too; today that is ``billing``.
+    Other names (``assistant``, ``relay``, ``matter``) are ignored. So whoever enables Billing
+    in the deployment cannot forget its erasure, and an installation without Billing never
+    waits for it. Billing gets the same value and refuses to start when it is not in it."""
 
     identity_erasure_sweep_seconds: float = Field(default=60, ge=1)
     """Interval of the sweep that purges accounts whose grace period is over."""
@@ -314,9 +323,10 @@ class Settings(ServiceSettings):
 
     def erasure_config(self) -> ErasureConfig:
         """The services that must confirm an account erasure and its timings (ADR 0082)."""
-        services = tuple(s.strip() for s in self.identity_erasure_services.split(",") if s.strip())
+        listed = [s.strip() for s in self.identity_erasure_services.split(",") if s.strip()]
+        optional = [s.strip() for s in self.identity_optional_services.split(",") if s.strip()]
         return ErasureConfig(
-            services=tuple(dict.fromkeys(services)),
+            services=required_services(listed, optional),
             settle=timedelta(seconds=self.identity_erasure_settle_seconds),
             stall_after=timedelta(hours=self.identity_erasure_stall_hours),
         )

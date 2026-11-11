@@ -12,6 +12,16 @@ and claimed before it is handled; a repeated delivery of a processed event only 
 failure (Entitlements not answering) releases the claim and answers 500, so the provider
 retries. Delivery order is not guaranteed, so an event older than the last one applied to a
 subscription is stored as ``stale`` and changes nothing.
+
+**Whose event it is** is decided by the customer row, never by the event alone: Billing creates
+the provider's customer of an account itself, before the first checkout, so every event of an
+account names a customer Billing knows. An event whose customer it does not know is
+acknowledged and dropped (``unknown_account``), also when its metadata names an account. That
+is what keeps a deleted account deleted (ADR 0082): the erasure removes the customer row, and a
+late ``customer.subscription.deleted``, invoice or checkout event of that customer can neither
+write a row nor set a plan again. An event is applied under a lock on its customer row
+(:meth:`~billing.application.ports.Tx.lock_customer`) which the erasure also takes, so an event
+that is being applied finishes, plan and all, before the rows go.
 """
 
 import asyncio
@@ -35,8 +45,9 @@ from billing.application.ports import (
     PaymentProvider,
     PlanCatalog,
     Store,
+    Tx,
 )
-from billing.domain.errors import ConflictError, InvalidInput, NotFoundError, ProviderError
+from billing.domain.errors import ConflictError, InvalidInput, NotFoundError
 from billing.domain.models import (
     BillingAccount,
     Customer,
@@ -337,10 +348,10 @@ class BillingService:
         except Exception:
             _log.exception("handling a webhook event failed", event_id=event.id, type=event.type)
             async with self.store.transaction() as tx:
-                await tx.finish_event(provider, event.id, EventOutcome.FAILED, None, None)
+                await tx.finish_event(provider, event.id, EventOutcome.FAILED, None)
             raise
         async with self.store.transaction() as tx:
-            await tx.finish_event(provider, event.id, outcome, self.clock(), account_id)
+            await tx.finish_event(provider, event.id, outcome, self.clock())
         _log.info(
             "webhook event handled",
             event_id=event.id,
@@ -350,37 +361,41 @@ class BillingService:
         )
         return WebhookResult(event.id, event.type, outcome)
 
-    async def _account_of_customer(self, customer_id: str | None) -> UUID | None:
+    async def _customer_of(
+        self, tx: Tx, event: ProviderEvent, customer_id: str | None
+    ) -> UUID | None:
+        """The account of the event's customer, with the customer row locked until ``tx`` ends
+        and the event noted for that account; None for a customer Billing does not know (the
+        event is dropped)."""
         if not customer_id:
             return None
-        async with self.store.transaction() as tx:
-            customer = await tx.find_customer(self.provider.name, customer_id)
-        return customer.account_id if customer else None
-
-    async def _remember_customer(self, account_id: UUID, customer_id: str | None) -> None:
-        if not customer_id:
-            return
-        async with self.store.transaction() as tx:
-            if await tx.get_customer(account_id, self.provider.name) is None:
-                await tx.save_customer(
-                    Customer(account_id, self.provider.name, customer_id, self.clock())
-                )
+        customer = await tx.lock_customer(self.provider.name, customer_id)
+        if customer is None:
+            return None
+        await tx.attribute_event(self.provider.name, event.id, customer.account_id)
+        return customer.account_id
 
     async def _apply(self, event: ProviderEvent) -> tuple[EventOutcome, UUID | None]:
         if event.type == CHECKOUT_COMPLETED and event.checkout is not None:
             checkout = event.checkout
-            account_id = checkout.account_id or await self._account_of_customer(
-                checkout.customer_id
-            )
-            if account_id is None:
-                return EventOutcome.UNKNOWN_ACCOUNT, None
-            await self._remember_customer(account_id, checkout.customer_id)
             if checkout.subscription_id is None:
-                return EventOutcome.APPLIED, account_id
+                # Nothing to store: the customer is known since the checkout was started.
+                async with self.store.transaction() as tx:
+                    account_id = await self._customer_of(tx, event, checkout.customer_id)
+                outcome = (
+                    EventOutcome.UNKNOWN_ACCOUNT if account_id is None else EventOutcome.APPLIED
+                )
+                return outcome, account_id
+            async with self.store.transaction() as tx:
+                known = await tx.find_customer(self.provider.name, checkout.customer_id or "")
+            if known is None:
+                return EventOutcome.UNKNOWN_ACCOUNT, None
             subscription = await self.provider.fetch_subscription(checkout.subscription_id)
-            return await self._apply_subscription(subscription, event, account_id)
+            return await self._apply_subscription(subscription, event, checkout.customer_id)
         if event.type in SUBSCRIPTION_EVENTS and event.subscription is not None:
-            return await self._apply_subscription(event.subscription, event, None)
+            return await self._apply_subscription(
+                event.subscription, event, event.subscription.customer_id
+            )
         if event.type == TRIAL_WILL_END and event.subscription is not None:
             return await self._trial_will_end(event.subscription, event)
         if event.type in INVOICE_EVENTS and event.invoice is not None:
@@ -388,135 +403,138 @@ class BillingService:
         return EventOutcome.IGNORED, None
 
     async def _apply_subscription(
-        self, data: ProviderSubscription, event: ProviderEvent, hint: UUID | None
+        self, data: ProviderSubscription, event: ProviderEvent, customer_id: str | None
     ) -> tuple[EventOutcome, UUID | None]:
         provider = self.provider.name
         now = self.clock()
-        account_id = data.account_id or hint or await self._account_of_customer(data.customer_id)
-        if account_id is None:
-            return EventOutcome.UNKNOWN_ACCOUNT, None
+        # One transaction, held while Entitlements is asked: the plan is set, the row written
+        # and the event published while the customer row is locked, so the erasure of the
+        # account waits for all three and nothing of them happens after it.
         async with self.store.transaction() as tx:
+            account_id = await self._customer_of(tx, event, customer_id)
+            if account_id is None:
+                return EventOutcome.UNKNOWN_ACCOUNT, None
             existing = await tx.get_subscription(provider, data.id)
             others = [s for s in await tx.subscriptions_of(account_id) if s.id != data.id]
             account = await tx.get_account(account_id)
-        if existing and existing.last_event_at and event.created < existing.last_event_at:
-            return EventOutcome.STALE, account_id
-        plan_key = (
-            self.config.prices.plan_for(data.price_id)
-            or data.plan_key
-            or (existing.plan_key if existing else None)
-        )
-        decision = plan_decision(
-            data.status,
-            now=now,
-            grace_days=self.config.grace_days,
-            current_period_start=data.current_period_start,
-            current_period_end=data.current_period_end,
-            ended_at=data.ended_at,
-            trial_end=data.trial_end,
-        )
-        # A late event of an old subscription must not restrict an account that has a newer
-        # running one.
-        superseded = (
-            decision is not None
-            and decision.status.is_inactive
-            and any(
-                s.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING) for s in others
+            if existing and existing.last_event_at and event.created < existing.last_event_at:
+                return EventOutcome.STALE, account_id
+            plan_key = (
+                self.config.prices.plan_for(data.price_id)
+                or data.plan_key
+                or (existing.plan_key if existing else None)
             )
-        )
-        outcome = EventOutcome.APPLIED
-        plan_status: PlanStatus | None = None
-        if decision is not None and not superseded:
-            if plan_key is None:
-                _log.error("a subscription has no known plan", subscription=data.id)
-                outcome = EventOutcome.REJECTED
-            else:
-                reply = await self.entitlements.set_plan(
-                    PlanSetRequest(
-                        account_id=account_id,
-                        plan=plan_key,
-                        status=decision.status,
-                        trial_until=decision.trial_until,
-                        grace_until=decision.grace_until,
-                        reason=f"{provider} {event.type} ({data.status.value})",
-                        account_name=account.name if account else None,
-                        reference=data.id,
-                    )
+            decision = plan_decision(
+                data.status,
+                now=now,
+                grace_days=self.config.grace_days,
+                current_period_start=data.current_period_start,
+                current_period_end=data.current_period_end,
+                ended_at=data.ended_at,
+                trial_end=data.trial_end,
+            )
+            # A late event of an old subscription must not restrict an account that has a newer
+            # running one.
+            superseded = (
+                decision is not None
+                and decision.status.is_inactive
+                and any(
+                    s.status in (SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING)
+                    for s in others
                 )
-                if reply.ok:
-                    plan_status = decision.status
-                else:
-                    _log.error(
-                        "entitlements refused the plan",
-                        plan=plan_key,
-                        error=reply.error,
-                        detail=reply.detail,
-                    )
+            )
+            outcome = EventOutcome.APPLIED
+            plan_status: PlanStatus | None = None
+            if decision is not None and not superseded:
+                if plan_key is None:
+                    _log.error("a subscription has no known plan", subscription=data.id)
                     outcome = EventOutcome.REJECTED
-        await self._remember_customer(account_id, data.customer_id)
-        stored = Subscription(
-            id=existing.id if existing else uuid4(),
-            account_id=account_id,
-            provider=provider,
-            provider_subscription_id=data.id,
-            plan_key=plan_key,
-            status=data.status,
-            created_at=existing.created_at if existing else now,
-            updated_at=now,
-            current_period_end=data.current_period_end,
-            trial_end=data.trial_end,
-            cancel_at_period_end=data.cancel_at_period_end,
-            plan_status=plan_status or (existing.plan_status if existing else None),
-            grace_until=decision.grace_until if decision and plan_status else None,
-            last_event_at=_later(existing.last_event_at if existing else None, event.created),
-        )
-        async with self.store.transaction() as tx:
-            await tx.save_subscription(stored)
-        await self.events.subscription_changed(
-            SubscriptionChanged(
+                else:
+                    reply = await self.entitlements.set_plan(
+                        PlanSetRequest(
+                            account_id=account_id,
+                            plan=plan_key,
+                            status=decision.status,
+                            trial_until=decision.trial_until,
+                            grace_until=decision.grace_until,
+                            reason=f"{provider} {event.type} ({data.status.value})",
+                            account_name=account.name if account else None,
+                            reference=data.id,
+                        )
+                    )
+                    if reply.ok:
+                        plan_status = decision.status
+                    else:
+                        _log.error(
+                            "entitlements refused the plan",
+                            plan=plan_key,
+                            error=reply.error,
+                            detail=reply.detail,
+                        )
+                        outcome = EventOutcome.REJECTED
+            stored = Subscription(
+                id=existing.id if existing else uuid4(),
                 account_id=account_id,
                 provider=provider,
-                plan=plan_key,
+                provider_subscription_id=data.id,
+                plan_key=plan_key,
                 status=data.status,
-                plan_status=plan_status,
+                created_at=existing.created_at if existing else now,
+                updated_at=now,
                 current_period_end=data.current_period_end,
                 trial_end=data.trial_end,
-                grace_until=stored.grace_until,
                 cancel_at_period_end=data.cancel_at_period_end,
-                event_type=event.type,
+                plan_status=plan_status or (existing.plan_status if existing else None),
+                grace_until=decision.grace_until if decision and plan_status else None,
+                last_event_at=_later(existing.last_event_at if existing else None, event.created),
             )
-        )
+            await tx.save_subscription(stored)
+            await self.events.subscription_changed(
+                SubscriptionChanged(
+                    account_id=account_id,
+                    provider=provider,
+                    plan=plan_key,
+                    status=data.status,
+                    plan_status=plan_status,
+                    current_period_end=data.current_period_end,
+                    trial_end=data.trial_end,
+                    grace_until=stored.grace_until,
+                    cancel_at_period_end=data.cancel_at_period_end,
+                    event_type=event.type,
+                )
+            )
         return outcome, account_id
 
     async def _trial_will_end(
         self, data: ProviderSubscription, event: ProviderEvent
     ) -> tuple[EventOutcome, UUID | None]:
-        account_id = data.account_id or await self._account_of_customer(data.customer_id)
-        if account_id is None:
-            return EventOutcome.UNKNOWN_ACCOUNT, None
-        plan_key = self.config.prices.plan_for(data.price_id) or data.plan_key
-        await self.events.subscription_changed(
-            SubscriptionChanged(
-                account_id=account_id,
-                provider=self.provider.name,
-                plan=plan_key,
-                status=data.status,
-                current_period_end=data.current_period_end,
-                trial_end=data.trial_end,
-                cancel_at_period_end=data.cancel_at_period_end,
-                event_type=event.type,
+        async with self.store.transaction() as tx:
+            account_id = await self._customer_of(tx, event, data.customer_id)
+            if account_id is None:
+                return EventOutcome.UNKNOWN_ACCOUNT, None
+            plan_key = self.config.prices.plan_for(data.price_id) or data.plan_key
+            await self.events.subscription_changed(
+                SubscriptionChanged(
+                    account_id=account_id,
+                    provider=self.provider.name,
+                    plan=plan_key,
+                    status=data.status,
+                    current_period_end=data.current_period_end,
+                    trial_end=data.trial_end,
+                    cancel_at_period_end=data.cancel_at_period_end,
+                    event_type=event.type,
+                )
             )
-        )
         return EventOutcome.APPLIED, account_id
 
     async def _apply_invoice(self, event: ProviderEvent) -> tuple[EventOutcome, UUID | None]:
         data = event.invoice
         assert data is not None  # noqa: S101 - checked by the caller
-        account_id = await self._account_of_customer(data.customer_id)
-        if account_id is None:
-            return EventOutcome.UNKNOWN_ACCOUNT, None
         now = self.clock()
         async with self.store.transaction() as tx:
+            account_id = await self._customer_of(tx, event, data.customer_id)
+            if account_id is None:
+                return EventOutcome.UNKNOWN_ACCOUNT, None
             await tx.save_invoice(
                 Invoice(
                     id=uuid4(),
@@ -536,16 +554,3 @@ class BillingService:
                 )
             )
         return EventOutcome.APPLIED, account_id
-
-    async def cancel(self, account_id: UUID) -> list[str]:
-        """Cancel every open subscription of an account now (account deletion); the ids."""
-        async with self.store.transaction() as tx:
-            open_ones = [s for s in await tx.subscriptions_of(account_id) if s.is_open]
-        cancelled: list[str] = []
-        for subscription in open_ones:
-            try:
-                await self.provider.cancel_subscription(subscription.provider_subscription_id)
-            except Exception as exc:
-                raise ProviderError("cancelling at the payment provider failed") from exc
-            cancelled.append(subscription.provider_subscription_id)
-        return cancelled

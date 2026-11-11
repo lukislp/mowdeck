@@ -132,6 +132,13 @@ async def store_contract(store: Store) -> None:
         assert by_id.account_id == account_id
         assert await tx.find_customer("stripe", "cus_2") is None
         assert await tx.get_customer(account_id, "fake") is None
+        locked = await tx.lock_customer("stripe", "cus_1")
+        assert locked is not None and locked.account_id == account_id
+        assert await tx.lock_customer("stripe", "cus_2") is None
+        assert await tx.lock_customer("fake", "cus_1") is None
+        await tx.save_customer(Customer(account_id, "fake", "cus_f", T0))
+        assert [c.provider for c in await tx.customers_of(account_id)] == ["fake", "stripe"]
+        assert await tx.customers_of(uuid4()) == []
 
     first = Subscription(
         id=uuid4(),
@@ -243,13 +250,13 @@ async def store_contract(store: Store) -> None:
     async with store.transaction() as tx:
         # The lease expired: another delivery may take it over.
         assert await tx.claim_event("stripe", "evt_1", T0 + timedelta(seconds=61), 60)
-        await tx.finish_event("stripe", "evt_1", EventOutcome.FAILED, None, None)
+        await tx.finish_event("stripe", "evt_1", EventOutcome.FAILED, None)
         assert await tx.claim_event("stripe", "evt_1", T0 + timedelta(seconds=62), 60)
-        await tx.finish_event(
-            "stripe", "evt_1", EventOutcome.APPLIED, T0 + timedelta(minutes=2), account_id
-        )
+        await tx.attribute_event("stripe", "evt_1", account_id)
+        await tx.finish_event("stripe", "evt_1", EventOutcome.APPLIED, T0 + timedelta(minutes=2))
         assert not await tx.claim_event("stripe", "evt_1", T0 + timedelta(days=1), 60)
-        await tx.finish_event("stripe", "evt_missing", EventOutcome.APPLIED, T0, None)
+        await tx.finish_event("stripe", "evt_missing", EventOutcome.APPLIED, T0)
+        await tx.attribute_event("stripe", "evt_missing", account_id)
     async with store.transaction() as tx:
         event = await tx.get_event("stripe", "evt_1")
         assert event is not None
@@ -261,6 +268,48 @@ async def store_contract(store: Store) -> None:
         )
         assert event.processed_at == T0 + timedelta(minutes=2)
         assert await tx.get_event("stripe", "evt_missing") is None
+
+    # Everything above belongs to one account; another account's rows survive its purge.
+    other = uuid4()
+    async with store.transaction() as tx:
+        await tx.save_account_if_absent(BillingAccount(other, "Other"))
+        await tx.save_customer(Customer(other, "stripe", "cus_other", T0))
+        await tx.record_event(WebhookEvent("stripe", "evt_unknown", "customer.deleted", T0))
+        before = await tx.account_rows(account_id)
+        assert before == {
+            "accounts": 1,
+            "customers": 2,
+            "subscriptions": 2,
+            "invoices": 3,
+            "webhook_events": 1,
+        }
+    async with store.transaction() as tx:
+        assert await tx.purge_account(account_id) == sum(before.values())
+        assert await tx.purge_account(account_id) == 0
+        assert await tx.account_rows(account_id) == {}
+        assert await tx.account_rows(other) == {"accounts": 1, "customers": 1}
+        assert await tx.find_customer("stripe", "cus_1") is None
+        assert await tx.get_event("stripe", "evt_1") is None
+        # An event that belongs to no account is nobody's and stays.
+        assert await tx.get_event("stripe", "evt_unknown") is not None
+
+
+@asynccontextmanager
+async def store_of(kind: str, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Store]:
+    """The memory store, or the SQL store on a fresh migrated database."""
+    if kind == "memory":
+        yield MemoryStore()
+        return
+    async with temporary_database() as url:
+        await migrate(url, monkeypatch)
+        engine = create_async_engine(async_database_url(url))
+        try:
+            yield SqlStore(engine)
+        finally:
+            await engine.dispose()
+
+
+STORES = [pytest.param("memory"), pytest.param("postgres", marks=needs_db)]
 
 
 async def test_billing_memory_store_contract() -> None:
@@ -298,6 +347,7 @@ async def test_billing_db_webhook_path_end_to_end(monkeypatch: pytest.MonkeyPatc
         try:
             async with harness(store=SqlStore(engine)) as h:  # type: ignore[arg-type]
                 owner = await h.owner()
+                await h.customer(owner.account_id)
                 event = _sub(h, owner.account_id, "past_due")
                 assert (await h.webhook(event)).json()["outcome"] == "applied"
                 assert (await h.webhook(event)).json()["duplicate"] is True

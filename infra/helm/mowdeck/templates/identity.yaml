@@ -4,6 +4,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 */ -}}
 {{- /* Identity: accounts, users, roles, sessions, API tokens; issues the access tokens and
 publishes /.well-known/jwks.json (Compose services identity and identity-migrate). */ -}}
+{{- /* Account erasure (ADR 0082): on unless config.IDENTITY_ERASURE_ENABLED is false (not
+"default true": that would turn an explicit false into true). The optional services that keep
+data of an account must confirm too; that is Billing, named here when it is enabled, so nobody
+enables Billing and forgets its erasure. */ -}}
 {{- $c := .Values.config }}
 {{- $modules := list }}
 {{- range list "device-gateway" "fleet" "telemetry" "realtime" "notifications" "scheduler" "entitlements" "planner" "vision" }}
@@ -23,7 +27,8 @@ publishes /.well-known/jwks.json (Compose services identity and identity-migrate
 {{- $env := merge (include "mowdeck.commonEnv" . | fromJson) (include "mowdeck.authzEnv" . | fromJson) (include "mowdeck.billingEnv" . | fromJson) (dict
   "MOWDECK_IDENTITY_REGISTRATION" $c.IDENTITY_REGISTRATION
   "MOWDECK_IDENTITY_ARGON2_PROFILE" $c.IDENTITY_ARGON2_PROFILE
-  "MOWDECK_IDENTITY_ERASURE_ENABLED" (toString (default false $c.IDENTITY_ERASURE_ENABLED))
+  "MOWDECK_IDENTITY_ERASURE_ENABLED" (ternary "true" "false" (ne (toString $c.IDENTITY_ERASURE_ENABLED) "false"))
+  "MOWDECK_IDENTITY_OPTIONAL_SERVICES" (ternary "billing" "" .Values.services.billing.enabled)
   "MOWDECK_IDENTITY_MODULE_URLS" (join "," $modules)
   "MOWDECK_IDENTITY_TRUST_FORWARDED_FOR" "true"
   "MOWDECK_CLIENT_IP_DEPTH" (include "mowdeck.clientIpDepth" .)

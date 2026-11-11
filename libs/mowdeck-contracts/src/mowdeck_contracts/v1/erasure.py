@@ -36,14 +36,20 @@ ERASURE_SERVICES: Final[tuple[str, ...]] = (
     "notifications",
     "vision",
     "planner",
-    "entitlements",
     "billing",
+    "entitlements",
 )
-"""The services that keep per-account data, in the order Identity asks them. Fleet is first:
-removing the mowers stops their simulators and connections, so the other services see no further
-states of the account. ``billing`` runs only with the Compose profile ``billing``; Identity asks
-the services of its setting ``IDENTITY_ERASURE_SERVICES`` (the default leaves billing out, an
-installation with billing adds it)."""
+"""The services that keep per-account data, in the order Identity asks them, whatever order an
+installation lists them in. Two places of this order are rules:
+
+* Fleet is first: removing the mowers stops their simulators and connections, so the other
+  services see no further states of the account.
+* Billing comes before Entitlements: Billing sets plans there (``entitlements.plan.set``, which
+  creates the plan row of any account), so Entitlements erases only after Billing has ended the
+  subscriptions and can set nothing for the account any more.
+
+``billing`` is optional (the Compose profile ``billing``, the chart's
+``services.billing.enabled``): Identity asks it only where the installation runs it."""
 
 
 class AccountEraseRequest(ContractModel):

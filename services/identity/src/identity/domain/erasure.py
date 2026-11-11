@@ -33,6 +33,44 @@ from identity.domain.models import Account, AccountStatus, Membership
 RETRY_BASE_SECONDS = 15
 """First wait after a failed attempt; doubles with every failure."""
 
+ASK_ORDER: tuple[str, ...] = (
+    "fleet",
+    "scheduler",
+    "telemetry",
+    "notifications",
+    "vision",
+    "planner",
+    "billing",
+    "entitlements",
+)
+"""The order in which the services are asked to erase an account (``ERASURE_SERVICES`` of the
+contracts; a test keeps both equal). It is a rule, not the order somebody happened to write a
+setting in: :func:`ask_order` applies it to every purge.
+
+* ``fleet`` first: removing the mowers stops their connections and simulators, so the other
+  services see no further state of the account.
+* ``billing`` before ``entitlements``: Billing sets plans in Entitlements, and setting a plan
+  creates the plan row of any account. Entitlements is asked only when Billing has confirmed
+  that it has ended the subscriptions and applies nothing for the account any more; otherwise
+  a late plan change would write the row of an erased account again."""
+
+
+def ask_order(services: Iterable[str]) -> list[str]:
+    """``services`` once each, in the order they are asked (:data:`ASK_ORDER`). A name the order
+    does not know comes last, in the order given."""
+    rank = {name: position for position, name in enumerate(ASK_ORDER)}
+    return sorted(dict.fromkeys(services), key=lambda name: rank.get(name, len(rank)))
+
+
+def required_services(listed: Iterable[str], deployed_optional: Iterable[str]) -> tuple[str, ...]:
+    """The services that must confirm an account erasure in this installation: the listed ones
+    and, of the optional parts the deployment says it runs, those that keep data of an account
+    (Billing). Other optional parts (the assistant, the camera relay) keep none and are not
+    asked. In the order they are asked."""
+    optional = [name for name in deployed_optional if name in ASK_ORDER]
+    return tuple(ask_order([*listed, *optional]))
+
+
 AUDIT_DETAILS_KEPT: frozenset[str] = frozenset(
     {
         "delete_after",
@@ -391,12 +429,13 @@ class AccountErasure:
         """The record of a purge that starts now. The services are asked from ``ask_from`` on
         (:func:`tokens_expired_at`: when the last access token of the account has run out);
         without it the first attempt is due at once."""
-        return cls(account_id, now, list(dict.fromkeys(required)), next_attempt_at=ask_from or now)
+        return cls(account_id, now, ask_order(required), next_attempt_at=ask_from or now)
 
     @property
     def open_services(self) -> list[str]:
-        """The required services that did not confirm yet, in the order they are asked."""
-        return [s for s in self.required if s not in self.confirmed]
+        """The required services that did not confirm yet, in the order they are asked
+        (:func:`ask_order`, also for a record that was stored in another order)."""
+        return [s for s in ask_order(self.required) if s not in self.confirmed]
 
     @property
     def all_confirmed(self) -> bool:

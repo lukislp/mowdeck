@@ -19,7 +19,7 @@ from mowdeck_contracts.v1 import AccountEraseReply, AccountEraseRequest
 from mowdeck_service_kit.bus import InMemoryBus
 
 from identity.adapters.bus.erasure import BusAccountEraser
-from identity.application.erasure import ErasureService
+from identity.application.erasure import ErasureService, scheduled_deletions
 from identity.cli import amain
 from identity.domain.erasure import AccountErasure, ErasureState
 from identity.domain.models import AccountStatus
@@ -385,12 +385,26 @@ async def test_the_demo_runs_no_account_erasure() -> None:
         assert h.app.state.identity.erasure is None
 
 
-async def test_the_purge_is_off_by_default_and_nothing_changes() -> None:
+async def test_the_purge_is_on_by_default() -> None:
+    """Every service answers ``account.erase.<service>``, so a deleted account is purged
+    without anybody setting anything (the repository check ties the default to that)."""
+    assert make_settings().identity_erasure_enabled is True
+    assert make_settings().erasure_enabled is True
+    fake = FakeEraser()
+    defaults = {k: v for k, v in NOW_GRACE.items() if k != "identity_erasure_enabled"}
+    async with harness(eraser=fake, **defaults) as h:
+        lukas = await h.register("lukas")
+        await _schedule(h, lukas)
+        await _finish(h)
+        record = await _record(h, lukas.account_id)
+    assert record.state is ErasureState.ERASED
+
+
+async def test_switched_off_nothing_is_purged_and_nothing_changes() -> None:
     """While the switch is off no purge starts: an account stays deleting and restorable past
     delete_after, exactly as before the purge existed."""
     fake = FakeEraser()
-    off = {k: v for k, v in NOW_GRACE.items() if k != "identity_erasure_enabled"}
-    assert make_settings().identity_erasure_enabled is False
+    off = {**NOW_GRACE, "identity_erasure_enabled": False}
     async with harness(eraser=fake, **off) as h:
         assert h.app.state.identity.erasure is None  # not wired, no background task
         lukas = await h.register("lukas")
@@ -419,19 +433,150 @@ async def test_the_switch_never_turns_the_purge_on_in_the_demo() -> None:
     assert make_settings(identity_erasure_enabled=True, demo_mode=True).erasure_enabled is False
 
 
+CORE = ("fleet", "scheduler", "telemetry", "notifications", "vision", "planner", "entitlements")
+
+
 async def test_the_default_services_are_the_core_ones_in_order() -> None:
+    """An installation without Billing never waits for it."""
     config = make_settings().erasure_config()
-    assert config.services[0] == "fleet"
-    assert "billing" not in config.services  # an installation with billing adds it
-    assert set(config.services) == {
-        "fleet",
-        "scheduler",
-        "telemetry",
-        "notifications",
-        "vision",
-        "planner",
-        "entitlements",
-    }
+    assert config.services == CORE
+    assert "billing" not in config.services
+
+
+async def test_a_deployment_with_billing_asks_it_too_and_before_entitlements() -> None:
+    """Compose passes ``COMPOSE_PROFILES``, the chart its enabled optional services. Billing is
+    added by that alone; the other optional parts keep no data of an account."""
+    with_billing = make_settings(identity_optional_services="relay, billing,matter")
+    assert with_billing.erasure_config().services == (*CORE[:-1], "billing", "entitlements")
+    for others in ("", "assistant,relay,matter", "billing-migrate"):
+        assert make_settings(identity_optional_services=others).erasure_config().services == CORE
+
+
+async def test_the_order_asked_does_not_depend_on_the_order_listed() -> None:
+    listed = make_settings(
+        identity_erasure_services="entitlements, billing,scheduler,fleet,billing"
+    ).erasure_config()
+    assert listed.services == ("fleet", "scheduler", "billing", "entitlements")
+
+
+async def test_billing_is_asked_before_entitlements_whatever_the_list_says() -> None:
+    """The ordering property of the purge itself: Entitlements gets its request only after
+    Billing confirmed, also when Billing fails first and is retried."""
+    fake = FakeEraser()
+    fake.fail = {"billing": 1}
+    listed = {**NOW_GRACE, "identity_erasure_services": "entitlements,billing,fleet"}
+    async with harness(eraser=fake, **listed) as h:
+        lukas = await h.register("lukas")
+        await _schedule(h, lukas)
+        await _finish(h)  # Fleet, the settle time, then Billing fails
+        before_retry = [s for s, _ in fake.calls]
+        waiting = (await _record(h, lukas.account_id)).open_services
+        h.clock.advance(timedelta(minutes=1))
+        await _erasure(h).sweep()
+        record = await _record(h, lukas.account_id)
+    assert before_retry == ["fleet"]  # Entitlements was not asked while Billing had not confirmed
+    assert waiting == ["billing", "entitlements"]
+    assert [s for s, _ in fake.calls] == ["fleet", "billing", "entitlements"]
+    assert record.state is ErasureState.ERASED
+
+
+async def test_an_installation_without_billing_completes_without_asking_it() -> None:
+    fake = FakeEraser()
+    core = {k: v for k, v in NOW_GRACE.items() if k != "identity_erasure_services"}
+    async with harness(eraser=fake, **core) as h:
+        lukas = await h.register("lukas")
+        await _schedule(h, lukas)
+        await _finish(h)
+        record = await _record(h, lukas.account_id)
+    assert record.state is ErasureState.ERASED
+    assert [s for s, _ in fake.calls] == list(CORE)
+
+
+# --- switching the purge on (an update to the release that turned the default) ------------------
+
+
+async def test_accounts_past_their_grace_period_are_announced_and_purged_once_it_is_on(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """What an installation sees that had the purge off: accounts whose deletion was requested
+    stay ``deleting`` past ``delete_after``. With the purge on, the start-up names how many
+    there are, and the first sweep starts their purge (there is no second grace period; until
+    that sweep the owner could still restore)."""
+    fake = FakeEraser()
+    off = {**NOW_GRACE, "identity_erasure_enabled": False}
+    async with harness(**off) as before:
+        lukas = await before.register("lukas")
+        bob = await before.register("bob")
+        anna = await before.register("anna")
+        await _schedule(before, lukas)  # the grace period (0 days) is over at once
+        await _schedule(before, bob)
+        restored = await before.client.post(bob.url("/restore"), headers=bob.headers)
+        store = before.store
+    quiet = capsys.readouterr()
+    async with harness(store=store, eraser=fake, **NOW_GRACE) as h:
+        started = capsys.readouterr()
+        waiting = await scheduled_deletions(h.app.state.identity.deps)
+        await _finish(h)
+        async with h.store.transaction() as tx:
+            states = [
+                (await tx.accounts.get(id=account.account_id)) for account in (lukas, bob, anna)
+            ]
+        record = await _record(h, lukas.account_id)
+    off_text, on_text = quiet.out + quiet.err, started.out + started.err
+    assert restored.status_code == 200
+    assert "account erasure is switched off" in off_text
+    assert "past their deletion grace period" not in off_text
+    assert "account erasure is on" in on_text
+    assert "past their deletion grace period" in on_text and "count=1" in on_text
+    assert str(lukas.account_id) in on_text and str(bob.account_id) not in on_text
+    assert [(s.account_id, s.due) for s in waiting] == [(lukas.account_id, True)]
+    assert record.state is ErasureState.ERASED
+    assert states[0] is None  # purged
+    assert states[1] is not None and states[1].status is AccountStatus.ACTIVE  # restored before
+    assert states[2] is not None and states[2].status is AccountStatus.ACTIVE  # never scheduled
+
+
+async def test_no_warning_without_an_account_past_its_grace_period(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async with harness(identity_erasure_enabled=True):
+        pass
+    text = capsys.readouterr()
+    assert "account erasure is on" in text.out + text.err
+    assert "past their deletion grace period" not in text.out + text.err
+
+
+async def test_the_operator_lists_the_scheduled_accounts_before_switching_it_on() -> None:
+    off = {**NOW_GRACE, "identity_erasure_enabled": False, "identity_deletion_grace_days": 7}
+    async with harness(**off) as h:
+        lukas = await h.register("lukas")
+        bob = await h.register("bob")
+        runtime = h.app.state.runtime
+
+        async def scheduled() -> str:
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
+                code = await amain(["erasures", "--scheduled"], cast(Runtime, _NoClose(runtime)))
+            assert code == 0
+            return buffer.getvalue()
+
+        nothing = await scheduled()
+        await _schedule(h, lukas)
+        h.clock.advance(timedelta(days=8))
+        await _schedule(h, bob)
+        listed = (await scheduled()).splitlines()
+    async with harness(store=h.store, eraser=FakeEraser(), **NOW_GRACE) as on:
+        on.clock.advance(timedelta(days=8))
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            await amain(["erasures", "--scheduled"], cast(Runtime, _NoClose(on.app.state.runtime)))
+    assert nothing.strip() == "no account is scheduled for deletion"
+    assert len(listed) == 2
+    assert listed[0].startswith(f"{lukas.account_id}  deleting  grace period until ")
+    assert listed[0].endswith("over: stays as it is (the purge is off)")
+    assert listed[1].startswith(str(bob.account_id))
+    assert listed[1].endswith("the owner can restore it")
+    assert "over: purged at the next sweep" in buffer.getvalue()
 
 
 async def test_a_stalled_purge_is_reported() -> None:

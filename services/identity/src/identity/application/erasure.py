@@ -17,7 +17,9 @@ demand:
    (:func:`~identity.domain.erasure.tokens_expired_at`, with the lifetime the issuer signs
    with): a service that confirmed must not get a write from a still valid token afterwards.
 3. **Ask.** Every required service gets a core NATS request (``account.erase.<service>``, the
-   port :class:`~identity.application.ports.AccountEraser`), Fleet first. A confirmation is stored
+   port :class:`~identity.application.ports.AccountEraser`), in the order of the domain rule
+   (:func:`~identity.domain.erasure.ask_order`: Fleet first, Billing before Entitlements),
+   whatever order the installation listed them in. A confirmation is stored
    at once, so a retry skips it; a failure is stored with the reason and the next attempt waits
    longer each time (a service that is down is asked again, never skipped). A purge that runs
    longer than ``stall_after`` logs an error on every attempt: the account is locked and its
@@ -35,7 +37,7 @@ Nothing here talks to a service by name or to NATS: the port does.
 
 import asyncio
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from mowdeck_authz import api_token, user
@@ -70,8 +72,9 @@ class ErasureConfig:
     """Which services must confirm and the timings of the purge (from the settings)."""
 
     services: tuple[str, ...]
-    """The services asked, in order (Fleet first). Never empty in a real installation: Identity
-    must not delete its rows while no service was asked."""
+    """The services that must confirm (:func:`~identity.domain.erasure.required_services`). The
+    order they are asked in is the domain's, not this tuple's. Never empty in a real
+    installation: Identity must not delete its rows while no service was asked."""
     settle: timedelta = timedelta(seconds=30)
     """Wait after the first service confirmed (Fleet removed the mowers, so their last states
     have landed before the other services delete)."""
@@ -81,6 +84,28 @@ class ErasureConfig:
     """How long an attempt holds a purge; a second replica finds it not due meanwhile."""
     stall_after: timedelta = timedelta(hours=1)
     """A purge older than this that is still not finished is logged as an error."""
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledDeletion:
+    """An account whose deletion is scheduled and whose purge has not begun."""
+
+    account_id: UUID
+    delete_after: datetime | None
+    due: bool
+    """The grace period is over: the next sweep starts the purge (where the purge is on). Until
+    that sweep the owner can still restore the account."""
+
+
+async def scheduled_deletions(deps: Deps) -> list[ScheduledDeletion]:
+    """The accounts scheduled for deletion, the ones due first. For the operator (the start-up
+    log line, ``python -m identity.cli erasures --scheduled``): it works with the purge switched
+    off as well, which is when an operator wants to look before switching it on."""
+    now = deps.clock()
+    async with deps.store.transaction() as tx:
+        deleting = await tx.accounts.find(status=AccountStatus.DELETING.value)
+    found = [ScheduledDeletion(a.id, a.delete_after, grace_over(a, now)) for a in deleting]
+    return sorted(found, key=lambda s: (not s.due, str(s.delete_after), str(s.account_id)))
 
 
 @dataclass(frozen=True, slots=True)

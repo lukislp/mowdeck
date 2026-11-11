@@ -231,6 +231,33 @@ docker compose exec -e MOWDECK_IDENTITY_CLI_PASSWORD=... identity python -m iden
 
 Details: `services/identity/README.md` and [ADR 0015](../adr/0015-tokens-sessions-and-key-rotation.md).
 
+### Account erasure
+
+An owner can delete the account (`DELETE /api/v1/identity/accounts/{id}`, or `DELETE /api/v1/identity/me`; the web app has no button for it yet). The account is then scheduled: it stays usable for the grace period (`MOWDECK_IDENTITY_DELETION_GRACE_DAYS`, 7 days) and the owner can restore it. After that Identity purges it ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md)): every service deletes the account's data, then Identity its own rows. A purge that has begun cannot be undone.
+
+`IDENTITY_ERASURE_ENABLED` is **`true` by default** since every service answers the erasure request. Which services are asked needs no setting: the core services always, and Billing when `COMPOSE_PROFILES` names it. `IDENTITY_ERASURE_ENABLED=false` switches the purge off: nothing is deleted and a scheduled account stays as it is.
+
+**Updating from a release in which the purge was off.** In those releases a deletion request scheduled the account and nothing ever purged it. With this release an account whose grace period is already over is purged **at the first sweep after the update**, within a minute of Identity starting: it is locked at once, and its data is deleted about 11 minutes later (when the last access token has expired). There is no second grace period and nobody is notified. Most installations have no such account, because only a call of the API schedules one. To be sure:
+
+1. If your `.env` has the line `IDENTITY_ERASURE_ENABLED=false` (it is in `.env.example` since the release that introduced the setting), the purge stays off after the update until you change it. Without the line the new default applies.
+2. Look before you update, on the running installation:
+
+   ```bash
+   docker compose exec -T postgres psql -U postgres -d identity -c \
+     "select id, name, delete_after from accounts where status = 'deleting' order by delete_after"
+   ```
+
+   No row: nothing changes for you. Rows whose `delete_after` is in the past are purged after the update.
+3. To keep such an account, its owner restores it before the update (`POST /api/v1/identity/accounts/{id}/restore`), or you set `IDENTITY_ERASURE_ENABLED=false` in `.env` before updating and decide later.
+4. After the update Identity logs at start-up whether the purge is on, the services it asks and the number of scheduled accounts, and a warning with the ids of the accounts past their grace period. The same list at any time, also with the purge off:
+
+   ```bash
+   docker compose exec identity python -m identity.cli erasures --scheduled
+   docker compose exec identity python -m identity.cli erasures            # purges that are running
+   ```
+
+A purge that cannot finish (a listed service is down) keeps the account locked and is retried; `erasures` shows which service it waits for and the last error. Backups you made before the purge still contain the account until you rotate them out; MowDeck defines no retention for them.
+
 ## Fleet
 
 Fleet owns sites, groups and mowers, writes their place in the hierarchy to OpenFGA and sends every command to the Device-Gateway after checking the right the command kind needs (`can_control`, `can_drive`, or `can_emergency_stop` for an emergency stop). `fleet-migrate` runs the database migrations first. Register a simulated mower with `POST /api/v1/fleet/mowers` (`{"name": "Front lawn", "connection_kind": "simulated"}`), start it with `POST /api/v1/fleet/mowers/<id>/commands` (`{"command": {"kind": "start_mow", "area_ids": ["front"]}}`) and follow the command at `GET /api/v1/fleet/commands/<command_id>`. `FLEET_ALLOWED_CONNECTION_KINDS` in `.env` lists the accepted connection kinds (the example enables `simulated,cloud,ble_bridge`; the web app offers exactly these, from `GET /api/v1/fleet/connection-kinds`). Cloud mowers come from a linked Mammotion account ([ADR 0034](../adr/0034-linked-cloud-accounts-and-device-discovery.md)): link it once in the web app (add mower, or Settings, Linked accounts), then pick its mowers; the password is stored encrypted with `FLEET_CREDENTIAL_ENCRYPTION_KEY` (the example value is a marked development key: generate your own and keep a backup). `GATEWAY_FAKE_CLOUDS=true` (development only; the former name `GATEWAY_FAKE_MAMMOTION_CLOUD` still works) replaces the vendor clouds of the enabled providers with fake ones (Mammotion: `*@fake.mowdeck.test`, password `fake-cloud-password`; `shared-*@fake.mowdeck.test` plays a shared account that may not drive). Cloud providers other than Mammotion are off until listed in `GATEWAY_CLOUD_PROVIDERS_ENABLE` ([ADR 0066](../adr/0066-cloud-provider-plugins-and-more-vendors.md), [Cloud providers](../dev/cloud-providers.md)). Manual driving over the cloud ([ADR 0049](../adr/0049-manual-driving-over-the-mammotion-cloud.md): joystick, nudges, AI assist moves and spot runs without a Bluetooth bridge, forwards and turns only, firmware 1.30.31.19 or newer) needs the linked account to be the account that **owns** the mower; a shared account sees and runs everything else, and its drive attempts are refused with a message that says so. Running the same Mammotion account in the phone app or in a script at the same time can drop MowDeck's MQTT session (and the other client's); never run test scripts with MowDeck's account. The cloud mower's option `cloud_drive` (default on) switches cloud driving off. Details: `services/fleet/README.md` and [ADR 0016](../adr/0016-fleet-commands-and-authorization-per-command-kind.md).
