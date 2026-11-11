@@ -267,6 +267,25 @@ await bus.subscribe(
 
 A new service adds the `serve` entry in `tools/repo-checks/scripts/nats_auth.py`; `tools/repo-checks/tests/test_erasure_registry.py` fails while a service with tables does not answer.
 
+## A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user, Identity publishes `identity.user.deleted` ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"). The account goes on, so the account erasure does not run: a service removes what is the *person's* and keeps what is the account's. `mowdeck_service_kit.user_erasure` holds what is the same in every service:
+
+- `UserErasure(forget, leftovers, in_memory=())`, the use case. `forget(user_id, account_id) -> int` deletes the user's own rows and scrubs their name from what stays (idempotent), each `in_memory(user_id)` drops what a use case keeps in memory, `leftovers(user_id) -> {place: count}` counts what is still there. `erase` raises `UserErasureIncomplete` while something personal is left.
+- `user_deleted_handler(service, erasure.erase)`, the bus handler of a durable consumer: decodes the `EventEnvelope[UserChanged]` and calls the use case. A failure raises, so JetStream delivers the event again; a malformed event is dropped.
+- Where a name is: a `PrincipalRef` stored as JSON (who issued a command, who owns a schedule) carries `display_name`. By convention such a column is named `owner` or `<verb>_by` (`is_ref_name`). `mowdeck_service_kit.db.principal_ref_columns(metadata)` reads these columns from the schema, `scrub_principal_refs(conn, columns, user_id, account_id)` removes the name and keeps the subject id, `named_principal_refs(conn, columns, user_id)` counts what still carries it; `scrub_refs` and `named_refs` do the same for a memory store's dataclass rows. `user_tables(metadata)` lists the tables with a `user_id` column (a user's own rows). A plain id (`created_by` as a UUID) is not personal: it names nobody once Identity's user row is gone.
+
+```python
+await bus.subscribe(
+    event_subject_for_type(IDENTITY_USER_DELETED),
+    user_deleted_handler("fleet", services.user_erasure.erase),
+    durable="fleet-users",
+    queue="fleet-users",
+)
+```
+
+A new service adds the `consume` entry in `tools/repo-checks/scripts/nats_auth.py`; `tools/repo-checks/tests/test_user_erasure_registry.py` fails while a service whose schema holds something personal of a user has no `adapters/bus/user_erasure.py`.
+
 ## Testing utilities
 
 `mowdeck_service_kit.testing` (extra `testing`) provides `make_test_app(...)` (in-memory bus, static principal, settings independent of the environment), `make_test_settings`, `make_test_descriptor`, `make_principal`, `StaticPrincipalResolver` and `lifespan_client(app)`, an `httpx.AsyncClient` that also runs startup and shutdown hooks.
