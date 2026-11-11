@@ -60,6 +60,7 @@ Creating a schedule needs the plan feature `schedules` (403 `urn:mowdeck:problem
 | request | `fleet.targets.resolve` | core NATS (Fleet) | `ResolveTargetRequest` / `ResolveTargetReply` | the target's mowers, time zone and site coordinates |
 | request | `fleet.commands.issue` | core NATS (Fleet) | `IssueCommandRequest` / `IssueCommandReply` | `start_mow` and `return_to_dock` on behalf of the owner (or the caller of a manual run) |
 | reply | `account.erase.scheduler` | core NATS, queue `scheduler-erasure` (internal, Identity only) | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
+| consumed | `event.identity.user.deleted` | JetStream, durable and queue `scheduler-users` | `EventEnvelope[UserChanged]` | a user was deleted: their name goes from the schedules and runs, see [A deleted user](#a-deleted-user) |
 | consumed | `telemetry.mower.*` | JetStream, durable and queue `scheduler-states` | `MowerState` | latest activity (busy check) and position; an activity change is written at once, an unchanged activity at most every 30 s or after a move of 100 m (the follow-up and the weather need no more; one write per state was most of the Scheduler's work per state, `docs/ops/load-testing.md`) |
 | consumed | `device.mower.>` | JetStream `DEVICE`, durable and queue `scheduler-device` | `MowerMapSnapshot` | map origin (location) and area ids; capability snapshots are ignored here |
 | consumed | `device.mower.*.capabilities` | JetStream `DEVICE`, durable and queue `scheduler-capabilities`, newest message per subject first | `MowerCapabilitiesSnapshot` | what a schedule may set for the mower (check when saved, fit at fire time) |
@@ -74,6 +75,18 @@ When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-dele
 - **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
 
 Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
+
+### A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"), Identity publishes `identity.user.deleted`. The account goes on, so the Scheduler deletes nothing: the schedules the user created and their runs are the account's and stay.
+
+- **Scrubbed:** the person's name in `schedules.owner` and `schedule_runs.issued_by` (each a `PrincipalRef` as JSON: the `display_name` key goes, the subject id and the kind stay).
+- **Kept as it is:** `schedules.owner_subject`. Every firing re-checks that the owner may still control the target; a deleted user holds no permission, so the schedule skips its runs (`skipped_permission`) and after `MOWDECK_SCHEDULER_MAX_PERMISSION_SKIPS` skips is disabled with its reason, exactly as for an owner who lost the right. Whoever edits or re-enables it becomes its owner. Nothing mows on behalf of somebody who is gone.
+- **No rows of a user:** no table has a `user_id` column. Nothing of a user is kept in memory.
+
+Which columns hold a name is read from the schema (`mowdeck_service_kit.db.principal_ref_columns`), for the scrub and for the count afterwards; a name that is still there fails the event, so JetStream delivers it again. `tests/test_scheduler_user_erasure.py` pins the list of columns and runs a schedule of a deleted owner end to end with Fleet.
+
+Layers: `adapters/bus/user_erasure.py` subscribes (durable `scheduler-users`); the use case is `application/user_erasure.py` (the kit's `UserErasure` over `Tx.forget_user` and `Tx.user_names`).
 
 ## Execution
 

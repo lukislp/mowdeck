@@ -366,8 +366,9 @@ async def test_telemetry_consumer_names_are_the_documented_queue_groups() -> Non
         "telemetry-mowers",
     )
     async with harness() as h:
-        # five consumers (incl. the theft alarms), the track responder and the account erasure
-        assert len(h.app.state.subscriptions) == 7
+        # six consumers (incl. the theft alarms and deleted users), the track responder and
+        # the account erasure
+        assert len(h.app.state.subscriptions) == 8
         assert h.app.state.telemetry.ingest is not None
         assert MowerActivity.DOCKED.value == "docked"
         assert RetentionTarget.HISTORY.value == "mower_history"

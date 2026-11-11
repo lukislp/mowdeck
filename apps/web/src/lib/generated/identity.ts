@@ -580,7 +580,25 @@ export type paths = {
         get: operations["me_api_v1_identity_me_get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Me
+         * @description Delete yourself (ADR 0082). The server applies the operation of the caller's role, so a
+         *     client needs one call:
+         *
+         *     * a member **without the owner relation** (sub-users included) is deleted at once and for
+         *       good: **200** with `operation: "user"`. The user, every sign-in method, session and
+         *       personal token go, the roles and permissions are removed, the other services drop the
+         *       user's own data; what the user created in the account stays with the account, without
+         *       their name. The account goes on. There is no grace period and no way back;
+         *     * the **owner** deletes the account: **202** with `operation: "account"` and `delete_after`,
+         *       exactly `DELETE /accounts/{id}` (409 while the account has other members or is already
+         *       scheduled; the owner cancels with `POST /accounts/{id}/restore`).
+         *
+         *     Needs a login session and the password in the body or, without it, a recent step-up
+         *     confirmation (401 `reauth-required`); API tokens and service identities get 403
+         *     `step-up-unavailable`. Refused in the public demo (403 `demo-mode`).
+         */
+        delete: operations["delete_me_api_v1_identity_me_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1765,6 +1783,11 @@ export type components = {
             is_admin: boolean;
             /** Is Owner */
             is_owner: boolean;
+            /**
+             * Self Deletion
+             * @description What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well).
+             */
+            self_deletion?: ("account" | "user") | null;
             /** Status */
             status: string;
         };
@@ -2464,6 +2487,37 @@ export type components = {
              * @description Live login sessions in all accounts
              */
             sessions: number;
+        };
+        /**
+         * SelfDeletionIn
+         * @description ``DELETE /me``: the caller's password, or none after a step-up confirmation.
+         */
+        SelfDeletionIn: {
+            /** Password */
+            password?: string | null;
+        };
+        /**
+         * SelfDeletionOut
+         * @description ``DELETE /me``: which of the two deletions the caller's role meant, and its state.
+         */
+        SelfDeletionOut: {
+            /**
+             * Account Id
+             * Format: uuid
+             * @description The account the caller was signed in to.
+             */
+            account_id: string;
+            /**
+             * Delete After
+             * @description `account` only: when the grace period ends and the purge starts; until then the owner can call `POST /accounts/{id}/restore`. Null for `user` (nothing to restore).
+             */
+            delete_after?: string | null;
+            /**
+             * Operation
+             * @description `user`: the caller was a member without the owner relation and is deleted now; the account stays. `account`: the caller owns the account, which is now scheduled for deletion (`DELETE /accounts/{id}`).
+             * @enum {string}
+             */
+            operation: "account" | "user";
         };
         /**
          * SessionOut
@@ -3909,6 +3963,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    delete_me_api_v1_identity_me_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SelfDeletionIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfDeletionOut"];
+                };
+            };
+            /** @description The caller owns the account: it is scheduled for deletion. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfDeletionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

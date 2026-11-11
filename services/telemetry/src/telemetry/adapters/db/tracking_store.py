@@ -175,6 +175,27 @@ class SqlTrackingStore:
             )
         return result.rowcount > 0
 
+    async def revoke_links_of_creator(
+        self, user_id: UUID, account_id: UUID | None, now: datetime
+    ) -> int:
+        conditions = [_L.created_by == user_id, _L.revoked_at.is_(None)]
+        if account_id is not None:
+            conditions.append(_L.account_id == account_id)
+        async with self.engine.begin() as conn:
+            result = await conn.execute(
+                sa.update(tables.tracking_links).where(*conditions).values(revoked_at=now)
+            )
+        return int(result.rowcount)
+
+    async def usable_links_of_creator(self, user_id: UUID, now: datetime) -> int:
+        query = (
+            sa.select(sa.func.count())
+            .select_from(tables.tracking_links)
+            .where(_L.created_by == user_id, _L.revoked_at.is_(None), _L.expires_at > now)
+        )
+        async with self.engine.connect() as conn:
+            return int((await conn.execute(query)).scalar_one())
+
     async def touch_link(self, link_id: UUID, now: datetime, *, counted: bool = True) -> None:
         values: dict[str, Any] = {"last_used_at": now}
         if counted:
