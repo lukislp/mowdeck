@@ -188,7 +188,8 @@ async def test_a_demo_visitor_sees_only_their_own_session() -> None:
     assert sessions.status_code == 200, sessions.text
     (own,) = sessions.json()
     assert own["current"] is True
-    assert own["label"] == "VisitorA"
+    assert own["label"] == "Unknown device"  # the demo keeps no browser string (see privacy test)
+    assert own["ip_prefix"] is None
     assert events.status_code == 200, events.text
     sessions_in_events = {event["details"].get("session") for event in events.json()}
     assert sessions_in_events == {own["id"]}
