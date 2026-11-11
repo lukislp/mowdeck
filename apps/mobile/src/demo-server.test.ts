@@ -19,7 +19,7 @@ describe('the demo server address', () => {
   it('is connected through the normal server check', async () => {
     const get = vi.fn().mockResolvedValue({ status: 200, data: { name: 'MowDeck' } });
     await expect(checkServer(DEMO_SERVER_URL, get)).resolves.toEqual({
-      kind: 'ok',
+      kind: 'connect',
       origin: DEMO_SERVER_URL,
       insecure: false,
     });

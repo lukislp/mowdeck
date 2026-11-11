@@ -396,9 +396,11 @@ flowchart LR
 | `account.erase.*` | core | identity | - |
 | `account.erase.entitlements` | core | - | entitlements |
 | `account.erase.fleet` | core | - | fleet |
+| `account.erase.notifications` | core | - | notifications |
 | `account.erase.planner` | core | - | planner |
 | `account.erase.scheduler` | core | - | scheduler |
 | `account.erase.telemetry` | core | - | telemetry |
+| `account.erase.vision` | core | - | vision |
 | `camera.mower.*.relay.*` | CAMERA | camera-relay | fleet |
 | `command.mower.*` | COMMANDS | fleet, realtime, vision | device-gateway, notifications, vision |
 | `command.result.mower.*` | COMMANDS | device-gateway | fleet, realtime, telemetry, vision |

@@ -85,6 +85,8 @@ export interface StartSheetDeps {
   setpoint(command: SetpointCommand): Promise<boolean>;
   /** Send `start_mow`; false when it did not go out. */
   start(request: StartRequest): Promise<boolean>;
+  /** The safety acknowledgement before anything is sent; false when the user declined. */
+  acknowledge(): Promise<boolean>;
   /** Send `return_to_dock`; false when it did not go out. */
   dock(endJob: boolean): Promise<boolean>;
   /** `PUT /mowers/{id}/mow-defaults` (reports its own failure). */
@@ -320,6 +322,8 @@ export class StartSheetFlow {
     const setpoints = setpointCommands(this.setpointDraft, this.#setpointStart);
     this.starting = true;
     try {
+      // Nothing goes out, not even a setpoint, before the user confirmed the area is clear.
+      if (!(await this.deps.acknowledge())) return;
       // Setpoints first, one after the other, then the start: the controller runs a mower's
       // commands in arrival order, so the job starts with the new blade height and speed.
       for (const command of setpoints) {

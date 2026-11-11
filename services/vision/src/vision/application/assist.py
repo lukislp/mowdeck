@@ -236,14 +236,34 @@ class VisionService:
         self.clock = clock
         self.config = config
         self._tasks: set[asyncio.Task[None]] = set()
+        self._task_accounts: dict[asyncio.Task[None], UUID] = {}
+        """The account each running analysis or execution works for."""
         self._cancel: dict[UUID, asyncio.Event] = {}
 
     # --- background tasks -----------------------------------------------------------------
 
-    def _spawn(self, coro: Coroutine[Any, Any, None], name: str) -> None:
+    def _spawn(self, coro: Coroutine[Any, Any, None], name: str, account_id: UUID) -> None:
         task = asyncio.create_task(coro, name=name)
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._task_accounts[task] = account_id
+
+        def done(finished: asyncio.Task[None]) -> None:
+            self._tasks.discard(finished)
+            self._task_accounts.pop(finished, None)
+
+        task.add_done_callback(done)
+
+    async def stop_account(self, account_id: UUID) -> int:
+        """Cancel the analyses and executions running for an account and wait until they
+        ended; returns how many. The account purge calls it first (ADR 0082): an analysis
+        records its interruption and an execution closes its drive session while their rows
+        still exist, so the purge that follows removes those too and no job of the account runs
+        on afterwards. Nothing is sent to a model by stopping."""
+        tasks = [task for task, owner in self._task_accounts.items() if owner == account_id]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return len(tasks)
 
     async def idle(self) -> None:
         """Wait until every background analysis and execution finished (tests).
@@ -441,9 +461,10 @@ class VisionService:
         await self._announce(proposal.id)
         return proposal
 
-    def spawn(self, coro: Coroutine[Any, Any, None], name: str) -> None:
-        """Run ``coro`` as a tracked background task (awaited by :meth:`idle`)."""
-        self._spawn(coro, name)
+    def spawn(self, coro: Coroutine[Any, Any, None], name: str, account_id: UUID) -> None:
+        """Run ``coro`` as a tracked background task for ``account_id`` (awaited by
+        :meth:`idle`, stopped by :meth:`stop_account`)."""
+        self._spawn(coro, name, account_id)
 
     def _check_images(self, images: list[Image]) -> None:
         if len(images) > self.config.max_images:
@@ -565,6 +586,7 @@ class VisionService:
                 proposal, provider, images, context, principal if restore_light else None
             ),
             f"vision-analyse-{proposal.id}",
+            proposal.account_id,
         )
         return proposal
 
@@ -893,7 +915,7 @@ class VisionService:
         state, detail = decision.state, decision.detail
         drive = decision.action in (ProposalAction.DRIVE, ProposalAction.RESUME)
         now = self.clock()
-        await self.store.record_request(
+        recorded = await self.store.record_request(
             ProviderRequest(
                 id=uuid4(),
                 account_id=proposal.account_id,
@@ -915,6 +937,11 @@ class VisionService:
                 ),
             )
         )
+        if not recorded:
+            # The proposal was deleted while the model answered (its account was erased,
+            # ADR 0082): the result belongs to nobody and nothing of it is stored.
+            _log.info("vision analysis dropped, its proposal is gone", proposal_id=str(proposal.id))
+            return
         expires = now + timedelta(seconds=self.config.proposal_ttl_seconds)
         if state is ProposalState.PROPOSED and drive:
             await self.store.put_steps(_audit_steps(proposal.id, assessment.result.proposal))
@@ -1124,7 +1151,9 @@ class VisionService:
             action=approved.action.value,
             low_confidence=approved.low_confidence,
         )
-        self._spawn(self._execute(approved, approver, account), f"vision-execute-{proposal_id}")
+        self._spawn(
+            self._execute(approved, approver, account), f"vision-execute-{proposal_id}", account
+        )
         return approved
 
     async def _execute(self, proposal: Proposal, approver: PrincipalRef, account: UUID) -> None:

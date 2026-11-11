@@ -23,8 +23,17 @@ const de = {
   insecure:
     'Ohne HTTPS funktioniert die Anmeldung nicht (das Sitzungs-Cookie ist nur über HTTPS gültig).',
   unreachable:
-    'Unter dieser Adresse antwortet kein MowDeck-Server. Adresse, WLAN/VPN und Zertifikat prüfen.',
+    'Der Server ist von hier aus gerade nicht erreichbar. Adresse, WLAN/VPN und Zertifikat prüfen.',
+  notMowDeck:
+    'Diese Adresse antwortet, ist aber kein MowDeck-Server. Die App öffnet nur MowDeck-Server. Adresse prüfen, oder zuerst die Anmeldeseite des WLANs bestätigen.',
+  redirected: 'Diese Adresse leitet zu {host} weiter. Fahre nur fort, wenn das dein Server ist.',
+  redirectedOpen: 'Mit {host} verbinden',
   useAnyway: 'Trotzdem verwenden',
+  anywayTitle: '{host} ohne Prüfung öffnen?',
+  anywayBody:
+    'Die App kann {host} gerade nicht prüfen. Fahre nur fort, wenn das dein eigener MowDeck-Server ist, zum Beispiel weil du nicht im Heimnetz bist.',
+  anywayOpen: '{host} öffnen',
+  cancel: 'Abbrechen',
   tryDemo: 'Demo ausprobieren',
   demoNote: 'Die Demo nutzt simulierte Mäher und wird regelmäßig zurückgesetzt.',
   about: 'Was ist MowDeck?',
@@ -72,8 +81,17 @@ const en: Record<keyof typeof de, string> = {
   credentials: 'The address must not contain a user name or password.',
   insecure: 'Login needs HTTPS (the session cookie is only valid over HTTPS).',
   unreachable:
-    'No MowDeck server answers at this address. Check the address, Wi-Fi/VPN and certificate.',
+    'The server cannot be reached from here right now. Check the address, Wi-Fi/VPN and certificate.',
+  notMowDeck:
+    'This address answers, but it is not a MowDeck server. The app only opens MowDeck servers. Check the address, or confirm the Wi-Fi sign-in page first.',
+  redirected: 'This address redirects to {host}. Only continue if that is your server.',
+  redirectedOpen: 'Connect to {host}',
   useAnyway: 'Use anyway',
+  anywayTitle: 'Open {host} without checking?',
+  anywayBody:
+    'The app cannot check {host} right now. Only continue if it is your own MowDeck server, for example because you are not on your home network.',
+  anywayOpen: 'Open {host}',
+  cancel: 'Cancel',
   tryDemo: 'Try the demo',
   demoNote: 'The demo uses simulated mowers and is reset regularly.',
   about: 'What is MowDeck?',
@@ -141,6 +159,11 @@ export function storeLanguage(storage: LanguageStorage | null, language: Languag
   } catch {
     // the choice then lasts until the page closes
   }
+}
+
+/** Put values into a text's `{name}` placeholders. */
+export function fill(text: string, values: Record<string, string>): string {
+  return text.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);
 }
 
 export function texts(language: string | undefined): Record<TextKey, string> {

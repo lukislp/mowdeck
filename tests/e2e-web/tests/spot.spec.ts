@@ -23,6 +23,7 @@ import {
   waitForMap,
   watchCsp,
   type SpotCaps,
+  acknowledgeSafety,
 } from './support';
 
 test('spot mowing: spot mode, the sheet, and a run when the gateway offers spot runs', async ({
@@ -93,6 +94,7 @@ test('spot mowing: spot mode, the sheet, and a run when the gateway offers spot 
 
   // --- the run: run bar with progress, STOP ends it with the reason in words ----------------
   await start.click();
+  await acknowledgeSafety(page);
   const runBar = page.getByTestId('spot-run');
   await expect(runBar).toBeVisible({ timeout: 30_000 });
   await expect(runBar.getByTestId('spot-run-blades')).toContainText('Trockenlauf');

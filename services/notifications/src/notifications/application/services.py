@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from mowdeck_contracts.v1 import NewDeviceLogin, NotificationKind
+from mowdeck_service_kit.erasure import AccountErasure
 
 from notifications.application.context import NotificationsConfig
 from notifications.application.demo import DemoPurge
+from notifications.application.erasure import account_erasure
 from notifications.application.fanout import Fanout, Notified
 from notifications.application.live_activity import LiveActivities
 from notifications.application.outbox import DeliveryObserver, Outbox
@@ -118,7 +120,9 @@ class Services:
     push_images: PushImages | None = None
     """Serves the push image URLs; None without a public URL and signing secret."""
     demo: DemoPurge | None = None
-    """The demo sandbox purge (ADR 0076)."""
+    """The account purge (the demo sandboxes, ADR 0076; the erasure reuses it)."""
+    erasure: AccountErasure | None = None
+    """Answers ``account.erase.notifications`` (ADR 0082)."""
 
 
 def build_services(
@@ -141,14 +145,17 @@ def build_services(
     fanout = Fanout(store, channels, views, publisher, catalog, config, clock, photos, errors)
     live = LiveActivities(store, channels, views, clock, errors)
     watcher = Watcher(store, fanout, config, clock, live)
+    outbox = Outbox(store, channels, config, clock, observer)
+    purge = DemoPurge(store, [fanout.forget_mowers, watcher.forget_mowers, live.forget_mowers])
     return Services(
         watcher=watcher,
         fanout=fanout,
-        outbox=Outbox(store, channels, config, clock, observer),
+        outbox=outbox,
         users=UserNotifications(store, fanout, channels, views, catalog, config, clock),
         accounts=Accounts(store, fanout, catalog, config),
         config=config,
         live=live,
         push_images=PushImages(store, image_links, clock) if image_links is not None else None,
-        demo=DemoPurge(store, [fanout.forget_mowers, watcher.forget_mowers, live.forget_mowers]),
+        demo=purge,
+        erasure=account_erasure(purge, store, outbox, fanout),
     )

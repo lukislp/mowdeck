@@ -13,8 +13,8 @@ tables that Identity does not ask would silently keep personal data. The test fa
 * a contract list (``ERASURE_SERVICES``) that differs from the services with tables.
 
 :data:`PENDING` is the work of the follow-up steps of ADR 0082 and must be empty when step 2c
-has landed: 2b Notifications and Vision; 2c Billing. Fleet, Scheduler, Telemetry, Planner and
-Entitlements answer since step 2a.
+has landed: 2c Billing. Fleet, Scheduler, Telemetry, Planner and Entitlements answer since
+step 2a, Notifications and Vision since step 2b.
 """
 
 import importlib.util
@@ -29,8 +29,6 @@ ORCHESTRATOR = "identity"
 """Identity owns the accounts and asks the others; it erases its own rows itself."""
 
 PENDING: dict[str, str] = {
-    "notifications": "2b",
-    "vision": "2b",
     "billing": "2c",
 }
 """Services that own tables and do not answer ``account.erase.<service>`` yet, with the step of

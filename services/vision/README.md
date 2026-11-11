@@ -75,6 +75,7 @@ Proposal states: `analysing`, then `proposed` (waits for approval until `expires
 | requests | `fleet.commands.issue` | `IssueCommandRequest` (`origin: vision`) | `return_to_dock` after a successful Find Dock or an approved dock proposal; `resume_mow` for an approved `resume`; `set_light` on and off around a dark photo (on the requester's behalf) |
 | requests | `gateway.mower.<id>.photo` | `PhotoRequest`, `PhotoReply` | a still image when the app sent none |
 | subscribes (every instance) | `telemetry.mower.*`, `device.mower.>` (newest per subject), `command.mower.*`, `command.result.mower.*` | | the view: states (without acknowledgements, ADR 0078: the next state replaces a lost one), maps, capabilities, the route of the running job (`path`), recent commands and the areas of the newest `start_mow`, emergency stops, command results |
+| answers (queue `vision-erasure`, internal, Identity only) | `account.erase.vision` | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | subscribes (durable `vision-identity`) | `event.identity.>` | `UserChanged` | disabled or deleted users lose their provider settings and preferences |
 | subscribes (durable queue `vision-auto`) | `telemetry.mower.*` | `MowerState` | automatic analysis on errors (not subscribed with `VISION_AUTO_ENABLED=false`) |
 
@@ -155,6 +156,20 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | `MOWDECK_VISION_STEREO_UPGRADE_SECONDS` | `8.0` | A manual request with a single camera frame waits this long for the gateway's stereo pair; 0 never asks. |
 | `MOWDECK_VISION_SWEEP_SECONDS` | `30.0` | Interval of the sweep (expiry, interrupted work, image purge). |
 
+## Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.vision` (core NATS, internal, no principal) after Fleet removed the account's mowers, and Vision deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Stopped first:** the analyses (manual and automatic, also one still waiting for its photo) and the executions running for the account in this replica. An interrupted analysis records that it was interrupted and an execution closes its drive session while their rows still exist, so the delete that follows removes those rows too and no job of the account runs on.
+- **Deleted, in one transaction:** `proposals` with their `proposal_images` (the pictures the model saw: they are stored in the database, there is no object storage or file on disk) and `proposal_steps`, `provider_requests`, `user_providers` (model, base URL, the encrypted key and headers), `user_preferences` (stereo preference, the opt-in to automatic analyses and the consent to a cloud model with its family, model and endpoint, [ADR 0081](../../docs/adr/0081-explicit-consent-before-cloud-ai.md)) and `auto_watch`. Every table with a `user_id` also has the `account_id`. Vision keeps no conversations and no embeddings.
+- **In memory:** the bus view of the account's mowers (state, map, capabilities, route, recent commands, track, the areas of the last start; the account of a mower is also taken from its commands) and the errors the automatic analysis remembered for them.
+- **AI provider:** nothing is sent to a model as part of an erasure. A request a model already received stays with its provider under the provider's terms; a user's own API key is deleted here and stays valid at the provider until the user revokes it there.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and nothing of the account is left, counted after the purge over every table with an `account_id` column **and** the pictures and drive steps of the account's proposals (those two tables have no account column and are reached through the proposal). A repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again.
+
+A result that arrives after the delete is not stored: `provider_requests` rows that name a proposal are inserted only while that proposal exists (checked with the insert, the proposal row locked `FOR KEY SHARE`), so an analysis another replica was still running drops its answer. Not closed by this: with several replicas the stopping and the memory reach the replica that answers (another one may finish a request it already sent to the model, and an automatic analysis it had started before the delete can still record its proposal); and a state of a mower of the account that arrives after the purge writes its `auto_watch` row again, because the service cannot tell an erased account from one it has not seen yet.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the `Store` port); the stopping is `VisionService.stop_account`, the SQL is in `adapters/db/`.
+
 ## Data model
 
 `proposals` (one row per round, with `light_used`, `stereo`, `frames`, `trigger` and `trigger_error_code`, `action` (`drive` or `return_to_dock`) and `fallback` from migration 0006, `low_confidence`, `alternative_action`, `model_refused` and `approved_option` from migration 0007; a partial unique index allows one open proposal per mower), `proposal_steps` (per step: timestamps, frames, outcome), `proposal_images` (deleted after `delete_after`), `provider_requests` (cost accounting, daily caps), `user_providers` (model, base URL, AES-GCM ciphertexts of the key and the extra headers, last test), `user_preferences` (per user and account: `stereo_frames` from migration 0004, `auto_analysis` and the principal kind it acts as from migration 0005; deleted with the user), `auto_watch` (the current recoverable error per mower). Migrations: `python -m vision.adapters.db.migrate` (Compose `vision-migrate`, Helm a Job).
@@ -164,8 +179,8 @@ The kit settings (`MOWDECK_DATABASE_URL`, `MOWDECK_NATS_URL`, ...), OpenFGA (`MO
 | Layer | Contents |
 | --- | --- |
 | `domain` | models and the answer schema, families and base URL policy, scene context (mower frame), rules (evaluation, start and abort rules, geofence, verification) |
-| `application` | `assist.py` (requests, decisions, rounds, sweeps), `executor.py` (drive session, frames, safety watch, verification, return to dock), `providers.py` (settings, resolution, test), `ports.py` |
-| `adapters` | `api` (routes, schemas, problem mapping), `bus` (view, Fleet, photos, publisher, subscriptions), `db` (tables, store, migrations), `providers` (LiteLLM, fake, prompt and schema), `crypto.py`, `memory.py` |
+| `application` | `erasure.py` (the account erasure), `assist.py` (requests, decisions, rounds, sweeps), `executor.py` (drive session, frames, safety watch, verification, return to dock), `providers.py` (settings, resolution, test), `ports.py` |
+| `adapters` | `api` (routes, schemas, problem mapping), `bus` (view, Fleet, photos, publisher, subscriptions, the account erasure request), `db` (tables, store, migrations), `providers` (LiteLLM, fake, prompt and schema), `crypto.py`, `memory.py` |
 
 Startup imports LiteLLM first, on the main thread, before the service subscribes to anything or serves a request (2 to 7 s, logged as `litellm loaded` with the seconds). A warm-up thread used to import it while the startup went on and sometimes tripped Python's module-lock deadlock detection (`loading litellm failed`), so the first analysis paid the import. A failed import is a single warning; the first analysis tries again.
 

@@ -19,6 +19,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 type Command = { kind: string; status: string; pattern?: Record<string, unknown> | null };
@@ -110,6 +111,7 @@ test('start options: shown behind "Mehr", sent with the start, remembered withou
   await expect(more).toHaveText('Mehr · 4');
 
   await page.getByTestId('area-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('mower-state')).toContainText('Mäht', { timeout: 30_000 });
 
   // The start carried exactly the chosen options and the simulator ran it.
