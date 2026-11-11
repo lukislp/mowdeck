@@ -7,11 +7,13 @@ from dataclasses import dataclass
 
 from mowdeck_authz import Authorizer
 from mowdeck_service_kit.entitlements import Entitlements
+from mowdeck_service_kit.erasure import AccountErasure
 
 from scheduler.application.access import Access
 from scheduler.application.angles import AngleService
 from scheduler.application.context import SchedulerConfig
 from scheduler.application.demo_purge import AccountPurge
+from scheduler.application.erasure import account_erasure
 from scheduler.application.ingest import Ingest
 from scheduler.application.ports import (
     Clock,
@@ -38,6 +40,8 @@ class Services:
     config: SchedulerConfig
     angles: AngleService
     purge: AccountPurge
+    erasure: AccountErasure
+    """Answers ``account.erase.scheduler`` (ADR 0082)."""
 
 
 def build_services(
@@ -55,13 +59,16 @@ def build_services(
     """Wire the use cases."""
     access = Access(authorizer)
     weather = WeatherService(store, provider)
+    ingest = Ingest(store)
+    purge = AccountPurge(store)
     return Services(
         schedules=ScheduleService(store, access, fleet, weather, config, clock, entitlements),
         runner=Runner(store, fleet, access, weather, events, config, clock, observer),
-        ingest=Ingest(store),
+        ingest=ingest,
         weather=weather,
         access=access,
         config=config,
         angles=AngleService(store, clock),
-        purge=AccountPurge(store),
+        purge=purge,
+        erasure=account_erasure(purge, store, ingest),
     )

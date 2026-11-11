@@ -87,6 +87,15 @@ class MemoryTx:
             del self._data.facts[mower_id]
         return len(templates) + len(mowers)
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        counts = {
+            "templates": sum(1 for key in self._data.templates if key[0] == account_id),
+            "mower_facts": sum(
+                1 for facts in self._data.facts.values() if facts.account_id == account_id
+            ),
+        }
+        return {table: found for table, found in counts.items() if found}
+
 
 class MemoryStore:
     """``Store`` in memory."""

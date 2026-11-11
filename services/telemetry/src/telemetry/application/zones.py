@@ -361,6 +361,11 @@ class Zones:
 
     # --- evaluation ---------------------------------------------------------------------------
 
+    def clear_shapes(self) -> None:
+        """Drop the prepared zone shapes (an account is being deleted, ADR 0082: the shapes are
+        keyed by zone, not by account; the next evaluation prepares them again)."""
+        self._shapes.clear()
+
     def _shapes_of(self, zones: list[VirtualZone]) -> list[ZoneShape]:
         if len(self._shapes) > 4096:
             self._shapes.clear()

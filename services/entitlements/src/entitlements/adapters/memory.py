@@ -100,6 +100,13 @@ class MemoryTx:
         self.state.history = [h for h in self.state.history if h.account_id != account_id]
         return before - len(self.state.accounts) - len(self.state.history)
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        counts = {
+            "account_plans": int(account_id in self.state.accounts),
+            "plan_history": sum(1 for h in self.state.history if h.account_id == account_id),
+        }
+        return {table: found for table, found in counts.items() if found}
+
 
 class MemoryStore:
     """The state lives in this object; one transaction at a time."""

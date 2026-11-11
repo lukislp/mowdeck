@@ -477,3 +477,22 @@ class MemoryStore:
             data.daily = drop(data.daily)
             data.blade_changes = drop(data.blade_changes)
             return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        data = self.data
+        tables: dict[str, Collection[_Owned]] = {
+            "mower_directory": data.directory.values(),
+            "mower_latest": data.latest.values(),
+            "mower_history": data.history.values(),
+            "mower_positions": data.positions.values(),
+            "command_timeline": data.commands.values(),
+            "mower_snapshots": data.snapshots.values(),
+            "mower_health": data.health.values(),
+            "mower_health_daily": data.daily.values(),
+            "blade_changes": data.blade_changes.values(),
+        }
+        counts = {
+            name: sum(1 for row in rows if row.account_id == account_id)
+            for name, rows in tables.items()
+        }
+        return {name: found for name, found in counts.items() if found}

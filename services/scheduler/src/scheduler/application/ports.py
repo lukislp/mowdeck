@@ -146,7 +146,13 @@ class Tx(Protocol):
 
     async def purge_account(self, account_id: UUID) -> int:
         """Delete every row of the account: schedules, runs, mower status, places,
-        capabilities, angles and rotation (demo purge, ADR 0076); returns the rows deleted."""
+        capabilities, angles and rotation (demo purge, ADR 0076, and account erasure, ADR
+        0082); returns the rows deleted."""
+        ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in every table, by table name; tables without one are left
+        out, so an account the service holds nothing of answers ``{}`` (ADR 0082)."""
         ...
 
 

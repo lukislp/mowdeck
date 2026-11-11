@@ -118,6 +118,14 @@ class MemoryZoneStore:
         }
         return before - len(self.zones) - len(self.presences) - len(self.days)
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        counts = {
+            "virtual_zones": sum(1 for z in self.zones.values() if z.account_id == account_id),
+            "zone_presence": sum(1 for p in self.presences.values() if p.account_id == account_id),
+            "zone_days": sum(1 for d in self.days.values() if d.account_id == account_id),
+        }
+        return {name: found for name, found in counts.items() if found}
+
     def drop_mower(self, mower_id: UUID) -> None:
         """Forget everything of a mower (the SQL store does this in ``drop_mower``)."""
         self.zones = {k: v for k, v in self.zones.items() if v.mower_id != mower_id}

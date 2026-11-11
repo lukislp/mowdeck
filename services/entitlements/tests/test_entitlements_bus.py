@@ -94,7 +94,8 @@ async def test_entitlements_startup_announces_and_seeds_once() -> None:
     async with harness(store=store) as h:
         changed = h.bus.messages(event_subject_for_type(ENTITLEMENTS_PLAN_CHANGED))
         assert len(changed) == 1  # announce_restart: every client drops its snapshots
-        assert len(h.app.state.subscriptions) == 4  # check, plan.set, account.created, grants
+        # check, plan.set, account.created, account erasure, grants
+        assert len(h.app.state.subscriptions) == 5
         operator = await h.operator()
         edited = await h.client.put(
             f"{API}/plans/home",

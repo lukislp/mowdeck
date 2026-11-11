@@ -189,8 +189,14 @@ class Tx(Protocol):
         ...
 
     async def purge_audit(self, account_id: UUID) -> int:
-        """Delete the account's audit rows (only the demo purge, ADR 0076: the audit log is
-        append-only otherwise); returns the number deleted."""
+        """Delete the account's audit rows (only the account purge of an expired demo sandbox,
+        ADR 0076, and of a deleted account, ADR 0082: the audit log is append-only otherwise);
+        returns the number deleted."""
+        ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in every table, by table name; tables without one are left
+        out, so an account Fleet holds nothing of answers ``{}`` (ADR 0082)."""
         ...
 
 

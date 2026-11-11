@@ -108,3 +108,11 @@ class LoginThrottle:
     def succeeded(self, key: ThrottleKey) -> None:
         """Forget the failures of ``key``."""
         self._states.pop(key, None)
+
+    def forget_account(self, account_id: UUID) -> int:
+        """Forget every vendor identity of ``account_id`` (the account is being deleted: the key
+        holds the vendor e-mail address); returns how many were remembered."""
+        keys = [key for key in self._states if key[0] == account_id]
+        for key in keys:
+            del self._states[key]
+        return len(keys)

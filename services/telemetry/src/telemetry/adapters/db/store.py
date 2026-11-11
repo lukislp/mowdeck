@@ -19,6 +19,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_service_kit import get_logger
+from mowdeck_service_kit.db import account_row_counts
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -191,7 +192,8 @@ _ACCOUNT_TABLES = (
     tables.mower_latest,
     tables.mower_directory,
 )
-"""The tables of :class:`SqlStore` with an ``account_id`` column (the demo purge)."""
+"""The tables of :class:`SqlStore` with an ``account_id`` column: what the purge of an account
+deletes and what the account erasure counts afterwards."""
 
 _COPIED_TABLES = (
     tables.mower_history,
@@ -807,6 +809,10 @@ class SqlStore:
                 )
                 removed += result.rowcount
         return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        async with read_connection(self.engine) as conn:
+            return await account_row_counts(conn, _ACCOUNT_TABLES, account_id)
 
     @asynccontextmanager
     async def retention(self) -> AsyncIterator[RetentionScope | None]:

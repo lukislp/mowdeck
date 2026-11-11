@@ -72,9 +72,20 @@ Permission defined by this service (module descriptor): `telemetry.view`, an acc
 | request | `fleet.mowers.list` (core NATS) | at startup, retried with backoff | seeds the directory |
 | request | `gateway.errors.explain`, `gateway.errors.lexicons` (core NATS) | per API request, answers cached an hour | the error lexicons of the adapters installed at the Device-Gateway (see [Error lexicon](#error-lexicon)) |
 | answered | `tracks.positions.query` (core NATS, `PositionTrackRequest` / `PositionTrackReply`) | queue group `telemetry-track` | the position track of one mower of one account for a time range (at most 50 000 points, the range limit of the HTTP queries) as an encoded polyline, for the Planner's coverage and gaps ([ADR 0030](../../docs/adr/0030-mowing-patterns-and-planner.md)); an invalid range is answered with `error` |
+| answered | `account.erase.telemetry` (core NATS, `AccountEraseRequest` / `AccountEraseReply`, internal, Identity only) | queue group `telemetry-erasure` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
 | produced | `event.telemetry.blade_hours.threshold` (`telemetry.blade_hours.threshold`, `BladeHoursThreshold`, stream `EVENTS`) | Notifications | the blade hours since the last blade change crossed the mower's threshold (its own, else `MOWDECK_TELEMETRY_BLADE_HOURS_THRESHOLD`); published once per blade change, after the commit (a failed publish is logged, not retried) |
 
 Handler rules: malformed payloads, payloads whose subject names another mower and states of a foreign account are dropped with a warning (never redelivered). A command result for a mower missing from the directory is redelivered and dropped with a warning on the `MOWDECK_TELEMETRY_UNKNOWN_MOWER_ATTEMPTS`-th delivery. A snapshot whose account differs from the directory entry of its mower is dropped with a warning; an older snapshot never replaces a newer one. Manual drive frames (ten per second) produce command results whose correlation id starts with `drive:`; their `accepted` results are not stored, so they do not flood the timeline (rejected, failed and expired ones are).
+
+### Account erasure
+
+When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)), Identity sends `account.erase.telemetry` (core NATS, internal, no principal) and Telemetry deletes everything it holds of the account. This is not the demo endpoint: it works on every installation and needs no demo mode.
+
+- **Deleted:** the rows of the account in all three stores: `mower_directory`, `mower_latest`, `mower_history`, `mower_positions` (and the thinning watermarks of its mowers in `mower_positions_thinning`), `command_timeline`, `mower_snapshots`, `mower_health`, `mower_health_daily`, `blade_changes`; `virtual_zones`, `zone_presence`, `zone_days`; `tracking_sessions`, `tracking_links`, `tracking_photos`. One transaction per store.
+- **In memory:** the account's aerial tile rate limit, and the caches that are keyed by content, zone or session and so cannot be searched for one account are emptied (rendered widget maps, zone shapes, the map areas of tracking sessions; the next request fills them again), in the replica that answers. The aerial tile cache on disk holds the provider's tiles by URL and nothing of an account.
+- **Reply:** `AccountEraseReply{ok, deleted, error}`. `ok=true` only when the purge ran and no table with an `account_id` column holds a row of the account any more (counted after the purge); a repeated request, or one for an account the service never knew, answers `ok=true, deleted=0`. A purge that raised or left rows answers `ok=false` with the kind of failure and the tables (never row contents; the detail is in the log), and Identity asks again. An account with months of history can take longer to delete than Identity waits for one request (`MOWDECK_IDENTITY_ERASURE_TIMEOUT_SECONDS`); the purge finishes anyway and the next attempt confirms it.
+
+Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the store port); the SQL is in `adapters/db/`.
 
 ### Batched ingestion
 
@@ -236,7 +247,7 @@ Zones the owner draws for a mower whose vendor shares no map areas but that repo
 | `domain/` | rows, write rules (`decide`), fingerprints, bin arithmetic, downsampling, health accounting (`health.py`) | pure Python, no I/O |
 | `application/` | `Ingest`, `Queries`, `Health`, `Retention`, the heatmap binning (`heatmap.py`, pure, Shapely and numpy), the `Store` and `HealthEvents` ports | depends on `domain` and ports only |
 | `adapters/api/` | FastAPI routes, schemas, the object gate, error mapping | translate HTTP to use cases |
-| `adapters/bus/` | the consumers, the Fleet seed and the health event publisher | translate messages to use cases |
+| `adapters/bus/` | the consumers, the Fleet seed, the health event publisher and the account erasure request (`erasure.py`) | translate messages to use cases |
 | `adapters/db/` | SQLAlchemy tables, `SqlStore` (`date_bin`, advisory lock), Alembic migrations | implement the `Store` port |
 | `adapters/memory.py` | in-memory store with the same semantics | tests |
 | `main.py` | wiring (`build_app`), background tasks, `main()` | the only place that knows every layer |
