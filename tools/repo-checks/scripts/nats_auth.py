@@ -97,11 +97,14 @@ _PLAN_CHANGES: tuple[str, ...] = ("event.entitlements.plan.changed",)
 _GRANTS: tuple[str, ...] = ("event.identity.grants.changed",)
 # Every service that forgets a deleted user (mowdeck_service_kit.user_erasure, ADR 0082).
 _USER_DELETED: tuple[str, ...] = ("event.identity.user.deleted",)
+# Every service that verifies access tokens keeps the deny list of deleted users and erased
+# accounts (mowdeck_auth.revocation, ADR 0082).
+_REVOKED: tuple[str, ...] = ("event.identity.access.revoked.*",)
 
 USERS: dict[str, Access] = {
     "billing": Access(
         publish=("event.billing.>", "entitlements.plan.set"),
-        consume=("event.identity.account.created", *_GRANTS),
+        consume=(*_REVOKED, "event.identity.account.created", *_GRANTS),
     ),
     "camera-relay": Access(
         publish=(
@@ -139,12 +142,12 @@ USERS: dict[str, Access] = {
             "gateway.mower.*.tracking",
             "presence.accounts",
         ),
-        consume=("command.mower.*", "event.mower.>"),
+        consume=(*_REVOKED, "command.mower.*", "event.mower.>"),
     ),
     "entitlements": Access(
         publish=("event.entitlements.>",),
         serve=("account.erase.entitlements", "entitlements.check", "entitlements.plan.set"),
-        consume=("event.identity.account.created", *_GRANTS),
+        consume=(*_REVOKED, "event.identity.account.created", *_GRANTS),
     ),
     "fleet": Access(
         publish=(
@@ -175,6 +178,7 @@ USERS: dict[str, Access] = {
             "fleet.targets.resolve",
         ),
         consume=(
+            *_REVOKED,
             "camera.mower.*.relay.*",
             "command.result.mower.*",
             "event.identity.account.created",
@@ -194,7 +198,7 @@ USERS: dict[str, Access] = {
     ),
     "identity": Access(
         publish=(*_PLANS, "account.erase.*", "event.identity.>"),
-        consume=(*_GRANTS, *_USER_DELETED, *_PLAN_CHANGES),
+        consume=(*_REVOKED, *_GRANTS, *_USER_DELETED, *_PLAN_CHANGES),
         # Identity owns accounts and users: it removes their stored events (ADR 0082).
         erase=("event.>",),
     ),
@@ -208,6 +212,7 @@ USERS: dict[str, Access] = {
         ),
         serve=("account.erase.notifications",),
         consume=(
+            *_REVOKED,
             "command.mower.*",
             "device.mower.>",
             "event.identity.>",
@@ -222,7 +227,7 @@ USERS: dict[str, Access] = {
     "planner": Access(
         publish=(*_PLANS, "tracks.positions.query"),
         serve=("account.erase.planner",),
-        consume=("device.mower.>", *_GRANTS, *_PLAN_CHANGES),
+        consume=(*_REVOKED, "device.mower.>", *_GRANTS, *_PLAN_CHANGES),
     ),
     "realtime": Access(
         publish=(
@@ -233,6 +238,7 @@ USERS: dict[str, Access] = {
             "presence.accounts",
         ),
         consume=(
+            *_REVOKED,
             "command.result.mower.*",
             "device.mower.*.capabilities",
             *_GRANTS,
@@ -246,6 +252,7 @@ USERS: dict[str, Access] = {
         publish=(*_PLANS, "event.scheduler.>", "fleet.commands.issue", "fleet.targets.resolve"),
         serve=("account.erase.scheduler",),
         consume=(
+            *_REVOKED,
             "device.mower.>",
             *_GRANTS,
             *_USER_DELETED,
@@ -266,6 +273,7 @@ USERS: dict[str, Access] = {
         ),
         serve=("account.erase.telemetry", "tracks.positions.query"),
         consume=(
+            *_REVOKED,
             "command.result.mower.*",
             "device.mower.>",
             *_USER_DELETED,
@@ -286,6 +294,7 @@ USERS: dict[str, Access] = {
         ),
         serve=("account.erase.vision",),
         consume=(
+            *_REVOKED,
             "command.mower.*",
             "command.result.mower.*",
             "device.mower.>",
@@ -451,8 +460,21 @@ LIB_ENTRY_POINTS: Mapping[str, tuple[tuple[Kind, str], ...]] = {
     ),
     # mowdeck_authz.events: cache invalidation on grant changes.
     "subscribe_cache_invalidation": (("consume", "GRANTS_CHANGED_SUBJECT"),),
+    # mowdeck_auth.revocation: the deny list of the token verifier (ADR 0082). The kit attaches
+    # a JwtPrincipalResolver to the bus (create_app); Realtime, which verifies the token of a
+    # WebSocket itself, subscribes directly.
+    "JwtPrincipalResolver": (("consume", "ALL_ACCESS_REVOKED"),),
+    "subscribe_revocations": (("consume", "ALL_ACCESS_REVOKED"),),
 }
 """Library functions that use the bus on the caller's behalf, by name: (kind, constant)."""
+
+LIB_ENTRY_POINTS_WITH_A_BUS: Mapping[str, tuple[tuple[Kind, str], ...]] = {
+    # The resolver every HTTP service builds. It listens only where the service has a bus: a
+    # service without a NATS user (Assistant: no bus, no data) verifies tokens without the list.
+    "principal_resolver_from_env": (("consume", "ALL_ACCESS_REVOKED"),),
+}
+"""Like :data:`LIB_ENTRY_POINTS`, for functions that use the bus only when the service has one
+(a NATS user in :data:`USERS`)."""
 
 
 def _arch(root: Path) -> ModuleType:
@@ -551,6 +573,9 @@ def scan(root: Path) -> dict[str, set[tuple[Kind, str]]]:
                         uses.add(("publish", subject))
                 for kind, const in LIB_ENTRY_POINTS.get(name, ()):
                     uses.add((kind, constant(const)))
+                if service_dir.name in USERS:
+                    for kind, const in LIB_ENTRY_POINTS_WITH_A_BUS.get(name, ()):
+                        uses.add((kind, constant(const)))
                 for keyword in node.keywords:  # EventEnvelope(type=EVENT, ...)
                     typed = event_type(keyword.value)
                     if keyword.arg == "type" and typed:

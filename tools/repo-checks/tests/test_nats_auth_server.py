@@ -24,13 +24,24 @@ import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import nats
 import nats.errors
 import pytest
-from mowdeck_service_kit.bus import BusError, BusMessage, JetStreamBus
+from mowdeck_auth import RevocationList, subscribe_revocations
+from mowdeck_contracts.v1 import (
+    IDENTITY_ACCESS_REVOKED,
+    AccessRevoked,
+    AccessScope,
+    EventEnvelope,
+    Principal,
+    PrincipalKind,
+)
+from mowdeck_contracts.v1.subjects import access_revoked_subject
+from mowdeck_service_kit.bus import BusError, BusMessage, JetStreamBus, publish_event
 from nats.aio.client import Client
 
 URL = os.environ.get("MOWDECK_TEST_NATS_AUTH_URL")
@@ -286,6 +297,53 @@ async def test_identity_erases_single_events_and_nobody_else_can(streams: None) 
         with pytest.raises(nats.errors.TimeoutError):
             await client.nc.request("$JS.API.STREAM.MSG.DELETE.EVENTS", b'{"seq": 1}', 1)
         assert await client.violation("$js.api.stream.msg.delete.events")
+
+
+async def test_every_token_verifier_hears_a_revocation_and_only_identity_sends_one(
+    streams: None,
+) -> None:
+    """The deny list of deleted users and erased accounts (ADR 0082): Identity publishes an
+    entry on the subject of its id, a service's verifier reads it live and again after a
+    restart, and no other service can put an entry there."""
+    now = datetime.now(UTC)
+    entry = AccessRevoked(
+        scope=AccessScope.SUBJECT,
+        id=uuid4(),
+        issued_before=now,
+        expires_at=now + timedelta(minutes=11),
+    )
+    envelope = EventEnvelope[AccessRevoked](
+        type=IDENTITY_ACCESS_REVOKED, producer="identity", payload=entry
+    )
+    token = Principal(subject=entry.id, account_id=uuid4(), kind=PrincipalKind.USER)
+    identity, planner, restarted = _bus("identity"), _bus("planner"), _bus("planner")
+    await identity.connect()
+    await planner.connect()
+    try:
+        live = RevocationList()
+        await subscribe_revocations(planner, live)
+        await publish_event(identity, envelope, subject=access_revoked_subject(entry.id))
+        for _ in range(100):
+            if live.refuses(token, now):
+                break
+            await asyncio.sleep(0.05)
+        assert live.refuses(token, now)
+
+        await restarted.connect()  # a replica that starts while the entry is in force
+        replayed = RevocationList()
+        await subscribe_revocations(restarted, replayed)
+        for _ in range(100):
+            if replayed.refuses(token, now):
+                break
+            await asyncio.sleep(0.05)
+        assert replayed.refuses(token, now)
+
+        with pytest.raises(BusError):  # only Identity publishes below event.identity
+            await publish_event(planner, envelope, subject=access_revoked_subject(uuid4()))
+    finally:
+        await identity.close()
+        await planner.close()
+        await restarted.close()
 
 
 async def test_only_the_streams_job_changes_streams(streams: None) -> None:

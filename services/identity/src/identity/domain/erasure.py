@@ -210,6 +210,25 @@ def event_names_user(event: Mapping[str, Any], user_id: UUID) -> bool:
     )
 
 
+TOKEN_SKEW = timedelta(seconds=60)
+"""How much longer than its lifetime an access token may be accepted somewhere: the leeway a
+verifier allows on ``exp`` (``MOWDECK_AUTH_LEEWAY_SECONDS``, default 30 s) plus as much again
+for clocks that differ between hosts. A verifier leeway above this would break the rule below."""
+
+
+def tokens_expired_at(
+    ended_at: datetime, access_token_ttl: timedelta, skew: timedelta = TOKEN_SKEW
+) -> datetime:
+    """From when on no access token issued up to ``ended_at`` can be accepted anywhere: its
+    lifetime (the one setting the issuer signs tokens with) plus the skew.
+
+    Access tokens are verified offline, so ending the sessions does not end the tokens. The purge
+    of an account asks no service to delete before this moment (a still valid token could write
+    rows again after the service confirmed), and a deny list entry
+    (``identity.access.revoked``) lives exactly until then."""
+    return ended_at + access_token_ttl + skew
+
+
 def grace_over(account: Account, now: datetime) -> bool:
     """Whether the grace period of an account scheduled for deletion has passed."""
     return (
@@ -265,9 +284,18 @@ class AccountErasure:
         self.state = ErasureState(self.state)
 
     @classmethod
-    def begin(cls, account_id: UUID, required: Sequence[str], now: datetime) -> "AccountErasure":
-        """The record of a purge that starts now (due at once)."""
-        return cls(account_id, now, list(dict.fromkeys(required)), next_attempt_at=now)
+    def begin(
+        cls,
+        account_id: UUID,
+        required: Sequence[str],
+        now: datetime,
+        *,
+        ask_from: datetime | None = None,
+    ) -> "AccountErasure":
+        """The record of a purge that starts now. The services are asked from ``ask_from`` on
+        (:func:`tokens_expired_at`: when the last access token of the account has run out);
+        without it the first attempt is due at once."""
+        return cls(account_id, now, list(dict.fromkeys(required)), next_attempt_at=ask_from or now)
 
     @property
     def open_services(self) -> list[str]:

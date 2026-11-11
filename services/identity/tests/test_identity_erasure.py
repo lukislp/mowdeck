@@ -71,8 +71,21 @@ async def _record(h: Harness, account_id: UUID) -> AccountErasure:
     return found
 
 
+EXPIRED = timedelta(minutes=11)
+"""The access token lifetime plus the skew: the purge asks no service before the last token
+issued for the account has run out (``test_identity_revoked_access`` has the rule's tests)."""
+
+
+async def _begin(h: Harness) -> int:
+    """Start the purges that are due and let the tokens of those accounts expire; how many."""
+    begun = await _erasure(h).begin_due()
+    h.clock.advance(EXPIRED)
+    return begun
+
+
 async def _finish(h: Harness) -> None:
-    """Sweep, wait out the settle time after Fleet, sweep again."""
+    """Begin, sweep, wait out the settle time after Fleet, sweep again."""
+    await _begin(h)
     await _erasure(h).sweep()
     h.clock.advance(timedelta(seconds=31))
     await _erasure(h).sweep()
@@ -86,10 +99,11 @@ async def test_nothing_happens_before_the_grace_period_is_over() -> None:
         h.clock.advance(timedelta(days=6, hours=23))
         early = await _erasure(h).sweep()
         h.clock.advance(timedelta(hours=2))
-        late = await _erasure(h).sweep()
+        late = await _begin(h)
+        await _erasure(h).sweep()
         async with h.store.transaction() as tx:
             acct = await tx.accounts.get(id=lukas.account_id)
-    assert (early.begun, late.begun) == (0, 1)
+    assert (early.begun, late) == (0, 1)
     assert acct is not None and acct.status is AccountStatus.PURGING
     assert fake.calls == [("fleet", lukas.account_id)]
 
@@ -101,6 +115,7 @@ async def test_a_deleted_account_is_erased_in_every_service_then_in_identity() -
         bob = await h.register("bob")
         user_id = lukas.user_id
         await _schedule(h, lukas)
+        await _begin(h)
         first = await _erasure(h).sweep()
         after_fleet = [s for s, _ in fake.calls]
         mid = await _record(h, lukas.account_id)
@@ -124,7 +139,7 @@ async def test_a_deleted_account_is_erased_in_every_service_then_in_identity() -
         gone = await h.client.post(
             f"{API}/session", json={"username": "lukas", "password": PASSWORD}
         )
-    assert (first.begun, first.pending, first.erased) == (1, 1, 0)
+    assert (first.begun, first.pending, first.erased) == (0, 1, 0)  # begun before, see _begin
     assert after_fleet == ["fleet"]  # the others wait until the mowers' last states landed
     assert mid.confirmed == ["fleet"] and mid.state is ErasureState.PURGING
     assert second.erased == 1
@@ -143,6 +158,7 @@ async def test_a_failing_service_is_retried_with_backoff_and_skipped_services_st
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         await _erasure(h).sweep()
         h.clock.advance(timedelta(seconds=31))
         failed = await _erasure(h).sweep()
@@ -173,6 +189,7 @@ async def test_identity_keeps_its_rows_while_one_service_has_not_confirmed() -> 
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         for _ in range(4):
             await _erasure(h).sweep()
             h.clock.advance(timedelta(minutes=11))
@@ -191,6 +208,7 @@ async def test_the_purge_cuts_every_access_and_cannot_be_restored() -> None:
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         await _erasure(h).sweep()
         refresh = await h.client.post(
             f"{API}/session/refresh", json={"refresh_token": lukas.refresh_token}
@@ -202,7 +220,9 @@ async def test_the_purge_cuts_every_access_and_cannot_be_restored() -> None:
         tuples = h.tuples_of(f"user:{lukas.user_id}")
     assert refresh.status_code == 401
     assert login.status_code == 401
-    assert restore.status_code == 404  # no tuple: invisible, and irreversible
+    # Irreversible: the access token is on the deny list since the purge began (401), and
+    # without it there is no tuple that would make the account visible.
+    assert restore.status_code == 401
     assert tuples == set()
 
 
@@ -260,7 +280,7 @@ async def test_two_replicas_do_not_run_the_same_purge() -> None:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
         service = _erasure(h)
-        await service.begin_due()
+        await _begin(h)
         claimed = await service._claim_due()
         again = await service._claim_due()
     assert [e.account_id for e in claimed] == [lukas.account_id]
@@ -285,7 +305,7 @@ async def test_a_failure_in_identity_itself_is_retried_too(monkeypatch: pytest.M
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
         service = _erasure(h)
-        await service.begin_due()
+        await _begin(h)
 
         async def broken(_: AccountErasure, __: int) -> None:
             msg = "database busy"
@@ -309,6 +329,7 @@ async def test_a_purge_that_stays_stuck_keeps_failing_loudly() -> None:
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         await _erasure(h).sweep()
         h.clock.advance(timedelta(hours=2))  # past stall_after: logged as an error
         stuck = await _erasure(h).sweep()
@@ -323,6 +344,7 @@ async def test_the_loop_sweeps_and_survives_a_failing_sweep(
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         service = _erasure(h)
         task = asyncio.create_task(service.run(0.01))
         await asyncio.sleep(0.2)
@@ -427,6 +449,7 @@ async def test_the_operator_sees_open_and_finished_purges() -> None:
     async with harness(eraser=fake, **NOW_GRACE) as h:
         lukas = await h.register("lukas")
         await _schedule(h, lukas)
+        await _begin(h)
         await _erasure(h).sweep()
         h.clock.advance(timedelta(seconds=31))
         await _erasure(h).sweep()

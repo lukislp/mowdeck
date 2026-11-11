@@ -506,10 +506,16 @@ def outgoing_headers(
     return result
 
 
-async def publish_event(bus: EventBus, envelope: EventEnvelope[Any]) -> PublishResult:
-    """Publish a domain event on ``event.<domain>.<name>`` with ``msg_id = envelope.id``."""
+async def publish_event(
+    bus: EventBus, envelope: EventEnvelope[Any], *, subject: str | None = None
+) -> PublishResult:
+    """Publish a domain event on ``event.<domain>.<name>`` with ``msg_id = envelope.id``.
+
+    ``subject`` replaces the subject of the type for the rare event whose subject carries an id
+    below it (``event.identity.access.revoked.<id>``, so the newest one per id can be read back).
+    """
     return await bus.publish(
-        event_subject_for_type(envelope.type),
+        subject or event_subject_for_type(envelope.type),
         envelope,
         msg_id=str(envelope.id),
         headers={

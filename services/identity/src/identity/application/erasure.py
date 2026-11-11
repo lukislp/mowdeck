@@ -9,14 +9,20 @@ demand:
 
 1. **Begin.** An account whose grace period is over becomes ``purging``: all sessions end, the
    authorization tuples of its members and tokens go, and an :class:`AccountErasure` record
-   names the services that must confirm. From here there is no way back.
-2. **Ask.** Every required service gets a core NATS request (``account.erase.<service>``, the
+   names the services that must confirm. From here there is no way back. No token is issued for
+   the account any more, and ``identity.access.revoked`` tells every service to refuse the ones
+   that exist.
+2. **Wait.** Access tokens are verified offline and live for minutes. No service is asked
+   before the last one issued for the account has expired
+   (:func:`~identity.domain.erasure.tokens_expired_at`, with the lifetime the issuer signs
+   with): a service that confirmed must not get a write from a still valid token afterwards.
+3. **Ask.** Every required service gets a core NATS request (``account.erase.<service>``, the
    port :class:`~identity.application.ports.AccountEraser`), Fleet first. A confirmation is stored
    at once, so a retry skips it; a failure is stored with the reason and the next attempt waits
    longer each time (a service that is down is asked again, never skipped). A purge that runs
    longer than ``stall_after`` logs an error on every attempt: the account is locked and its
    data is not gone yet, which an operator has to look at (``python -m identity.cli erasures``).
-3. **Finish.** When the last service confirmed, Identity removes the account's domain events
+4. **Finish.** When the last service confirmed, Identity removes the account's domain events
    from the message stream (the port :class:`~identity.application.ports.EventLog`: the stream
    keeps them 30 days and only the envelope names the account), then deletes its own rows and
    tuples, scrubs the personal fields of the audit rows (the rows stay), writes
@@ -32,6 +38,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from mowdeck_authz import api_token, user
+from mowdeck_contracts.v1 import IDENTITY_ACCESS_REVOKED, AccessRevoked, AccessScope
 from mowdeck_service_kit import get_logger
 
 from identity.application.accounts import account_subjects
@@ -40,7 +47,12 @@ from identity.application.deps import Deps
 from identity.application.ports import AccountEraser, EventLog
 from identity.application.sync import platform_tuple
 from identity.application.users import delete_user_rows
-from identity.domain.erasure import AccountErasure, ErasureState, grace_over
+from identity.domain.erasure import (
+    AccountErasure,
+    ErasureState,
+    grace_over,
+    tokens_expired_at,
+)
 from identity.domain.models import AccountStatus
 
 _log = get_logger("identity.erasure")
@@ -155,7 +167,19 @@ class ErasureService:
             members = await tx.memberships.find(account_id=account_id)
             account.status = AccountStatus.PURGING
             await tx.accounts.update(account)
-            await tx.erasures.add(AccountErasure.begin(account_id, self.config.services, now))
+            # The sessions end below and a purging account gets no new token; the ones issued
+            # until now run out at ``expired``. The services are asked after that.
+            expired = tokens_expired_at(now, self.deps.config.access_token_ttl)
+            await tx.erasures.add(
+                AccountErasure.begin(account_id, self.config.services, now, ask_from=expired)
+            )
+            work.emit(
+                IDENTITY_ACCESS_REVOKED,
+                account_id,
+                AccessRevoked(
+                    scope=AccessScope.ACCOUNT, id=account_id, issued_before=now, expires_at=expired
+                ),
+            )
             for member in members:
                 await tx.sessions.update_where(
                     {"revoked_at": now, "revoke_reason": "account erasure"},
@@ -191,7 +215,14 @@ class ErasureService:
     async def advance(self, erasure: AccountErasure) -> bool:
         """Ask the services that did not confirm yet, then finish; True when the account is
         erased. Resumes where an earlier attempt stopped. A failure stores the reason, backs off
-        and ends the attempt."""
+        and ends the attempt. Nothing is asked while an access token of the account can still be
+        valid: the attempt is put off until then."""
+        now = self.deps.clock()
+        expired = tokens_expired_at(erasure.started_at, self.deps.config.access_token_ttl)
+        if now < expired:
+            erasure.lease(now, expired - now)
+            await self._save(erasure)
+            return False
         for service in erasure.open_services:
             try:
                 deleted = await self.eraser.erase(service, erasure.account_id)

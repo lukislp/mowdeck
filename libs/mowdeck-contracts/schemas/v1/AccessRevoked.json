@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "AccessScope": {
+      "description": "What an :class:`AccessRevoked` names.",
+      "enum": [
+        "subject",
+        "account"
+      ],
+      "title": "AccessScope",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of ``identity.access.revoked`` (ADR 0082): a deny list entry.\n\nAccess tokens are verified offline and live for minutes. When a user is deleted, or the\npurge of an account starts, the tokens issued before must not be accepted for the rest of\ntheir life: a service that just deleted the rows would store new ones. A verifier refuses a\ntoken whose subject (``scope: subject``) or account (``scope: account``) is ``id`` and that\nwas issued at or before ``issued_before``, until ``expires_at``. By then every such token\nhas expired by itself (the access token lifetime plus the clock skew a verifier allows), so\nthe entry can be dropped. It carries ids and times, nothing personal.",
+  "properties": {
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "issued_before": {
+      "format": "date-time",
+      "title": "Issued Before",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/AccessScope"
+    }
+  },
+  "required": [
+    "scope",
+    "id",
+    "issued_before",
+    "expires_at"
+  ],
+  "title": "AccessRevoked",
+  "type": "object"
+}

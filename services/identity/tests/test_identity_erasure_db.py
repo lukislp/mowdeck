@@ -185,6 +185,9 @@ async def test_a_whole_account_is_erased_on_postgres(monkeypatch: pytest.MonkeyP
             "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
         )
         assert response.status_code == 202, response.text
+        # The purge begins, waits until the access tokens of the account have expired, then asks.
+        begun = await h.app.state.identity.erasure.begin_due()
+        h.clock.advance(timedelta(minutes=11))
         sweep = await h.app.state.identity.erasure.sweep()
         async with store.transaction() as tx:
             account = await tx.accounts.get(id=lukas.account_id)
@@ -196,7 +199,7 @@ async def test_a_whole_account_is_erased_on_postgres(monkeypatch: pytest.MonkeyP
             record = await tx.erasures.get(account_id=lukas.account_id)
             bobs = await tx.accounts.get(id=bob.account_id)
             bobs_roles = await tx.roles.find(account_id=bob.account_id)
-    assert (sweep.begun, sweep.erased) == (1, 1)
+    assert (begun, sweep.erased) == (1, 1)
     assert (account, user, members, roles, sessions) == (None, None, [], [], [])
     assert audit and all("username" not in e.details and e.actor_name is None for e in audit)
     assert record is not None and record.state.value == "erased" and record.counts == {"fleet": 4}

@@ -214,6 +214,7 @@ from mowdeck_contracts.v1.fleet import (
 )
 from mowdeck_contracts.v1.health import TELEMETRY_BLADE_HOURS_THRESHOLD, BladeHoursThreshold
 from mowdeck_contracts.v1.identity import (
+    IDENTITY_ACCESS_REVOKED,
     IDENTITY_ACCOUNT_CREATED,
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_EVENT_TYPES,
@@ -223,6 +224,8 @@ from mowdeck_contracts.v1.identity import (
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
     USER_CHANGED_VERSION,
+    AccessRevoked,
+    AccessScope,
     AccountCreated,
     AccountKind,
     ApiTokenRevoked,
@@ -531,6 +534,7 @@ __all__ = [
     "GATEWAY_ERRORS_EXPLAIN",
     "GATEWAY_ERRORS_LEXICONS",
     "GENERIC_SEVERITY",
+    "IDENTITY_ACCESS_REVOKED",
     "IDENTITY_ACCOUNT_CREATED",
     "IDENTITY_API_TOKEN_REVOKED",
     "IDENTITY_EVENT_TYPES",
@@ -608,6 +612,8 @@ __all__ = [
     "VISION_PROPOSAL_UPDATED",
     "VISION_SNAPSHOT_HOLD_SECONDS",
     "VISION_STREAM_LEASE_SECONDS",
+    "AccessRevoked",
+    "AccessScope",
     "AccountCreated",
     "AccountEraseReply",
     "AccountEraseRequest",

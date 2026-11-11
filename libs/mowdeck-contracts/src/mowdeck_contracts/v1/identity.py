@@ -18,11 +18,19 @@ Event type                      Payload                 Meaning
 ``identity.api_token.revoked``  :class:`ApiTokenRevoked`  an API token was revoked
 ``identity.session.new_device``  :class:`NewDeviceLogin`  a login came from a device the user had
                                                         not used before (ADR 0065)
+``identity.access.revoked``     :class:`AccessRevoked`   a user was deleted or an account's purge
+                                                        started: its access tokens are refused
+                                                        (ADR 0082)
 ==============================  ======================  ===========================================
 
 ``identity.grants.changed`` is the cache invalidation signal for ``mowdeck-authz``: every
 service that caches authorization decisions drops the entries of the named subjects
 (``mowdeck_authz.events.subscribe_cache_invalidation``).
+
+``identity.access.revoked`` is the one event that is not published on the subject of its type
+alone: the subject carries the revoked id (``event.identity.access.revoked.<id>``,
+:func:`mowdeck_contracts.v1.subjects.access_revoked_subject`), so a process that starts later
+finds the newest revocation of every id in the stream (``mowdeck_auth.revocation``).
 """
 
 from datetime import datetime
@@ -32,7 +40,7 @@ from uuid import UUID
 
 from pydantic import Field, StringConstraints
 
-from mowdeck_contracts.v1._base import ContractModel
+from mowdeck_contracts.v1._base import ContractModel, UtcDateTime
 
 IDENTITY_ACCOUNT_CREATED: Final = "identity.account.created"
 """Event type: an account was registered (payload :class:`AccountCreated`)."""
@@ -51,6 +59,11 @@ IDENTITY_SESSION_NEW_DEVICE: Final = "identity.session.new_device"
 """Event type: a login from a device the user never used before (payload :class:`NewDeviceLogin`,
 ADR 0065); Notifications tells the user."""
 
+IDENTITY_ACCESS_REVOKED: Final = "identity.access.revoked"
+"""Event type: the access tokens of a subject or an account are refused from now on (payload
+:class:`AccessRevoked`, ADR 0082); every service that verifies tokens keeps the short-lived deny
+list (``mowdeck_auth.revocation``)."""
+
 USER_CHANGED_VERSION: Final = 2
 """Envelope ``version`` of the three ``identity.user.*`` events since ADR 0082: the payload
 :class:`UserChanged` without ``username``."""
@@ -63,6 +76,7 @@ IDENTITY_EVENT_TYPES: Final = (
     IDENTITY_GRANTS_CHANGED,
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_SESSION_NEW_DEVICE,
+    IDENTITY_ACCESS_REVOKED,
 )
 """Every event type Identity publishes."""
 
@@ -112,6 +126,35 @@ class UserChanged(ContractModel):
     """Version 1 only (deprecated): the normalized user name. Never set since version 2."""
     subuser: bool = False
     reason: str | None = Field(default=None, max_length=200)
+
+
+class AccessScope(StrEnum):
+    """What an :class:`AccessRevoked` names."""
+
+    SUBJECT = "subject"
+    """The ``sub`` of the tokens: a user, or an API token."""
+    ACCOUNT = "account"
+    """The ``acc`` of the tokens: every token that is scoped to the account."""
+
+
+class AccessRevoked(ContractModel):
+    """Payload of ``identity.access.revoked`` (ADR 0082): a deny list entry.
+
+    Access tokens are verified offline and live for minutes. When a user is deleted, or the
+    purge of an account starts, the tokens issued before must not be accepted for the rest of
+    their life: a service that just deleted the rows would store new ones. A verifier refuses a
+    token whose subject (``scope: subject``) or account (``scope: account``) is ``id`` and that
+    was issued at or before ``issued_before``, until ``expires_at``. By then every such token
+    has expired by itself (the access token lifetime plus the clock skew a verifier allows), so
+    the entry can be dropped. It carries ids and times, nothing personal.
+    """
+
+    scope: AccessScope
+    id: UUID
+    issued_before: UtcDateTime
+    """Tokens issued up to this moment are refused (the moment the access ended)."""
+    expires_at: UtcDateTime
+    """From here on the entry means nothing: no token it covers can still be valid."""
 
 
 class GrantsChanged(ContractModel):

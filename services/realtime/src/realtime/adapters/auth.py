@@ -5,8 +5,9 @@
 
 from collections.abc import Mapping
 
-from mowdeck_auth import AuthSettings, JwtVerifier, TokenError
+from mowdeck_auth import AuthSettings, JwtVerifier, TokenError, subscribe_revocations
 from mowdeck_service_kit import get_logger
+from mowdeck_service_kit.bus import EventBus, Subscription
 
 from realtime.domain.errors import InvalidTokenError
 from realtime.domain.models import Authenticated
@@ -23,6 +24,12 @@ class JwtTokenVerifier:
 
     def __init__(self, verifier: JwtVerifier) -> None:
         self.verifier = verifier
+
+    async def attach(self, bus: EventBus) -> Subscription:
+        """Keep the verifier's deny list of deleted users and erased accounts current from the
+        bus (ADR 0082). The HTTP services get this from the kit; Realtime verifies the token of
+        a WebSocket itself, so it attaches itself."""
+        return await subscribe_revocations(bus, self.verifier.revocations)
 
     async def verify(self, token: str) -> Authenticated:
         """The principal and expiry, or :class:`InvalidTokenError` (reason logged only)."""

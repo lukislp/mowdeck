@@ -42,6 +42,8 @@ Subject scheme:
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
 ``relay.camera.detach``               core NATS request: end a lease
 ``camera.mower.<id>.relay.<kind>``    camera relay events (stream ``CAMERA``)
+``event.identity.access.revoked.<id>``  deny list entry of a deleted user, API token or erased
+                                      account (stream ``EVENTS``, ADR 0082)
 ====================================  ============================================
 
 The camera request lives below ``gateway.`` and not below ``device.``: the stream ``DEVICE``
@@ -552,6 +554,20 @@ def account_erase_subject(service_id: str) -> str:
     _check_tokens(service_id, "service")
     return f"{ACCOUNT_ERASE_PREFIX}.{service_id}"
 
+
+ACCESS_REVOKED_PREFIX = "event.identity.access.revoked"
+"""Prefix of the deny list entries of ``identity.access.revoked`` (stream ``EVENTS``, ADR 0082):
+one subject per revoked id, so the newest entry of every id can be read back."""
+
+
+def access_revoked_subject(subject_id: UUID) -> str:
+    """Subject of the deny list entry of one id: ``event.identity.access.revoked.<id>`` (the
+    id of a user, an API token or an account)."""
+    return f"{ACCESS_REVOKED_PREFIX}.{subject_id}"
+
+
+ALL_ACCESS_REVOKED = f"{ACCESS_REVOKED_PREFIX}.*"
+"""Wildcard every token verifier subscribes to: the deny list entries of every id."""
 
 ALL_ACCOUNT_ERASE = f"{ACCOUNT_ERASE_PREFIX}.*"
 """Wildcard for the erasure requests of every service."""

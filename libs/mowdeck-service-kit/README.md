@@ -217,6 +217,7 @@ Raise `BadRequest` (400), `Unauthorized` (401, adds `WWW-Authenticate: Bearer`),
 - Resources of other accounts are answered with 404, not 403, so their existence is not revealed.
 - `current_principal` returns 401 without a principal; `current_account_id` returns 403 for principals without an account (operators, services).
 - `require_permission("mower.control")` asks the `PermissionChecker` on `app.state.permission_checker` when one is installed, otherwise it checks the token level permission list. `mowdeck_authz.fastapi.install_authz(app, authorizer)` installs a checker that asks OpenFGA for the key's computed relation on the principal's account (`mower.control` becomes `can_control` on `account:<acc>`). A checker is any object with `async def has_permission(principal, permission) -> bool` (protocol `PermissionChecker`). Object-level checks use `mowdeck_authz.fastapi.require(...)` or `require_or_not_found(...)`.
+- A resolver that implements `BusAware` (`async attach(bus)`) is attached to the event bus by `create_app` once the bus is connected, before the start-up hooks. The resolver of `mowdeck-auth` uses it for the deny list of deleted users and erased accounts (ADR 0082), so no service has code for it.
 - The principal comes from a `PrincipalResolver` (`async resolve(request) -> Principal`). The default resolver rejects everything with 401; `mowdeck-auth` provides the JWT resolver later.
 
 ## Database (extra `db`)

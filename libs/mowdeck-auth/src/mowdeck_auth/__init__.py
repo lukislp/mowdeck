@@ -26,6 +26,7 @@ from mowdeck_auth.resolver import (
     install_auth,
     principal_resolver_from_env,
 )
+from mowdeck_auth.revocation import RevocationList, subscribe_revocations
 from mowdeck_auth.settings import DEFAULT_AUDIENCE, DEFAULT_ISSUER, AuthSettings
 from mowdeck_auth.step_up import (
     ReauthRequired,
@@ -52,6 +53,7 @@ __all__ = [
     "JwtVerifier",
     "KeySource",
     "ReauthRequired",
+    "RevocationList",
     "SigningKey",
     "StaticKeySource",
     "StepUpUnavailable",
@@ -68,5 +70,6 @@ __all__ = [
     "public_jwk",
     "require_recent_auth",
     "step_up_max_age",
+    "subscribe_revocations",
     "thumbprint",
 ]

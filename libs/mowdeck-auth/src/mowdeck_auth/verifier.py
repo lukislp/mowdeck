@@ -14,6 +14,9 @@ Rules (in this order; the first failure rejects the token with a :class:`TokenEr
 5. Signature, ``iss``, ``aud``, ``exp``, ``nbf`` and ``iat`` with ``leeway``; the claims
    ``sub``, ``kind``, ``iss``, ``aud``, ``iat``, ``exp`` and ``jti`` are required.
 6. The claims form a valid :class:`~mowdeck_contracts.v1.Principal`.
+7. Neither the subject nor the account of the token was revoked since the token was issued
+   (:class:`~mowdeck_auth.revocation.RevocationList`, ADR 0082: a deleted user, an erased
+   account). The list is fed from the bus and empty without one.
 """
 
 from collections.abc import Sequence
@@ -29,6 +32,7 @@ from mowdeck_auth.claims import REQUIRED_CLAIMS, principal_from_claims
 from mowdeck_auth.issuer import ACCESS_TOKEN_TYPE
 from mowdeck_auth.jwks import JwksCache, KeySource
 from mowdeck_auth.keys import ALLOWED_ALGORITHMS
+from mowdeck_auth.revocation import RevocationList
 from mowdeck_auth.settings import DEFAULT_AUDIENCE, DEFAULT_ISSUER, AuthSettings
 
 MAX_TOKEN_LENGTH = 8192
@@ -67,6 +71,7 @@ class JwtVerifier:
         audience: str = DEFAULT_AUDIENCE,
         leeway: timedelta = timedelta(seconds=30),
         algorithms: Sequence[str] = ALLOWED_ALGORITHMS,
+        revocations: RevocationList | None = None,
     ) -> None:
         unsafe = {alg for alg in algorithms if alg == "none" or alg.startswith("HS")}
         if unsafe:
@@ -77,6 +82,8 @@ class JwtVerifier:
         self.audience = audience
         self.leeway = leeway
         self.algorithms = tuple(algorithms)
+        self.revocations = revocations if revocations is not None else RevocationList()
+        """Access that ended before its tokens did; fed by ``subscribe_revocations``."""
 
     @classmethod
     def from_settings(cls, settings: AuthSettings) -> "JwtVerifier":
@@ -134,6 +141,9 @@ class JwtVerifier:
         try:
             principal = principal_from_claims(claims)
             expires_at = datetime.fromtimestamp(int(claims["exp"]), UTC)
+            issued_at = datetime.fromtimestamp(int(claims["iat"]), UTC)
         except (ValidationError, ValueError, TypeError, OverflowError) as exc:
             raise TokenError(f"invalid claims: {type(exc).__name__}") from None
+        if self.revocations.refuses(principal, issued_at):
+            raise TokenError("access revoked: the user or the account was deleted")
         return VerifiedToken(principal=principal, expires_at=expires_at)

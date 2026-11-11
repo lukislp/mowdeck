@@ -48,7 +48,20 @@ In this order; the first failure raises `TokenError` (reason for logs only) and 
 5. Signature, `iss`, `aud`, `exp`, `nbf`, `iat` (leeway 30 s); `sub`, `kind`, `iss`, `aud`, `iat`, `exp`, `jti` are required.
 6. The claims map to a valid `Principal`: `sub` to `subject`, `acc` to `account_id`, `kind`, `name` to `display_name`, `roles`, `perms` to `permissions`, `plan`, `jti` to `token_id`, `sid` to `session_id`.
 
+7. Neither the subject nor the account of the token is on the deny list (below).
+
 A request without credentials answers 401 with plain `WWW-Authenticate: Bearer` (RFC 6750).
+
+## Revoked access
+
+A token is valid until it expires, whatever happened to its user meanwhile. For a deleted user or an erased account that is not acceptable: a service that just removed their rows would take a write from the still valid token ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 12). Identity publishes `identity.access.revoked` (`AccessRevoked{scope, id, issued_before, expires_at}`) and `mowdeck_auth.revocation` keeps the entries:
+
+- `RevocationList` (the time injected, bounded to 10 000 entries): `add(entry)`, `refuses(principal, issued_at)`. A token is refused when its subject (`scope: subject`, a user or an API token) or its account (`scope: account`) has an entry, the token was issued at or before `issued_before`, and the entry has not expired. Entries drop out at `expires_at`.
+- `JwtVerifier.revocations` is the verifier's list; `verify_token` asks it last and raises `TokenError` (401 like every other reason).
+- `subscribe_revocations(bus, revocations)` feeds a list from `event.identity.access.revoked.*`: an ephemeral consumer per process (every replica needs every entry) that starts with the newest stored entry of every id (`last_per_subject`), so a restarted process knows the revocations that are still in force.
+- `JwtPrincipalResolver.attach(bus)` does that for its verifier. The resolver is `BusAware`, and the kit's `create_app` calls `attach` when the bus is connected: **a service writes no code**. It needs the `consume` entry for `event.identity.access.revoked.*` in `tools/repo-checks/scripts/nats_auth.py`; the repository check names it when it is missing. A component that verifies tokens outside the resolver (Realtime's WebSocket) calls `subscribe_revocations` itself.
+
+**The list fails open.** Without a bus, or while the bus is away, a process accepts the tokens it accepted before the list existed, for at most the lifetime of an access token. Refusing every token then would sign everybody out of every service and take the emergency stop away. What must hold without the list (the account erasure) is guaranteed by Identity waiting until the tokens have expired.
 
 ## JWKS cache
 

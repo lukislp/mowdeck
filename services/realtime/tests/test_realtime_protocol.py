@@ -9,12 +9,23 @@ re-checks (``identity.grants.changed`` and the periodic timer), limits and shutd
 """
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from mowdeck_contracts.v1 import CommandStatus, MowerActivity, Principal, PrincipalKind
+from mowdeck_contracts.v1 import (
+    IDENTITY_ACCESS_REVOKED,
+    AccessRevoked,
+    AccessScope,
+    CommandStatus,
+    EventEnvelope,
+    MowerActivity,
+    Principal,
+    PrincipalKind,
+)
 from mowdeck_contracts.v1.realtime import RealtimeCloseCode
+from mowdeck_contracts.v1.subjects import access_revoked_subject
+from mowdeck_service_kit.bus import publish_event
 from realtime_support import T0, harness, make_state, short_token
 from structlog.testing import capture_logs
 
@@ -414,3 +425,34 @@ async def test_realtime_shutdown_closes_with_1001() -> None:
         h.server.should_exit = True
         assert await client.closed_code(timeout=5) == RealtimeCloseCode.GOING_AWAY
         assert h.app.state.draining is True
+
+
+async def test_realtime_refuses_the_token_of_a_deleted_user() -> None:
+    """ADR 0082: Realtime verifies a socket's token itself, so it keeps the deny list itself.
+    A token of a user who was just deleted opens no socket, somebody else's still does."""
+    async with harness() as h:
+        gone, stays = await h.owner(), await h.owner()
+        now = datetime.now(UTC)
+        entry = AccessRevoked(
+            scope=AccessScope.SUBJECT,
+            id=gone.principal.subject,
+            issued_before=now,
+            expires_at=now + timedelta(minutes=11),
+        )
+        await publish_event(
+            h.bus,
+            EventEnvelope[AccessRevoked](
+                type=IDENTITY_ACCESS_REVOKED, producer="identity", payload=entry
+            ),
+            subject=access_revoked_subject(entry.id),
+        )
+
+        refused = await h.connect()
+        await refused.send({"type": "auth", "token": gone.token})
+        error = await refused.expect("error")
+        other = await h.connect()
+        ready = await other.auth(stays.token)
+
+        assert error["code"] == "unauthorized"
+        assert await refused.closed_code() == RealtimeCloseCode.UNAUTHORIZED
+        assert ready["type"] == "ready"
