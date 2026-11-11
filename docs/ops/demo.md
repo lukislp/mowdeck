@@ -20,6 +20,16 @@ Live updates (the WebSocket of `/api/v1/realtime/ws`) are limited per login sess
 
 Names visitors type in (sites, groups, area names, zones, schedules) lose control and format characters such as right-to-left overrides and zero-width spaces, so nobody can spoof a label the other visitors read; a name of nothing but blanks and joiners counts as empty, and a planner template name with such characters is refused.
 
+## What the demo stores about a visitor
+
+The demo writes down **no IP address and no browser string** (`User-Agent`) of a visitor ([ADR 0076](../adr/0076-demo-sandboxes.md)):
+
+- Identity's request context (`IdentityConfig.request_context`, one place) marks the context of a demo request as keeping no visitor data. The login session, the refresh successor, the login attempts, the audit entries, the passkey and the known-device record then store `NULL` instead of the address and the browser (the security center shows "address unknown" and an unknown device for the own session).
+- The service's own access log is off in demo mode (`access_log` of uvicorn, which would print the client address); application logs never carry the address or the browser.
+- Rate limits stay: the per-address limits of Identity, Realtime and Telemetry are in memory only (keyed by the address, IPv6 by its /64) and the gateway's limits live in Traefik; nothing of them is persisted, and the buckets vanish with the process.
+- What is still kept: the sandbox account and its simulated data until 30 minutes after the last visit, the random device cookie's SHA-256, session and sign-in times, and the sandbox's own audit rows (no address) until the purge. The reverse proxy in front of the demo (Caddy, the gateway's Traefik) is configured separately; keep its access log off or anonymised.
+- Old rows: nothing needs a clean-up. Sandboxes are purged within 30 minutes (including their sessions and audit rows) and the periodic reset deletes every volume, so rows written before this change are gone within `DEMO_RESET_HOURS`.
+
 ## Sandboxes
 
 With `DEMO_SANDBOXES=true` (the default of `docker-compose.demo.yml`) every visitor gets an own account ([ADR 0076](../adr/0076-demo-sandboxes.md)):
