@@ -15,10 +15,13 @@ ARG NODE_IMAGE=public.ecr.aws/docker/library/node:24.21.0-alpine@sha256:ebfe2f90
 # native addons), so a multi-arch build needs no QEMU for them.
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS build
 WORKDIR /repo
-# pnpm through Corepack: the version named by "packageManager" in the root package.json,
-# checked against the sha512 recorded there.
+# pnpm through Corepack, which Node 25 and later no longer ship: a pinned Corepack from npm first
+# (.corepack-version, the one place for its version; --force replaces the copy Node 24 bundles),
+# then the pnpm version named by "packageManager" in the root package.json, downloaded by the first
+# pnpm call and checked against the sha512 recorded there.
+COPY .corepack-version /tmp/corepack-version
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN corepack enable pnpm
+RUN npm install --global --force "corepack@$(cat /tmp/corepack-version)"     && corepack enable pnpm
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
 COPY apps/web/package.json apps/web/
 COPY apps/mobile/package.json apps/mobile/

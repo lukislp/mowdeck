@@ -8,6 +8,7 @@
 !package.json
 !pnpm-lock.yaml
 !.npmrc
+!.corepack-version
 !LICENSE
 !LICENSING.md
 !LICENSES/

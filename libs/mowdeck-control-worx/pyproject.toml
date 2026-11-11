@@ -20,7 +20,7 @@ dependencies = [
   # pyworxcloud: PyPI metadata says MIT, the LICENSE file in its sdist is GPL-3.0, so this
   # package is GPL-3.0 and isolated like the Mammotion adapter (ADR 0011, ADR 0066). Exact pin:
   # the cloud API is reverse engineered and changes without notice; upgrade deliberately.
-  "pyworxcloud==6.4.2",
+  "pyworxcloud==6.5.0",
 ]
 
 # Linked Worx, Kress and LandXcape accounts and their mowers (ADR 0066). Off by default until

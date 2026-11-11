@@ -146,7 +146,9 @@ def test_shared_inputs_run_every_dependent_job(ci_scope: ModuleType, path: str) 
     assert ci_scope.jobs_for_path(path) == ci_scope.ALL - {"web", "gradle_wrapper"}
 
 
-@pytest.mark.parametrize("path", ["pnpm-lock.yaml", "package.json", ".node-version"])
+@pytest.mark.parametrize(
+    "path", ["pnpm-lock.yaml", "package.json", ".node-version", ".corepack-version"]
+)
 def test_node_inputs_run_web_and_the_stack(ci_scope: ModuleType, path: str) -> None:
     assert ci_scope.jobs_for_path(path) == {"web"} | STACK
 

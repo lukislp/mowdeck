@@ -6,7 +6,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Decisions: [ADR 0020](../
 
 ## Dev loop
 
-Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 (`corepack enable`), Docker for the Compose stack. Commands run from the repository root.
+Requirements: Node 24 (24.21 or newer), pnpm 10.34.6 ([set up through Corepack](../../docs/dev/web-app.md#pnpm-and-corepack)), Docker for the Compose stack. Commands run from the repository root.
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml up -d --build --wait   # the API (and the built app at http://localhost)

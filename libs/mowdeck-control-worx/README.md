@@ -138,7 +138,7 @@ uv run pytest libs/mowdeck-control-worx
 
 ## Known gaps
 
-- Nothing tested on a real mower; the payload shapes follow pyworxcloud 6.4.2's decoder.
+- Nothing tested on a real mower; the payload shapes follow pyworxcloud 6.5.0's decoder.
 - Not mapped: schedules, the party mode (schedule off), the lock, off-limits and ACS modules, the torque, zone training, restart, firmware updates, the Vision models' auto schedule and border settings.
 - Vision models report RTK zones by id (`cfg.rtk.zs`); the zone start plans cover only the four starting points of wire-guided models.
 - The Scheduler's schedules start mowers by map area, which a Worx mower has none of; the mower's own schedule (set in the app) stays in charge.
