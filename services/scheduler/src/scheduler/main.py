@@ -45,6 +45,7 @@ from scheduler.adapters.bus.erasure import subscribe_erasure
 from scheduler.adapters.bus.fleet import BusFleetGateway
 from scheduler.adapters.bus.publisher import BusEventPublisher
 from scheduler.adapters.bus.subscriptions import subscribe_all
+from scheduler.adapters.bus.user_erasure import subscribe_user_erasure
 from scheduler.adapters.db.store import SqlStore
 from scheduler.adapters.metrics import RunMetrics
 from scheduler.adapters.weather.open_meteo import OpenMeteoProvider
@@ -148,6 +149,7 @@ def build_app(
                 active_bus, services.ingest, as_cache(active_authorizer)
             )
             subscriptions.append(await subscribe_erasure(active_bus, services.erasure))
+            subscriptions.append(await subscribe_user_erasure(active_bus, services.user_erasure))
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             plan_events = await plans.subscribe()

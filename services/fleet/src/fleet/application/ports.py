@@ -199,6 +199,17 @@ class Tx(Protocol):
         out, so an account Fleet holds nothing of answers ``{}`` (ADR 0082)."""
         ...
 
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Remove a deleted user's name from every stored principal reference (who issued a
+        command, who started a drive session) and keep the rows (ADR 0082); with ``account_id``
+        only in that account. Idempotent; returns how many references changed."""
+        ...
+
+    async def user_names(self, user_id: UUID) -> dict[str, int]:
+        """The stored principal references that still carry the user's name, by place; empty
+        when there is none."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""

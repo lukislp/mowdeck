@@ -144,7 +144,7 @@ async def test_telemetry_retention_does_nothing_while_another_replica_holds_the_
 
 async def test_telemetry_background_tasks_run_retention_and_survive_failures() -> None:
     async with harness(background_tasks=True, telemetry_retention_interval_seconds=10) as h:
-        assert len(h.app.state.subscriptions) == 7
+        assert len(h.app.state.subscriptions) == 8
     calls = 0
 
     async def job() -> None:

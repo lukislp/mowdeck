@@ -281,6 +281,7 @@ flowchart LR
   c_fleet["fleet"]
   c_notifications["notifications"]
   c_realtime["realtime"]
+  c_scheduler["scheduler"]
   c_telemetry["telemetry"]
   c_vision["vision"]
   p_billing -->|"event.* (type chosen at runtime)"| s_EVENTS
@@ -296,10 +297,11 @@ flowchart LR
   s_EVENTS -->|"event.identity.account.created"| c_billing
   s_EVENTS -->|"event.mower.>"| c_device_gateway
   s_EVENTS -->|"event.identity.account.created"| c_entitlements
-  s_EVENTS -->|"event.identity.account.created"| c_fleet
+  s_EVENTS -->|"event.identity.account.created<br/>event.identity.user.deleted"| c_fleet
   s_EVENTS -->|"event.identity.><br/>event.mower.><br/>event.telemetry.><br/>+2 more"| c_notifications
   s_EVENTS -->|"event.identity.grants.changed<br/>event.notifications.><br/>event.vision.proposal.>"| c_realtime
-  s_EVENTS -->|"event.mower.><br/>event.notifications.>"| c_telemetry
+  s_EVENTS -->|"event.identity.user.deleted"| c_scheduler
+  s_EVENTS -->|"event.identity.user.deleted<br/>event.mower.><br/>event.notifications.>"| c_telemetry
   s_EVENTS -->|"event.identity.>"| c_vision
 ```
 
@@ -412,6 +414,7 @@ flowchart LR
 | `event.identity.>` | EVENTS | - | notifications, vision |
 | `event.identity.account.created` | EVENTS | - | billing, entitlements, fleet |
 | `event.identity.grants.changed` | EVENTS | identity | realtime |
+| `event.identity.user.deleted` | EVENTS | - | fleet, scheduler, telemetry |
 | `event.mower.>` | EVENTS | - | device-gateway, notifications, telemetry |
 | `event.notifications.>` | EVENTS | - | realtime, telemetry |
 | `event.presence.accounts` | EVENTS | realtime | - |
@@ -487,7 +490,7 @@ flowchart LR
     identity_identity__personal_access_tokens["identity: personal access tokens<br/>3 operations"]
     identity_identity__platform["identity: platform<br/>1 operation"]
     identity_identity__security["identity: security<br/>6 operations"]
-    identity_identity__sessions["identity: sessions<br/>23 operations"]
+    identity_identity__sessions["identity: sessions<br/>24 operations"]
   end
   subgraph notifications["notifications"]
     direction TB
@@ -540,7 +543,7 @@ flowchart LR
 | `identity` | `identity: personal access tokens` | 3 | 2 |
 | `identity` | `identity: platform` | 1 | 1 |
 | `identity` | `identity: security` | 6 | 6 |
-| `identity` | `identity: sessions` | 23 | 20 |
+| `identity` | `identity: sessions` | 24 | 20 |
 | `identity` | `operations` | 1 | 1 |
 | `notifications` | `notifications` | 22 | 16 |
 | `notifications` | `operations` | 1 | 1 |
@@ -580,7 +583,7 @@ flowchart LR
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>14 migrations")]
-    db_identity[("identity<br/>11 migrations")]
+    db_identity[("identity<br/>12 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]

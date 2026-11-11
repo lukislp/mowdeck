@@ -80,6 +80,8 @@ _PLANS: tuple[str, ...] = ("entitlements.check",)
 _PLAN_CHANGES: tuple[str, ...] = ("event.entitlements.plan.changed",)
 # Every service that drops cached authorization decisions on grant changes (mowdeck_authz).
 _GRANTS: tuple[str, ...] = ("event.identity.grants.changed",)
+# Every service that forgets a deleted user (mowdeck_service_kit.user_erasure, ADR 0082).
+_USER_DELETED: tuple[str, ...] = ("event.identity.user.deleted",)
 
 USERS: dict[str, Access] = {
     "billing": Access(
@@ -162,6 +164,7 @@ USERS: dict[str, Access] = {
             "command.result.mower.*",
             "event.identity.account.created",
             *_GRANTS,
+            *_USER_DELETED,
             *_PLAN_CHANGES,
         ),
     ),
@@ -215,7 +218,13 @@ USERS: dict[str, Access] = {
     "scheduler": Access(
         publish=(*_PLANS, "event.scheduler.>", "fleet.commands.issue", "fleet.targets.resolve"),
         serve=("account.erase.scheduler",),
-        consume=("device.mower.>", *_GRANTS, *_PLAN_CHANGES, "telemetry.mower.*"),
+        consume=(
+            "device.mower.>",
+            *_GRANTS,
+            *_USER_DELETED,
+            *_PLAN_CHANGES,
+            "telemetry.mower.*",
+        ),
     ),
     "telemetry": Access(
         publish=(
@@ -232,6 +241,7 @@ USERS: dict[str, Access] = {
         consume=(
             "command.result.mower.*",
             "device.mower.>",
+            *_USER_DELETED,
             "event.mower.>",
             "event.notifications.>",
             "telemetry.mower.*",
