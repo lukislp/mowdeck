@@ -36,7 +36,7 @@ from mowdeck_service_kit.logging import configure_logging, get_logger
 from mowdeck_service_kit.otel import instrument_app
 from mowdeck_service_kit.settings import ServiceSettings
 from mowdeck_service_kit.source import SourceCodeMiddleware
-from mowdeck_service_kit.tenancy import PrincipalResolver
+from mowdeck_service_kit.tenancy import BusAware, PrincipalResolver
 
 API_PREFIX = "/api/v1"
 """Prefix under which all service routers are mounted."""
@@ -103,6 +103,10 @@ def create_app(
             add_readiness_check(app, ReadinessCheck(name="nats", check=nats))
         watcher: asyncio.Task[None] | None = None
         try:
+            resolver = app.state.principal_resolver
+            if active_bus is not None and isinstance(resolver, BusAware):
+                # Token verification listens for revoked access (ADR 0082), in every service.
+                await resolver.attach(active_bus)
             for hook in on_startup:
                 await hook(app)
             if settings.readiness_interval_seconds > 0:

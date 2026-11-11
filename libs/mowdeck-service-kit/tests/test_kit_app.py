@@ -287,3 +287,42 @@ async def test_db_against_real_postgres() -> None:
             await anext(sessions)
     finally:
         await engine.dispose()
+
+
+async def test_a_bus_aware_resolver_is_attached_before_the_startup_hooks() -> None:
+    """ADR 0082: token verification listens on the bus in every service, without service code."""
+    calls: list[str] = []
+    bus = InMemoryBus()
+
+    class Listening:
+        async def resolve(self, request: Any) -> Any:
+            raise AssertionError("no request in this test")
+
+        async def attach(self, attached: Any) -> None:
+            assert attached is bus
+            calls.append("attach")
+
+    class Plain:
+        async def resolve(self, request: Any) -> Any:
+            raise AssertionError("no request in this test")
+
+    async def hook(_: FastAPI) -> None:
+        calls.append("hook")
+
+    def app_with(resolver: Any, on_bus: InMemoryBus | None) -> FastAPI:
+        return create_app(
+            make_test_settings(nats_enabled=False),
+            make_test_descriptor(),
+            bus=on_bus,
+            principal_resolver=resolver,
+            on_startup=[hook],
+        )
+
+    async with lifespan_client(app_with(Listening(), bus)):
+        assert calls == ["attach", "hook"]
+    calls.clear()
+    async with lifespan_client(app_with(Listening(), None)):  # no bus: nothing to listen on
+        assert calls == ["hook"]
+    calls.clear()
+    async with lifespan_client(app_with(Plain(), InMemoryBus())):  # not bus aware: left alone
+        assert calls == ["hook"]

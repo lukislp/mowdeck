@@ -18,6 +18,7 @@ from identity.application.ports import Ge, Gt, In, Lt
 from identity.domain.erasure import (
     AUDIT_DETAILS_KEPT,
     AccountErasure,
+    EventErasure,
     audit_fields_after_user_scrub,
     concerns_user,
 )
@@ -176,6 +177,7 @@ class MemoryTx:
     known_devices: MemoryTable[KnownDevice]
     sandboxes: MemoryTable[DemoSandbox]
     erasures: MemoryTable[AccountErasure]
+    event_erasures: MemoryTable[EventErasure]
 
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete one demo sandbox account's audit rows (ADR 0076)."""
@@ -250,6 +252,7 @@ class MemoryStore:
             known_devices=MemoryTable("id", [("user_id", "token_hash")]),
             sandboxes=MemoryTable("account_id"),
             erasures=MemoryTable("account_id"),
+            event_erasures=MemoryTable("subject_id"),
         )
         self._lock = asyncio.Lock()
         self.transactions = 0

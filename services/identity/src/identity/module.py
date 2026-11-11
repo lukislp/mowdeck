@@ -7,6 +7,7 @@ Identity reads its own descriptor too: the keys declared here join the permissio
 """
 
 from mowdeck_contracts.v1 import (
+    IDENTITY_ACCESS_REVOKED,
     IDENTITY_ACCOUNT_CREATED,
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_GRANTS_CHANGED,
@@ -41,10 +42,20 @@ DESCRIPTOR = ModuleDescriptor(
     ],
     events=[
         EventDef(type=IDENTITY_ACCOUNT_CREATED, schema_ref=f"{_SCHEMAS}/AccountCreated.json"),
-        EventDef(type=IDENTITY_USER_CREATED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
-        EventDef(type=IDENTITY_USER_DISABLED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
-        EventDef(type=IDENTITY_USER_DELETED, schema_ref=f"{_SCHEMAS}/UserChanged.json"),
+        EventDef(
+            type=IDENTITY_USER_CREATED,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
+        EventDef(
+            type=IDENTITY_USER_DISABLED,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
+        EventDef(
+            type=IDENTITY_USER_DELETED,
+            schema_ref=f"{_SCHEMAS}/UserChanged.json",
+        ),
         EventDef(type=IDENTITY_GRANTS_CHANGED, schema_ref=f"{_SCHEMAS}/GrantsChanged.json"),
+        EventDef(type=IDENTITY_ACCESS_REVOKED, schema_ref=f"{_SCHEMAS}/AccessRevoked.json"),
         EventDef(type=IDENTITY_API_TOKEN_REVOKED, schema_ref=f"{_SCHEMAS}/ApiTokenRevoked.json"),
     ],
     ui_areas=[

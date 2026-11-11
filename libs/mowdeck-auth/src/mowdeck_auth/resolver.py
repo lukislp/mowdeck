@@ -12,6 +12,10 @@
 Every failure answers **401** with ``WWW-Authenticate: Bearer error="invalid_token"`` (or plain
 ``Bearer`` when no credentials were sent, RFC 6750) and the same generic detail; the actual
 reason is logged, never returned.
+
+The resolver is :class:`~mowdeck_service_kit.tenancy.BusAware`: the kit attaches it to the event
+bus at start-up and it keeps the verifier's deny list of deleted users and erased accounts
+current (:mod:`mowdeck_auth.revocation`, ADR 0082). A service writes no code for that.
 """
 
 import logging
@@ -19,8 +23,10 @@ from collections.abc import Mapping
 
 from fastapi import FastAPI, Request
 from mowdeck_contracts.v1 import Principal
+from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.errors import Unauthorized
 
+from mowdeck_auth.revocation import subscribe_revocations
 from mowdeck_auth.settings import AuthSettings
 from mowdeck_auth.verifier import JwtVerifier, TokenError
 
@@ -46,6 +52,13 @@ class JwtPrincipalResolver:
 
     def __init__(self, verifier: JwtVerifier) -> None:
         self.verifier = verifier
+        self.revocation_events: Subscription | None = None
+        """The subscription that feeds the verifier's deny list, once attached to a bus."""
+
+    async def attach(self, bus: EventBus) -> None:
+        """Keep the verifier's deny list current from ``bus`` (called by the kit's
+        ``create_app`` when the bus is connected)."""
+        self.revocation_events = await subscribe_revocations(bus, self.verifier.revocations)
 
     async def resolve(self, request: Request) -> Principal:
         """The verified principal, or :class:`Unauthorized` (401)."""

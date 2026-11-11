@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from fleet_support import API, FlakyBackend, Harness, harness
 from mowdeck_contracts.v1 import AccountEraseReply, AccountEraseRequest
-from mowdeck_contracts.v1.subjects import account_erase_subject
+from mowdeck_contracts.v1.subjects import account_erase_subject, command_subject
 from mowdeck_service_kit.db import account_tables
 from mowdeck_service_kit.erasure import ErasureIncomplete
 from test_fleet_db import STORES, store_of
@@ -83,13 +83,18 @@ async def test_erasure_removes_every_row_of_one_account_and_keeps_the_other(
         # The seed reaches every table the schema gives an account, so none is checked empty.
         assert set(before) == account_table_names(store)
 
+        # The command of the seed is still in the COMMANDS stream.
+        messages = sum([await h.bus.count_subject(command_subject(UUID(m))) for m in alice_mowers])
+        assert messages == 1
+
         first = await erase(h, alice.account_id)
         second = await erase(h, alice.account_id)
         unknown = await erase(h, uuid4())
 
         assert first.ok and first.error is None
-        # Every row of the account plus the "mower.removed" audit rows written on the way.
-        assert first.deleted == sum(before.values()) + len(alice_mowers)
+        # Every row of the account, the "mower.removed" audit rows written on the way, and the
+        # messages the streams held of its mowers.
+        assert first.deleted == sum(before.values()) + len(alice_mowers) + messages
         assert second == AccountEraseReply(ok=True, deleted=0)
         assert unknown == AccountEraseReply(ok=True, deleted=0)
         assert await rows_of(store, alice.account_id) == {}

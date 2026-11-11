@@ -6,7 +6,11 @@
 from typing import Any
 from uuid import UUID
 
-from mowdeck_contracts.v1 import EventEnvelope
+from mowdeck_contracts.v1 import (
+    AccessRevoked,
+    EventEnvelope,
+)
+from mowdeck_contracts.v1.subjects import access_revoked_subject
 from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import EventBus, publish_event
 from mowdeck_service_kit.correlation import get_correlation_id
@@ -37,7 +41,9 @@ class BusEventPublisher:
         if correlation_id:
             values["correlation_id"] = correlation_id
         envelope = EventEnvelope[dict[str, Any]].model_validate(values)
+        # A deny list entry goes on the subject of its id, so the newest per id can be read back.
+        subject = access_revoked_subject(payload.id) if isinstance(payload, AccessRevoked) else None
         try:
-            await publish_event(self.bus, envelope)
+            await publish_event(self.bus, envelope, subject=subject)
         except Exception:
             _log.exception("publishing an event failed", event_type=event_type)

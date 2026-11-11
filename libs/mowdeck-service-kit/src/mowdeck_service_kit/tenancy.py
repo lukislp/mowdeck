@@ -24,6 +24,7 @@ import structlog
 from fastapi import Depends, Request
 from mowdeck_contracts.v1 import Principal
 
+from mowdeck_service_kit.bus import EventBus
 from mowdeck_service_kit.errors import Forbidden, Unauthorized
 
 _PRINCIPAL_STATE_KEY = "mowdeck_principal"
@@ -39,6 +40,20 @@ class PrincipalResolver(Protocol):
 
     async def resolve(self, request: Request) -> Principal:
         """Return the principal of ``request`` or raise ``Unauthorized``."""
+        ...
+
+
+@runtime_checkable
+class BusAware(Protocol):
+    """A :class:`PrincipalResolver` that also listens on the event bus.
+
+    ``create_app`` calls :meth:`attach` once the bus is connected, before the start-up hooks.
+    The resolver of ``mowdeck-auth`` uses it to keep the short-lived deny list of deleted users
+    and erased accounts (ADR 0082), so no service has code for it.
+    """
+
+    async def attach(self, bus: EventBus) -> None:
+        """Subscribe to what the resolver needs from ``bus``."""
         ...
 
 

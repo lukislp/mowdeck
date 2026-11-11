@@ -23,6 +23,7 @@ from identity.application.authenticators import (
 )
 from identity.application.deps import Deps
 from identity.application.erasure import ErasureConfig, ErasureService
+from identity.application.event_erasure import EventErasureService
 from identity.application.external import ExternalIdentityService
 from identity.application.onboarding import OnboardingService
 from identity.application.passkeys import PasskeyService
@@ -67,12 +68,18 @@ class Services:
     sandboxes: SandboxService | None = None
     """Demo sandboxes (ADR 0076); None everywhere but a demo with sandboxes on."""
 
+    event_erasure: EventErasureService | None = None
+    """Removes the stored events of erased accounts and deleted users (ADR 0082); set when the
+    runtime knows the bus."""
+
     erasure: ErasureService | None = None
     """The purge of deleted accounts (ADR 0082); None where it is not wired (the demo, tests)."""
 
-    def enable_erasure(self, eraser: AccountEraser, config: ErasureConfig) -> None:
+    def enable_erasure(
+        self, eraser: AccountEraser, config: ErasureConfig, events: EventErasureService
+    ) -> None:
         """Turn on the purge of accounts whose grace period is over."""
-        self.erasure = ErasureService(self.deps, eraser, config)
+        self.erasure = ErasureService(self.deps, eraser, config, events)
 
     def enable_sandboxes(self, provisioner: SandboxProvisioner, config: SandboxConfig) -> None:
         """Turn on the demo sandboxes ("Try the demo" gives every visitor an own account)."""

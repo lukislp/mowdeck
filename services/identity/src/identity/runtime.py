@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from identity.adapters.apple import AppleOAuthClient
 from identity.adapters.bus.erasure import BusAccountEraser
+from identity.adapters.bus.event_log import BusEventLog
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
@@ -39,10 +40,12 @@ from identity.adapters.webauthn import PyWebAuthnCeremonies
 from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
+from identity.application.event_erasure import EventErasureService
 from identity.application.keys import KeyManager
 from identity.application.ports import (
     AccountEraser,
     Clock,
+    EventLog,
     ModuleSource,
     OAuthClient,
     PasswordHasher,
@@ -86,6 +89,8 @@ class Runtime:
     provisioner: SandboxProvisioner | None = None
     """Demo sandboxes (ADR 0076): fills and empties them; the HTTP provisioner unless given."""
     eraser: AccountEraser | None = None
+    event_log: EventLog | None = None
+    """The stored domain events (ADR 0082); the bus's ``EVENTS`` stream unless given."""
     """Account erasure (ADR 0082): asks the services to delete; the NATS eraser unless given."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
@@ -156,6 +161,8 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
+        event_erasure = EventErasureService(deps, self.event_log or BusEventLog(bus))
+        self.services.event_erasure = event_erasure
         if not self.settings.erasure_enabled:
             if not self.settings.demo_mode:
                 _log.info(
@@ -167,6 +174,7 @@ class Runtime:
                 self.eraser
                 or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),
                 self.settings.erasure_config(),
+                event_erasure,
             )
         if self.settings.sandboxes_enabled:
             self.services.enable_sandboxes(

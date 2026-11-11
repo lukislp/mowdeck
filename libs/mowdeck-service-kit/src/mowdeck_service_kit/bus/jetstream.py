@@ -19,9 +19,10 @@ service's inbox when the service subscribes to it.
 """
 
 import asyncio
+import json
 import secrets
 import ssl
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,6 +56,7 @@ from mowdeck_service_kit.bus.base import (
     Outcome,
     PublishResult,
     RequestTimeoutError,
+    StoredMessage,
     check_acknowledge,
     dispatch,
     encode_payload,
@@ -67,6 +69,22 @@ from mowdeck_service_kit.tls import client_context
 _log = get_logger(__name__)
 
 _STREAM_POLL_SECONDS = 1.0
+_MESSAGE_GONE = frozenset({10037, 10043})
+"""JetStream error codes of a message that is not (or no longer) in the stream."""
+_READ_BATCH = 500
+"""Messages asked for in one batched read of a stream (``stored_messages``)."""
+_STATUS = "Status"
+_DIRECT_GET_HEADERS = frozenset(
+    {
+        "Nats-Stream",
+        "Nats-Time-Stamp",
+        "Nats-Num-Pending",
+        "Nats-Last-Sequence",
+        "Nats-UpTo-Sequence",
+    }
+)
+"""Headers a direct get adds to the stored message; they are not part of it."""
+_END_OF_BATCH, _NOT_FOUND, _NO_RESPONDERS = "204", "404", "503"
 
 
 def nats_tls_context(settings: ServiceSettings) -> ssl.SSLContext | None:
@@ -95,6 +113,7 @@ def stream_config(spec: StreamSpec) -> StreamConfig:
         max_bytes=spec.max_bytes,
         duplicate_window=float(spec.duplicate_window_seconds),
         discard=DiscardPolicy(spec.discard),
+        allow_direct=spec.allow_direct,
     )
 
 
@@ -567,6 +586,161 @@ class JetStreamBus:
 
         subscription = await client.subscribe(subject, queue=queue or "", cb=callback)
         return _NatsSubscriptionHandle(subscription)
+
+    # --- what the streams hold (StreamStore, ADR 0082) ----------------------------------------
+
+    def _stored_in(self, subject: str) -> StreamSpec:
+        stream = self._stream_for(subject.replace("*", "x").replace(">", "x"))
+        if stream is None:
+            msg = f"no stream stores {subject!r}"
+            raise ValueError(msg)
+        return stream
+
+    async def purge_subject(self, subject: str) -> int:
+        """Purge the messages matching ``subject`` from its stream (``$JS.API.STREAM.PURGE`` with
+        a subject filter); the number the server removed."""
+        stream = self._stored_in(subject)
+        api = f"$JS.API.STREAM.PURGE.{stream.name}"
+        try:
+            reply = await self._client().request(
+                api, json.dumps({"filter": subject}).encode(), timeout=self.publish_timeout_seconds
+            )
+            answer = json.loads(reply.data)
+        except (nats.errors.Error, ValueError) as exc:
+            msg = f"purging {subject!r} from {stream.name} failed: {exc!r}"
+            raise BusError(msg) from exc
+        if not isinstance(answer, dict) or not answer.get("success"):
+            error = answer.get("error") if isinstance(answer, dict) else answer
+            msg = f"purging {subject!r} from {stream.name} was refused: {error!r}"
+            raise BusError(msg)
+        return int(answer.get("purged", 0))
+
+    async def count_subject(self, subject: str) -> int:
+        """The number of stored messages matching ``subject`` (stream info with a subject
+        filter)."""
+        stream = self._stored_in(subject)
+        try:
+            info = await self._jetstream().stream_info(stream.name, subjects_filter=subject)
+        except nats.errors.Error as exc:
+            msg = f"counting {subject!r} in {stream.name} failed: {exc!r}"
+            raise BusError(msg) from exc
+        return sum((info.state.subjects or {}).values())
+
+    async def stored_messages(
+        self, subject: str, *, after: int = 0, until: int | None = None
+    ) -> AsyncIterator[StoredMessage]:
+        """Read the messages matching ``subject`` in batches (a batched direct get,
+        ``$JS.API.DIRECT.GET`` with ``next_by_subj``): no consumer, and the reader sets the pace
+        however large the stream, because the next batch is asked for only when this one was
+        handled. A stream without direct access (created before it was switched on, until the
+        ``nats-streams`` job updated it) is read one message per request instead."""
+        stream = self._stored_in(subject)
+        sequence = after + 1
+        direct = stream.allow_direct
+        while until is None or sequence <= until:
+            if direct:
+                batch = await self._direct_batch(stream.name, subject, sequence)
+                if batch is None:  # the stream does not answer direct gets (yet)
+                    direct = False
+                    continue
+            else:
+                batch = await self._single(stream.name, subject, sequence)
+            if not batch:
+                return
+            for message in batch:
+                if until is not None and message.sequence > until:
+                    return
+                yield message
+            sequence = batch[-1].sequence + 1
+
+    async def _direct_batch(
+        self, stream: str, subject: str, sequence: int
+    ) -> list[StoredMessage] | None:
+        """Up to ``_READ_BATCH`` messages from ``sequence`` on; empty at the end of the stream,
+        None when nothing answers direct gets for the stream."""
+        client = self._client()
+        inbox = client.new_inbox()
+        request = {"seq": sequence, "batch": _READ_BATCH, "next_by_subj": subject}
+        found: list[StoredMessage] = []
+        try:
+            replies = await client.subscribe(inbox)
+            try:
+                await client.publish(
+                    f"$JS.API.DIRECT.GET.{stream}", json.dumps(request).encode(), reply=inbox
+                )
+                while True:
+                    reply = await replies.next_msg(timeout=self.publish_timeout_seconds)
+                    headers = dict(reply.headers or {})
+                    status = headers.get(_STATUS)
+                    if status in (_END_OF_BATCH, _NOT_FOUND):
+                        return found
+                    if status == _NO_RESPONDERS:
+                        return None
+                    if status is not None:
+                        msg = f"reading {subject!r} from {stream} was refused: status {status}"
+                        raise BusError(msg)
+                    found.append(
+                        StoredMessage(
+                            stream=stream,
+                            sequence=int(headers.pop("Nats-Sequence")),
+                            subject=headers.pop("Nats-Subject"),
+                            data=reply.data,
+                            headers={
+                                key: value
+                                for key, value in headers.items()
+                                if key not in _DIRECT_GET_HEADERS
+                            },
+                        )
+                    )
+            finally:
+                await replies.unsubscribe()
+        except (nats.errors.Error, KeyError, ValueError) as exc:
+            msg = f"reading {subject!r} from {stream} failed: {exc!r}"
+            raise BusError(msg) from exc
+
+    async def _single(self, stream: str, subject: str, sequence: int) -> list[StoredMessage]:
+        """The next message from ``sequence`` on (``STREAM.MSG.GET``); empty at the end."""
+        try:
+            raw = await self._jetstream().get_msg(stream, seq=sequence, subject=subject, next=True)
+        except nats.js.errors.NotFoundError:
+            return []
+        except nats.errors.Error as exc:
+            msg = f"reading {subject!r} from {stream} failed: {exc!r}"
+            raise BusError(msg) from exc
+        if raw.seq is None or raw.subject is None:  # pragma: no cover - the server sets both
+            return []
+        return [
+            StoredMessage(
+                stream=stream,
+                sequence=raw.seq,
+                subject=raw.subject,
+                data=raw.data or b"",
+                headers=dict(raw.headers or {}),
+            )
+        ]
+
+    async def last_sequence(self, subject: str) -> int:
+        """The newest sequence of the stream of ``subject`` (stream info)."""
+        stream = self._stored_in(subject)
+        try:
+            info = await self._jetstream().stream_info(stream.name)
+        except nats.errors.Error as exc:
+            msg = f"reading the state of {stream.name} failed: {exc!r}"
+            raise BusError(msg) from exc
+        return int(info.state.last_seq)
+
+    async def erase_message(self, message: StoredMessage) -> bool:
+        """Delete one message by its sequence; the server overwrites it (secure erase)."""
+        try:
+            return bool(await self._jetstream().delete_msg(message.stream, message.sequence))
+        except nats.js.errors.APIError as exc:
+            if exc.err_code in _MESSAGE_GONE:
+                return False
+            msg = f"erasing message {message.sequence} of {message.stream} failed: {exc!r}"
+            raise BusError(msg) from exc
+        except nats.errors.Error as exc:
+            msg = f"erasing message {message.sequence} of {message.stream} failed: {exc!r}"
+            raise BusError(msg) from exc
 
     async def request(
         self,

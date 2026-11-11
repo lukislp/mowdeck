@@ -41,6 +41,7 @@ from identity.adapters.bus.subscriptions import subscribe_all
 from identity.application.ports import (
     AccountEraser,
     Clock,
+    EventLog,
     Lt,
     ModuleSource,
     PasswordHasher,
@@ -82,6 +83,7 @@ def build_app(
     apple_transport: httpx.AsyncBaseTransport | None = None,
     provisioner: SandboxProvisioner | None = None,
     eraser: AccountEraser | None = None,
+    event_log: EventLog | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA and Argon2id."""
     runtime = Runtime(
@@ -97,6 +99,7 @@ def build_app(
         apple_transport=apple_transport,
         provisioner=provisioner,
         eraser=eraser,
+        event_log=event_log,
     )
     keys = runtime.keys
     verifier = JwtVerifier(
@@ -117,7 +120,9 @@ def build_app(
         add_readiness_check(app, ReadinessCheck("signing_key", signing_key))
         authz: Any = services.deps.authorizer
         cache = authz if hasattr(authz, "invalidate_subject") else None
-        app.state.subscriptions = await subscribe_all(active_bus, cache) if active_bus else []
+        app.state.subscriptions = (
+            await subscribe_all(active_bus, cache, services.event_erasure) if active_bus else []
+        )
         if isinstance(runtime.entitlements, EntitlementsClient):
             plan_events = await runtime.entitlements.subscribe()
             if plan_events is not None:
@@ -204,6 +209,9 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
                 name="sandbox-sweep",
             )
         )
+    events = services.event_erasure
+    if events is not None:  # the stored events of deleted users (ADR 0082)
+        tasks.append(asyncio.create_task(events.run(), name="event-erasure"))
     erasure = services.erasure
     if erasure is not None:  # the purge of deleted accounts (ADR 0082)
         tasks.append(

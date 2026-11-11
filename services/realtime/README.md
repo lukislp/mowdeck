@@ -151,7 +151,7 @@ Plus the kit's HTTP metrics and `mowdeck_authz_*`.
 | `application/` | `Hub` (sessions, limits, mower index, last-value cache, fan-out, re-checks, shutdown), `Session` (protocol, expiry timer, reader and writer), `Outbox` (state slots and bounded queue), ports |
 | `adapters/api/` | the WebSocket route and the Starlette socket adapter |
 | `adapters/bus/` | the four subscriptions and the drive backend (`fleet.drive.*` requests, frame publishing) |
-| `adapters/` | `auth.py` (`mowdeck-auth` verifier), `authz.py` (`check_many(can_view)`), `metrics.py` (Prometheus), `server.py` (`RealtimeServer`) |
+| `adapters/` | `auth.py` (`mowdeck-auth` verifier, with the deny list of deleted users and erased accounts fed from `event.identity.access.revoked.*`, ADR 0082), `authz.py` (`check_many(can_view)`), `metrics.py` (Prometheus), `server.py` (`RealtimeServer`) |
 | `main.py` | wiring (`build_app`), uvicorn options, `main()` |
 
 ## Local start

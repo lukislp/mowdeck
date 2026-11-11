@@ -40,7 +40,7 @@ from mowdeck_service_kit.entitlements import (
 from mowdeck_service_kit.health import ReadinessCheck
 
 from realtime.adapters.api.routes import router
-from realtime.adapters.auth import RejectAllTokens, verifier_from_env
+from realtime.adapters.auth import JwtTokenVerifier, RejectAllTokens, verifier_from_env
 from realtime.adapters.authz import AuthzAccessChecker
 from realtime.adapters.bus.drive import BusDriveBackend
 from realtime.adapters.bus.presence import BusPresencePublisher
@@ -95,6 +95,9 @@ def build_app(
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             app.state.plan_subscription = await plans.subscribe()
+        if active_bus is not None and isinstance(verifier, JwtTokenVerifier):
+            # The deny list of deleted users and erased accounts (ADR 0082).
+            app.state.revocation_events = await verifier.attach(active_bus)
         if active_bus is not None:
             app.state.realtime_subscriptions = await subscribe_all(
                 active_bus, hub, _invalidation_cache(app.state.authorizer)

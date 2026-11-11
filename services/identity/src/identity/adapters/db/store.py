@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from identity.adapters.db import tables
 from identity.application.ports import Ge, Gt, In, Lt
-from identity.domain.erasure import AccountErasure
+from identity.domain.erasure import AccountErasure, EventErasure
 from identity.domain.errors import ConflictError
 from identity.domain.models import (
     Account,
@@ -193,6 +193,7 @@ class SqlTx:
     known_devices: SqlTable[KnownDevice]
     sandboxes: SqlTable[DemoSandbox]
     erasures: SqlTable[AccountErasure]
+    event_erasures: SqlTable[EventErasure]
 
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete one demo sandbox account's audit rows: the trigger lets a ``DELETE`` pass
@@ -243,6 +244,7 @@ class SqlTx:
             known_devices=SqlTable(conn, tables.known_devices, KnownDevice, "id"),
             sandboxes=SqlTable(conn, tables.demo_sandboxes, DemoSandbox, "account_id"),
             erasures=SqlTable(conn, tables.account_erasures, AccountErasure, "account_id"),
+            event_erasures=SqlTable(conn, tables.event_erasures, EventErasure, "subject_id"),
         )
 
 

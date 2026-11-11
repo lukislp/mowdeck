@@ -42,6 +42,8 @@ Subject scheme:
 ``relay.camera.renew``                core NATS request: a lease's heartbeat, a fresh ticket
 ``relay.camera.detach``               core NATS request: end a lease
 ``camera.mower.<id>.relay.<kind>``    camera relay events (stream ``CAMERA``)
+``event.identity.access.revoked.<id>``  deny list entry of a deleted user, API token or erased
+                                      account (stream ``EVENTS``, ADR 0082)
 ====================================  ============================================
 
 The camera request lives below ``gateway.`` and not below ``device.``: the stream ``DEVICE``
@@ -213,6 +215,16 @@ def device_subject(mower_id: UUID, kind: DeviceSnapshotKind) -> str:
         msg = f"invalid device snapshot kind {kind!r}"
         raise ValueError(msg)
     return f"{DEVICE_PREFIX}.{mower_id}.{kind}"
+
+
+def device_wildcard(mower_id: UUID) -> str:
+    """Wildcard for every device snapshot of one mower: ``device.mower.<id>.>``."""
+    return f"{DEVICE_PREFIX}.{mower_id}.>"
+
+
+def camera_wildcard(mower_id: UUID) -> str:
+    """Wildcard for every camera relay event of one mower: ``camera.mower.<id>.>``."""
+    return f"{CAMERA_PREFIX}.{mower_id}.>"
 
 
 def parse_device_subject(subject: str) -> tuple[UUID, str]:
@@ -451,6 +463,9 @@ class StreamSpec:
         max_bytes: Total size limit in bytes, ``-1`` for unlimited.
         duplicate_window_seconds: Window in which a repeated ``Nats-Msg-Id`` is dropped.
         discard: Which messages to drop when a limit is hit.
+        allow_direct: The stream answers direct gets (``$JS.API.DIRECT.GET``), which read
+            stored messages in batches without a consumer. Only where a service has to read a
+            stream to remove single messages from it (``EVENTS``, ADR 0082).
     """
 
     name: str
@@ -463,6 +478,7 @@ class StreamSpec:
     max_bytes: int = -1
     duplicate_window_seconds: int = 120
     discard: Literal["old", "new"] = "old"
+    allow_direct: bool = False
 
     def captures(self, subject: str) -> bool:
         """Return True if ``subject`` is stored by this stream."""
@@ -496,6 +512,7 @@ EVENTS = StreamSpec(
     max_age_seconds=30 * 24 * 3600,
     max_bytes=1024 * 1024 * 1024,
     duplicate_window_seconds=120,
+    allow_direct=True,
 )
 
 DEVICE = StreamSpec(
@@ -522,6 +539,11 @@ CAMERA = StreamSpec(
 STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, EVENTS, DEVICE, CAMERA)
 """All streams MowDeck services expect."""
 
+MOWER_STREAMS: tuple[StreamSpec, ...] = (COMMANDS, TELEMETRY, DEVICE, CAMERA)
+"""The streams whose subjects carry the mower id (``<kind>.mower.<id>...``): everything they
+hold of one mower can be purged by a subject filter (ADR 0082). ``EVENTS`` is not one of them:
+``event.<domain>.<name>`` names neither a mower nor an account, the envelope does."""
+
 
 def stream_for_subject(subject: str) -> StreamSpec | None:
     """Return the stream that stores ``subject`` (a concrete subject or a filter pattern)."""
@@ -537,6 +559,20 @@ def account_erase_subject(service_id: str) -> str:
     _check_tokens(service_id, "service")
     return f"{ACCOUNT_ERASE_PREFIX}.{service_id}"
 
+
+ACCESS_REVOKED_PREFIX = "event.identity.access.revoked"
+"""Prefix of the deny list entries of ``identity.access.revoked`` (stream ``EVENTS``, ADR 0082):
+one subject per revoked id, so the newest entry of every id can be read back."""
+
+
+def access_revoked_subject(subject_id: UUID) -> str:
+    """Subject of the deny list entry of one id: ``event.identity.access.revoked.<id>`` (the
+    id of a user, an API token or an account)."""
+    return f"{ACCESS_REVOKED_PREFIX}.{subject_id}"
+
+
+ALL_ACCESS_REVOKED = f"{ACCESS_REVOKED_PREFIX}.*"
+"""Wildcard every token verifier subscribes to: the deny list entries of every id."""
 
 ALL_ACCOUNT_ERASE = f"{ACCOUNT_ERASE_PREFIX}.*"
 """Wildcard for the erasure requests of every service."""

@@ -9,7 +9,7 @@ transaction). Filters are keyword arguments: plain values compare for equality (
 implement it: PostgreSQL (``adapters.db``) and memory (``adapters.memory``, tests).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,7 +19,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import ModuleDescriptor
 from pydantic import BaseModel
 
-from identity.domain.erasure import AccountErasure
+from identity.domain.erasure import AccountErasure, EventErasure
 from identity.domain.models import (
     Account,
     ApiToken,
@@ -232,6 +232,11 @@ class Tx(Protocol):
         """The purges of deleted accounts (ADR 0082)."""
         ...
 
+    @property
+    def event_erasures(self) -> Table[EventErasure]:
+        """The open removals of stored events of erased accounts and deleted users."""
+        ...
+
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete the audit rows of one demo sandbox account (ADR 0076), past the append-only
         rule that holds for every other delete; returns how many."""
@@ -355,6 +360,41 @@ class AccountEraser(Protocol):
 
     async def erase(self, service: str, account_id: UUID) -> int:
         """Ask ``service`` to delete everything of the account; raises when it did not confirm."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class StoredEvent:
+    """One message of the ``EVENTS`` stream as the port hands it out."""
+
+    sequence: int
+    event: Mapping[str, Any] | None
+    """The envelope as JSON; None for a message that is not a JSON object (nobody's event)."""
+    ref: object = None
+    """What the adapter needs to erase the message again."""
+
+
+class EventLog(Protocol):
+    """The domain events the bus still stores (the ``EVENTS`` stream, 30 days), for the one
+    purpose of removing those of an erased account or a deleted user (ADR 0082).
+
+    The port reads and erases; which event belongs to whom, and how the long read is cut into
+    slices, is decided by the domain and the use case
+    (:class:`identity.application.event_erasure.EventErasureService`). Every call raises when the
+    stream could not be read or changed, so the caller keeps its position and retries.
+    """
+
+    async def end(self) -> int:
+        """The newest sequence of the stream now (0: empty, or no stream at all)."""
+        ...
+
+    def read(self, subject: str, after: int, until: int) -> AsyncGenerator[StoredEvent]:
+        """The stored events on ``subject`` with a sequence above ``after`` and up to ``until``,
+        oldest first, at the pace of the reader."""
+        ...
+
+    async def erase(self, event: StoredEvent) -> bool:
+        """Remove one stored event; False when it was gone already."""
         ...
 
 

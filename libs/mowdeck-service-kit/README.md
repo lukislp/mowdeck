@@ -217,6 +217,7 @@ Raise `BadRequest` (400), `Unauthorized` (401, adds `WWW-Authenticate: Bearer`),
 - Resources of other accounts are answered with 404, not 403, so their existence is not revealed.
 - `current_principal` returns 401 without a principal; `current_account_id` returns 403 for principals without an account (operators, services).
 - `require_permission("mower.control")` asks the `PermissionChecker` on `app.state.permission_checker` when one is installed, otherwise it checks the token level permission list. `mowdeck_authz.fastapi.install_authz(app, authorizer)` installs a checker that asks OpenFGA for the key's computed relation on the principal's account (`mower.control` becomes `can_control` on `account:<acc>`). A checker is any object with `async def has_permission(principal, permission) -> bool` (protocol `PermissionChecker`). Object-level checks use `mowdeck_authz.fastapi.require(...)` or `require_or_not_found(...)`.
+- A resolver that implements `BusAware` (`async attach(bus)`) is attached to the event bus by `create_app` once the bus is connected, before the start-up hooks. The resolver of `mowdeck-auth` uses it for the deny list of deleted users and erased accounts (ADR 0082), so no service has code for it.
 - The principal comes from a `PrincipalResolver` (`async resolve(request) -> Principal`). The default resolver rejects everything with 401; `mowdeck-auth` provides the JWT resolver later.
 
 ## Database (extra `db`)
@@ -246,6 +247,20 @@ await plans.require_feature(account_id, "manual_drive")  # 403 feature-not-in-pl
 ```
 
 The client asks `entitlements.check` (core NATS) once per account and caches the returned `EntitlementSnapshot` for `MOWDECK_ENTITLEMENTS_CACHE_SECONDS`; `await plans.subscribe()` drops snapshots on `entitlements.plan.changed`. When Entitlements does not answer, `MOWDECK_ENTITLEMENTS_BILLING_ENABLED` decides (off: allowed with plan `unlimited`, on: refused with `entitlements_unavailable`); outages are never cached. `view` and `emergency_stop` are always allowed and never asked. The problem types are `PlanLimitReached` (409 `plan-limit`, `errors` carry `limit` and `current`) and `FeatureNotInPlan` (403 `feature-not-in-plan`); `feature_gate(key)` is a FastAPI dependency for routes, after `install_entitlements(app, plans)`. Tests use `mowdeck_service_kit.testing.FakeEntitlements` (one plan for every account, changeable between requests, records every question).
+
+## What the streams hold
+
+JetStream keeps messages for the retention of their stream (30 days in `EVENTS` and `DEVICE`), so the data of an erased account or a removed mower would outlive its rows there ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 11). `mowdeck_service_kit.bus.StreamStore` is the port that removes it; `JetStreamBus` and `InMemoryBus` implement it. It is not part of `EventBus`: only the service that owns what a message is about uses it (Fleet for the subjects of a mower, Identity for the events of an account or a user), and the NATS permissions allow the calls to nobody else.
+
+| Call | JetStream | For |
+| --- | --- | --- |
+| `purge_subject(subject) -> int` | `STREAM.PURGE` with a subject filter | subjects that name what is removed (`telemetry.mower.<id>`) |
+| `count_subject(subject) -> int` | stream info with a subject filter | the check after a purge |
+| `stored_messages(subject, after=0, until=None)` (async iterator of `StoredMessage`) | a batched `DIRECT.GET` with `next_by_subj` (500 per request, no consumer; one `STREAM.MSG.GET` per message while the stream does not allow direct gets) | subjects that do not name it (`event.>`): the caller decides per message |
+| `last_sequence(subject) -> int` | stream info | the bound of a read that must end under live traffic (`until`); `after` continues a read that was cut into pieces |
+| `erase_message(message) -> bool` | `STREAM.MSG.DELETE` (the message is overwritten) | removing one of them |
+
+Every call is idempotent and raises `BusError` when the server refused or did not answer; a subject no stream stores raises `ValueError`. A service that starts to use one of them adds the `purge` or `erase` entry in `tools/repo-checks/scripts/nats_auth.py` (the code scan finds the calls), and `tools/repo-checks/tests/test_stream_erasure_registry.py` fails for a new stream or per-mower subject that nobody removes. `InMemoryBus` keeps what its streams hold (with the per-subject limit, without age and size limits), so `last_per_subject` and these calls behave like the server in tests.
 
 ## Account erasure
 

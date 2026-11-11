@@ -372,6 +372,20 @@ account_erasures = Table(
     Column("completed_at", TS),
 )
 
+# The progress of removing an erased account's or a deleted user's stored events from the EVENTS
+# stream (ADR 0082). A row exists only while the work is open; ids and counters, nothing personal.
+event_erasures = Table(
+    "event_erasures",
+    metadata,
+    Column("subject_id", Uuid, primary_key=True),
+    Column("scope", String(16), nullable=False),
+    Column("requested_at", TS, nullable=False),
+    Column("last_sequence", BigInteger, nullable=False),
+    Column("filter_index", Integer, nullable=False),
+    Column("scanned_sequence", BigInteger, nullable=False),
+    Column("erased", Integer, nullable=False),
+)
+
 # Schema only in Phase 1 (design section 5): support access and invitations.
 support_grants = Table(
     "support_grants",

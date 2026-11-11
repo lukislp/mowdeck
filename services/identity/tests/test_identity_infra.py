@@ -557,6 +557,7 @@ async def test_background_tasks_run_and_stop() -> None:
     assert [t.get_name() for t in tasks] == [
         "catalogue",
         "maintenance",
+        "event-erasure",
         "account-erasure",
         "reconcile",
     ]

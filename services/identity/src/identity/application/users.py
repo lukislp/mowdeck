@@ -24,10 +24,14 @@ from uuid import UUID, uuid4
 
 from mowdeck_authz import api_token, user
 from mowdeck_contracts.v1 import (
+    IDENTITY_ACCESS_REVOKED,
     IDENTITY_API_TOKEN_REVOKED,
     IDENTITY_USER_CREATED,
     IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
+    USERNAME_PLACEHOLDER,
+    AccessRevoked,
+    AccessScope,
     ApiTokenRevoked,
     UserChanged,
 )
@@ -41,7 +45,12 @@ from identity.application.ports import Tx
 from identity.application.roles import AssignmentSpec, assign_role
 from identity.application.work import Work
 from identity.domain.credentials import normalize_email, validate_password, validate_username
-from identity.domain.erasure import SelfDeletion, self_deletion, self_deletion_blocker
+from identity.domain.erasure import (
+    SelfDeletion,
+    self_deletion,
+    self_deletion_blocker,
+    tokens_expired_at,
+)
 from identity.domain.errors import ConflictError, ForbiddenError, InvalidInput, NotFoundError
 from identity.domain.models import (
     ApiToken,
@@ -212,7 +221,10 @@ class UserService:
                 IDENTITY_USER_CREATED,
                 account_id,
                 UserChanged(
-                    user_id=created.id, account_id=account_id, username=username_norm, subuser=True
+                    user_id=created.id,
+                    account_id=account_id,
+                    username=USERNAME_PLACEHOLDER,
+                    subuser=True,
                 ),
             )
         return MemberView(created, membership, assignments)
@@ -248,10 +260,12 @@ class UserService:
 
     async def _cascade(
         self, work: Work, account_id: UUID, user_id: UUID, reason: str, *, all_sessions: bool
-    ) -> None:
-        """End sessions and revoke the API tokens the user created in the account."""
+    ) -> list[UUID]:
+        """End sessions and revoke the API tokens the user created in the account; the ids of
+        the tokens revoked now."""
         tx = work.tx
         now = self.deps.clock()
+        revoked: list[UUID] = []
         filters: dict[str, Any] = {"user_id": user_id, "revoked_at": None}
         if not all_sessions:
             filters["account_id"] = account_id
@@ -263,6 +277,7 @@ class UserService:
         ):
             token.revoked_at, token.revoke_reason = now, reason
             await tx.api_tokens.update(token)
+            revoked.append(token.id)
             work.touch(api_token(token.id))
             work.emit(
                 IDENTITY_API_TOKEN_REVOKED,
@@ -270,6 +285,23 @@ class UserService:
                 ApiTokenRevoked(token_id=token.id, account_id=account_id, reason=reason),
             )
         work.touch(user(user_id))
+        return revoked
+
+    def _revoke_access(self, work: Work, account_id: UUID, subjects: Sequence[UUID]) -> None:
+        """``identity.access.revoked`` for a deleted user and the API tokens that ended with
+        them, after the commit and before ``identity.user.deleted``: every service refuses the
+        access tokens issued until now, so a still valid one cannot write rows again after a
+        service dropped the user's (ADR 0082). The entries live until those tokens have expired."""
+        now = self.deps.clock()
+        expired = tokens_expired_at(now, self.deps.config.access_token_ttl)
+        for subject_id in subjects:
+            work.emit(
+                IDENTITY_ACCESS_REVOKED,
+                account_id,
+                AccessRevoked(
+                    scope=AccessScope.SUBJECT, id=subject_id, issued_before=now, expires_at=expired
+                ),
+            )
 
     async def set_disabled(
         self, account_id: UUID, user_id: UUID, disabled: bool, ctx: RequestContext
@@ -293,7 +325,7 @@ class UserService:
                     UserChanged(
                         user_id=user_id,
                         account_id=account_id,
-                        username=found.username_norm,
+                        username=USERNAME_PLACEHOLDER,
                         subuser=owned,
                     ),
                 )
@@ -378,7 +410,9 @@ class UserService:
             tx = work.tx
             found, membership = await self._target(work, account_id, user_id, ctx)
             owned = found.kind is UserKind.SUBUSER and found.owner_account_id == account_id
-            await self._cascade(work, account_id, user_id, "user removed", all_sessions=owned)
+            tokens = await self._cascade(
+                work, account_id, user_id, "user removed", all_sessions=owned
+            )
             await tx.assignments.delete(
                 account_id=account_id, subject_type=SubjectType.USER.value, subject_id=user_id
             )
@@ -392,6 +426,7 @@ class UserService:
                 target=("user", user_id),
                 details={"username": found.username_norm, "subuser": owned},
             )
+            self._revoke_access(work, account_id, [user_id, *tokens])
             _emit_deleted(work, account_id, found, owned=owned)
 
     async def delete_self(self, account_id: UUID, ctx: RequestContext) -> None:
@@ -431,7 +466,9 @@ class UserService:
             if self_deletion(memberships, account_id) is not SelfDeletion.USER:
                 raise ConflictError(OWNER_DELETES_THE_ACCOUNT)
             owned = found.kind is UserKind.SUBUSER and found.owner_account_id == account_id
-            await self._cascade(work, account_id, found.id, "user deleted", all_sessions=True)
+            tokens = await self._cascade(
+                work, account_id, found.id, "user deleted", all_sessions=True
+            )
             for token in await tx.api_tokens.find(account_id=account_id, created_by=found.id):
                 if is_personal_token(token):
                     await tx.api_tokens.delete(id=token.id)
@@ -444,6 +481,7 @@ class UserService:
             )
             await delete_user_rows(tx, found)
             await tx.scrub_user_audit(found.id)
+            self._revoke_access(work, account_id, [found.id, *tokens])
             _emit_deleted(work, account_id, found, owned=owned, reason="self")
 
 
@@ -457,7 +495,7 @@ def _emit_deleted(
         UserChanged(
             user_id=found.id,
             account_id=account_id,
-            username=found.username_norm,
+            username=USERNAME_PLACEHOLDER,
             subuser=owned,
             reason=reason,
         ),
