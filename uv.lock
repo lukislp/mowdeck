@@ -1910,7 +1910,7 @@ dependencies = [
 requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
-    { name = "pyworxcloud", specifier = "==6.4.2" },
+    { name = "pyworxcloud", specifier = "==6.5.0" },
 ]
 
 [[package]]
@@ -3030,7 +3030,7 @@ wheels = [
 
 [[package]]
 name = "pyworxcloud"
-version = "6.4.2"
+version = "6.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -3039,9 +3039,9 @@ dependencies = [
     { name = "tzdata" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/79/f2/8150009db744697368091f0e072996a97831aa00bc009d925c234878925a/pyworxcloud-6.4.2.tar.gz", hash = "sha256:4d9e2a1ab4103b15ea5edfc0811452b216568013f585ef03ae08d2ddec6384cc", size = 66401, upload-time = "2026-07-12T12:16:46.946Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/93/90/07391d2bfed5618e79e0abcbc977010c89e32fbd63b95bd2d2bb6d63636f/pyworxcloud-6.5.0.tar.gz", hash = "sha256:f48d0ebcc0baa2a77300a8259aab8707b4f900cdd79651e0c1679da927b0c710", size = 67879, upload-time = "2026-11-07T11:35:13.385Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/a3/f42c4e7c68961375aea0866b4f2630ff0e2eddd086bb1a25e7c50252fac1/pyworxcloud-6.4.2-py3-none-any.whl", hash = "sha256:913b81a51dbf81325d5468995305cae7f5116573fdd3ce17c98449b9eb780a0e", size = 74766, upload-time = "2026-07-12T12:16:48.106Z" },
+    { url = "https://files.pythonhosted.org/packages/45/5c/09bf83aefe7d070e1e29e8ea7b21b807a6b359b28720c34830e4e22117b0/pyworxcloud-6.5.0-py3-none-any.whl", hash = "sha256:702b58e72a9b8d92ee74d42f08c2ed861e6334bd415da8b044e5439207504081", size = 76181, upload-time = "2026-11-07T11:35:14.354Z" },
 ]
 
 [[package]]

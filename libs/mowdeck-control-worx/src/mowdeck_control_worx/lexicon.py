@@ -7,7 +7,7 @@ Registered through the entry point group ``mowdeck.error_lexicons`` under ``worx
 (``pyproject.toml``); ``mowdeck-control`` builds it at the first lookup. Worx Landroid, Kress and
 LandXcape mowers report the same codes (``dat.le``), so one lexicon serves all three brands.
 
-Sources: **pyworxcloud 6.4.2**'s tables (``ERROR_TO_DESCRIPTION`` and ``STATE_TO_DESCRIPTION``
+Sources: **pyworxcloud 6.5.0**'s tables (``ERROR_TO_DESCRIPTION`` and ``STATE_TO_DESCRIPTION``
 in ``pyworxcloud/utils/state.py``), copied as :data:`ENGLISH_NAMES` and :data:`STATUS_NAMES`
 so that loading the lexicon stays cheap and never imports the vendor library (a test keeps the
 copies equal). The vendor documents no code table; pyworxcloud's names come from reverse
@@ -39,7 +39,7 @@ from mowdeck_control_worx.descriptor import PROVIDER
 
 VENDOR: Final = PROVIDER
 SOURCE: Final = (
-    "pyworxcloud 6.4.2 error and status tables (reverse engineered, not confirmed by the "
+    "pyworxcloud 6.5.0 error and status tables (reverse engineered, not confirmed by the "
     "vendor) with MowDeck categories, German titles and steps"
 )
 
