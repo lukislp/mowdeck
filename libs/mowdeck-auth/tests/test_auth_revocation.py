@@ -6,6 +6,8 @@ refused although its signature and expiry are fine. The list is pure (the time i
 verifier asks it, the bus feeds it, a restart reads it back, and without a bus nothing changes.
 """
 
+import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -15,6 +17,7 @@ from mowdeck_auth import (
     AuthSettings,
     JwtPrincipalResolver,
     JwtVerifier,
+    RevocationFeed,
     RevocationList,
     TokenError,
     subscribe_revocations,
@@ -31,7 +34,14 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_contracts.v1.subjects import ALL_ACCESS_REVOKED, access_revoked_subject
 from mowdeck_service_kit import create_app, current_principal
-from mowdeck_service_kit.bus import InMemoryBus, publish_event
+from mowdeck_service_kit.bus import (
+    BusError,
+    BusNotConnectedError,
+    InMemoryBus,
+    MessageHandler,
+    Subscription,
+    publish_event,
+)
 from mowdeck_service_kit.tenancy import BusAware
 from mowdeck_service_kit.testing import lifespan_client, make_test_descriptor, make_test_settings
 
@@ -228,6 +238,138 @@ async def test_without_a_bus_tokens_are_accepted_as_before() -> None:
     async with lifespan_client(_app(keys, None)) as client:
         response = await client.put("/preferences", headers=bearer(keys.mint(anna)))
     assert response.status_code == 200
+
+
+# --- a refused subscription fails open (the v0.69.4 deploy) ----------------------------------
+
+
+class RefusingBus(InMemoryBus):
+    """A bus whose server refuses the deny list's consumer ``refusals`` times (a NATS that still
+    runs older permissions), then accepts it (after a reload)."""
+
+    def __init__(self, refusals: int) -> None:
+        super().__init__()
+        self.refusals = refusals
+        self.attempts = 0
+        self.closed = False
+
+    # The memory bus returns its own handle type; the port's Subscription is enough here.
+    async def subscribe(  # type: ignore[override]
+        self,
+        subject: str,
+        handler: MessageHandler,
+        *,
+        durable: str | None = None,
+        queue: str | None = None,
+        last_per_subject: bool = False,
+        acknowledge: bool = True,
+    ) -> Subscription:
+        if subject == ALL_ACCESS_REVOKED:
+            self.attempts += 1
+            if self.closed:
+                raise BusNotConnectedError("closed")
+            if self.attempts <= self.refusals:
+                raise BusError("consumer not created: permissions violation")
+        return await super().subscribe(
+            subject,
+            handler,
+            durable=durable,
+            queue=queue,
+            last_per_subject=last_per_subject,
+            acknowledge=acknowledge,
+        )
+
+
+async def test_a_refused_subscription_does_not_stop_the_start_and_is_retried(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    bus = RefusingBus(refusals=2)
+    entries = RevocationList(lambda: T0)
+    feed = RevocationFeed(entries, retry_seconds=0.01, max_retry_seconds=0.02)
+    check = feed.readiness_check()
+    assert (check.name, check.required) == ("token-deny-list", False)
+
+    with caplog.at_level(logging.INFO, logger="mowdeck_auth.revocation"):
+        await feed.start(bus)  # refused: no exception
+        assert not feed.subscribed
+        assert await check.check() is False
+        assert any(
+            r.levelno == logging.ERROR and "fail open" in r.getMessage() for r in caplog.records
+        )
+        for _ in range(200):
+            if feed.subscribed:
+                break
+            await asyncio.sleep(0.01)
+    assert feed.subscribed and bus.attempts == 3
+    assert await check.check() is True
+    assert [r.levelno for r in caplog.records].count(logging.ERROR) == 1  # loud once, not per try
+    assert any("subscribed" in r.getMessage() for r in caplog.records)
+
+    anna = user()
+    await publish(bus, revoked(AccessScope.SUBJECT, anna.subject))
+    assert entries.refuses(anna, T0)  # the list is fed again
+    await feed.stop()
+    await feed.stop()  # idempotent
+    assert not feed.subscribed
+
+
+async def test_the_retries_end_with_stop_and_with_a_closed_bus() -> None:
+    bus = RefusingBus(refusals=10_000)
+    feed = RevocationFeed(RevocationList(lambda: T0), retry_seconds=0.01, max_retry_seconds=0.01)
+    await feed.start(bus)
+    await asyncio.sleep(0.05)
+    await feed.stop()
+    attempts = bus.attempts
+    await asyncio.sleep(0.05)
+    assert bus.attempts == attempts and not feed.subscribed
+
+    closing = RefusingBus(refusals=10_000)
+    feed = RevocationFeed(RevocationList(lambda: T0), retry_seconds=0.01, max_retry_seconds=0.01)
+    await feed.start(closing)
+    closing.closed = True
+    await asyncio.sleep(0.05)
+    attempts = closing.attempts
+    await asyncio.sleep(0.05)
+    assert closing.attempts == attempts  # the retry loop ended by itself
+    await feed.stop()
+
+
+async def test_a_closed_bus_at_the_start_is_an_error_of_the_caller() -> None:
+    bus = RefusingBus(refusals=0)
+    bus.closed = True
+    with pytest.raises(BusNotConnectedError):
+        await RevocationFeed(RevocationList(lambda: T0)).start(bus)
+
+
+async def test_a_service_starts_degraded_when_the_bus_refuses_the_deny_list() -> None:
+    """Through the kit: the service starts and serves (fail open), ``/readyz`` stays 200 and
+    names the degraded check; once the retry succeeds the check passes again."""
+    keys, bus = TestKeys(), RefusingBus(refusals=10_000)
+    resolver = keys.resolver()
+    assert isinstance(resolver, JwtPrincipalResolver)
+    resolver.revocation_feed.retry_seconds = 0.01
+    resolver.revocation_feed.max_retry_seconds = 0.02
+    app = create_app(
+        make_test_settings(nats_enabled=False, readiness_interval_seconds=0),
+        make_test_descriptor(),
+        bus=bus,
+        principal_resolver=resolver,
+    )
+    async with lifespan_client(app) as client:
+        degraded = await client.get("/readyz")
+        assert degraded.status_code == 200
+        assert degraded.json()["status"] == "degraded"
+        assert degraded.json()["checks"]["token-deny-list"]["status"] == "degraded"
+        assert (await client.get("/startupz")).status_code == 200
+        assert (await client.put("/missing")).status_code == 404  # it serves
+        bus.refusals = 0  # NATS reloaded its permissions
+        for _ in range(200):
+            if resolver.revocation_feed.subscribed:
+                break
+            await asyncio.sleep(0.01)
+        ready = await client.get("/readyz")
+    assert ready.json()["status"] == "ok"
+    assert not resolver.revocation_feed.subscribed  # detached on shutdown
 
 
 # --- the leeway is bounded: Identity's wait depends on it ------------------------------------

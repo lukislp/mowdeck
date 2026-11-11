@@ -32,8 +32,12 @@ docker compose exec -T postgres pg_dumpall -U postgres > ~/mowdeck-before-<x>.sq
 ./nats-passwords.sh --check .env                    # the release's NATS passwords (ADR 0074)
 sed -i 's/^MOWDECK_VERSION=.*/MOWDECK_VERSION=<x>/' .env
 docker compose -f docker-compose.yml -f docker-compose.release.yml pull
+# only when the release changed nats/ (git diff --quiet <old tag> v<x> -- nats/ fails):
+docker compose -f docker-compose.yml -f docker-compose.release.yml kill -s HUP nats
 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait
 ```
+
+The `kill -s HUP` reloads NATS's users and permissions ([NATS permissions after an upgrade](#nats-permissions-after-an-upgrade)); `docker compose logs nats` then shows "Reloaded server configuration".
 
 `verify-release.sh` reads the image digests from the notes of the GitHub release `v<x>` (with `gh` when it is installed, else the public GitHub API with `curl`; no token), checks that each registry tag `<x>` points to that digest, verifies each digest's Sigstore signature with `cosign` (bound to `https://github.com/<repo>/.github/workflows/release.yml@refs/heads/main` and the issuer `https://token.actions.githubusercontent.com`; cosign from `PATH`, else the pinned cosign container) and fails closed: if one image fails, it writes nothing and exits 1. On success it writes `docker-compose.release.yml` (ignored by git), which sets every service to `<registry>/<service>:<x>@sha256:<digest>`, so `up` runs exactly the verified images even if a tag is moved later. `--print` writes the override to stdout, `--out FILE` elsewhere, `--no-pin` only verifies. The repository comes from `SOURCE_URL` (or `MOWDECK_RELEASE_REPO=<owner>/<repo>`) and must belong to the registry's owner. Instead of a full checkout, fetching `docker-compose.yml`, `verify-release.sh`, `init/` and `mediamtx/` of the tag is enough.
 
@@ -50,7 +54,7 @@ cd infra/compose                 # of the checkout on the server
 ./deploy.sh <x>                  # e.g. ./deploy.sh 0.9.0; --dry-run only prints the steps
 ```
 
-It runs, and stops at the first failure: `git fetch --tags`; the [pre-deploy dump](#the-pre-deploy-dump) (a gzip'd `pg_dumpall` in `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}`, refused unless it ends with "PostgreSQL database cluster dump complete", and a copy of `.env` in a separate directory; only the newest three of each are kept); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails) and `./nats-passwords.sh --check .env` (the NATS passwords of that release, see [NATS users](#nats-users-and-permissions)); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
+It runs, and stops at the first failure: `git fetch --tags`; the [pre-deploy dump](#the-pre-deploy-dump) (a gzip'd `pg_dumpall` in `${MOWDECK_BACKUP_DIR:-~/mowdeck-backups}`, refused unless it ends with "PostgreSQL database cluster dump complete", and a copy of `.env` in a separate directory; only the newest three of each are kept); `git checkout --detach v<x>` (refused with local changes); `./verify-release.sh <x>` (nothing is pulled when it fails) and `./nats-passwords.sh --check .env` (the NATS passwords of that release, see [NATS users](#nats-users-and-permissions)); `MOWDECK_VERSION=<x>` in `.env`; `pull`; **open the window** (`--window-minutes`, default 15, expires by itself); when the release changed `nats/` and NATS is running, **reload NATS** and wait up to `MOWDECK_NATS_RELOAD_SECONDS` (10) for its confirmation, stopping before `up` when it refuses the new file ([why](#nats-permissions-after-an-upgrade)); `up -d --no-build --wait`; **close the window** (also when `up` fails); a table of every service, failing when one is not running and healthy. It never prints `.env` or its values. `--no-maintenance` skips the window. A stack under another project name: `COMPOSE_PROJECT_NAME=<name> ./deploy.sh <x>`. The manual procedure above stays possible; add the window by hand with:
 
 ```bash
 docker compose exec -T notifications python -m notifications.cli maintenance open --minutes 15
@@ -154,7 +158,7 @@ Every MowDeck service answers three health endpoints ([ADR 0077](../adr/0077-liv
 | --- | --- | --- |
 | `/healthz` | 200 while the process serves requests; touches no dependency | Kubernetes liveness probe |
 | `/startupz` | 503 until every readiness check passed once, then 200 like `/healthz` for the rest of the process's life | the Compose healthcheck, the image's `HEALTHCHECK`, the Kubernetes startup probe |
-| `/readyz` | the readiness checks now (database, OpenFGA, NATS, subscriptions, ...); 503 with the failing check, and while shutting down | operators, the Kubernetes readiness probe |
+| `/readyz` | the readiness checks now (database, OpenFGA, NATS, subscriptions, ...); 503 with the failing check, and while shutting down; 200 with `"status": "degraded"` when only a check that is not required fails (`token-deny-list`, ADR 0082) | operators, the Kubernetes readiness probe |
 
 So `docker compose up --wait`, `deploy.sh` and `depends_on: service_healthy` still wait until a service was ready, but once it runs, neither load nor a dependency that fails later makes its container unhealthy. That matters because Traefik's Docker provider routes only to healthy containers: under the load test a saturated Telemetry answered its old `/readyz` healthcheck too late, Docker marked it unhealthy and every Telemetry request got 404 for about 40 s at a time ([Load testing](load-testing.md)). Traefik also runs with `--providers.docker.allowEmptyServices=true`, so a service that does become unhealthy (a hung process) answers 503 instead of disappearing (404).
 
@@ -210,7 +214,18 @@ git fetch --tags && git checkout --detach v<x>   # the release's nats/auth.conf 
 
 (If `deploy.sh` already stopped at `pull`, the checkout is done: run `./nats-passwords.sh .env` and `./deploy.sh <x>` again.) The services move their durable JetStream consumers to their own inbox on the first start, without losing their position.
 
-A permission violation shows in the NATS log; `sh nats-violations.sh` lists them (CI runs it after the end-to-end suites). A violation after a code change means the service's subjects are missing from the map: `uv run pytest tools/repo-checks/tests/test_nats_auth.py` names them.
+A permission violation shows in the NATS log; `sh nats-violations.sh` lists them (CI runs it after the end-to-end suites). A violation after a code change means the service's subjects are missing from the map: `uv run pytest tools/repo-checks/tests/test_nats_auth.py` names them. A violation right after an update, for a subject the release's `nats/auth.conf` allows, means NATS still runs the permissions of the previous release (next section).
+
+### NATS permissions after an upgrade
+
+NATS reads `nats/auth.conf` when it starts and when it is told to reload (SIGHUP), never by itself. The directory is mounted into the container, so a checkout of a new release puts the new file in front of the running server, but the server keeps the users and permissions it read at its start. `docker compose up` recreates NATS only when its own service definition changed (image, command, environment), which a release that only changes permissions does not do. The services of the new release then ask for something the running NATS does not allow yet and are refused: NATS logs `Permissions Violation for Publish to "$JS.API.CONSUMER.CREATE..."`, the service logs `nats error: ... permissions violation for publish to ...` and, for a consumer it cannot work without, fails to start and restarts.
+
+That is what happened on the update to v0.69.4 (from v0.61.7): v0.69.4 added the consumer `event.identity.access.revoked.*` (the deny list of ADR 0082) to every service that verifies tokens; NATS was not recreated, so Identity, Realtime, Fleet, Scheduler, Telemetry, Planner and Entitlements restart-looped until NATS reloaded its file. Since then:
+
+- `deploy.sh` compares `nats/` of the running and the new release and, when it changed, reloads a running NATS before `up` and waits for "Reloaded server configuration" (a file NATS cannot parse stops the deploy before any service is restarted; NATS keeps its old configuration then).
+- A refused deny list subscription no longer stops a service: the list fails open (ADR 0082), the service starts, logs `token deny list unavailable ...` once and `service degraded`, `/readyz` answers 200 with `"token-deny-list": {"status": "degraded"}`, and it subscribes by itself as soon as NATS allows it. Other consumers still stop the start, as before.
+
+By hand, or when an update stopped like this: `docker compose kill -s HUP nats` (or `docker kill -s HUP <project>-nats-1`), check `docker compose logs nats` for "Reloaded server configuration", then `docker compose -f docker-compose.yml -f docker-compose.release.yml up -d --no-build --wait`. Which file a running NATS has loaded: its log names the configuration's SHA-256 at the start ("Using configuration file ... (sha256:...)") and at every reload ("Reloaded server configuration (sha256:...)"); the hash covers the included `auth.conf`. Helm restarts NATS instead (the checksum of `files/nats-auth.conf` on its pods, [Helm](helm.md#nats-and-openfga)).
 
 ## Authorization bootstrap
 

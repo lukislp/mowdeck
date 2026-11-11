@@ -18,7 +18,7 @@ from mowdeck_service_kit.db import (
     readiness_check_db,
     session_dependency,
 )
-from mowdeck_service_kit.health import run_check
+from mowdeck_service_kit.health import ReadinessCheck, run_check
 from mowdeck_service_kit.otel import traces_endpoint
 from mowdeck_service_kit.testing import (
     lifespan_client,
@@ -294,6 +294,9 @@ async def test_a_bus_aware_resolver_is_attached_before_the_startup_hooks() -> No
     calls: list[str] = []
     bus = InMemoryBus()
 
+    async def listening_check() -> bool:
+        return False
+
     class Listening:
         async def resolve(self, request: Any) -> Any:
             raise AssertionError("no request in this test")
@@ -301,6 +304,12 @@ async def test_a_bus_aware_resolver_is_attached_before_the_startup_hooks() -> No
         async def attach(self, attached: Any) -> None:
             assert attached is bus
             calls.append("attach")
+
+        async def detach(self) -> None:
+            calls.append("detach")
+
+        def readiness_checks(self) -> list[ReadinessCheck]:
+            return [ReadinessCheck(name="listening", check=listening_check, required=False)]
 
     class Plain:
         async def resolve(self, request: Any) -> Any:
@@ -318,11 +327,17 @@ async def test_a_bus_aware_resolver_is_attached_before_the_startup_hooks() -> No
             on_startup=[hook],
         )
 
-    async with lifespan_client(app_with(Listening(), bus)):
+    async with lifespan_client(app_with(Listening(), bus)) as client:
         assert calls == ["attach", "hook"]
+        ready = await client.get("/readyz")  # its check is reported, it does not block
+        assert ready.status_code == 200
+        assert ready.json()["checks"]["listening"]["status"] == "degraded"
+    assert calls == ["attach", "hook", "detach"]
     calls.clear()
-    async with lifespan_client(app_with(Listening(), None)):  # no bus: nothing to listen on
+    async with lifespan_client(app_with(Listening(), None)) as client:  # no bus: nothing to do
         assert calls == ["hook"]
+        assert "listening" not in (await client.get("/readyz")).json()["checks"]
+    assert calls == ["hook"]
     calls.clear()
     async with lifespan_client(app_with(Plain(), InMemoryBus())):  # not bus aware: left alone
         assert calls == ["hook"]

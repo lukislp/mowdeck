@@ -102,10 +102,14 @@ def create_app(
             app.state.readiness_checks = [c for c in app.state.readiness_checks if c.name != "nats"]
             add_readiness_check(app, ReadinessCheck(name="nats", check=nats))
         watcher: asyncio.Task[None] | None = None
+        listening: BusAware | None = None
         try:
             resolver = app.state.principal_resolver
             if active_bus is not None and isinstance(resolver, BusAware):
                 # Token verification listens for revoked access (ADR 0082), in every service.
+                listening = resolver
+                for check in resolver.readiness_checks():
+                    add_readiness_check(app, check)
                 await resolver.attach(active_bus)
             for hook in on_startup:
                 await hook(app)
@@ -127,6 +131,11 @@ def create_app(
                 watcher.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await watcher
+            if listening is not None:
+                try:
+                    await listening.detach()
+                except Exception:
+                    _log.exception("detaching the principal resolver from the bus failed")
             await _shutdown(app, on_shutdown, active_bus, settings.shutdown_grace_seconds)
             if otel_shutdown is not None:
                 await otel_shutdown()

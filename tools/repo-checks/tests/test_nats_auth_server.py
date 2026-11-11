@@ -17,21 +17,28 @@ It checks that a service user can do what its service does and nothing else: no 
 client, no subject outside the allow list, no other user's inbox, no consumer with a broader
 filter, no stream changes except by the ``streams`` user, and stored messages removed only by
 the owner of what they are about (ADR 0082): Fleet purges the subjects of a mower, Identity
-erases single domain events.
+erases single domain events. Every user whose service verifies tokens creates the deny list's
+consumer as its code does, and a refused one fails open.
+
+The server must be started for the test run with the file of the checkout (CI starts it in the
+job): a server that runs an older file still refuses what the new file allows, which is what
+``deploy.sh`` reloads NATS for (the v0.69.4 deploy).
 """
 
 import asyncio
+import importlib.util
 import json
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import ModuleType
 from uuid import uuid4
 
 import nats
 import nats.errors
 import pytest
-from mowdeck_auth import RevocationList, subscribe_revocations
+from mowdeck_auth import RevocationFeed, RevocationList, subscribe_revocations
 from mowdeck_contracts.v1 import (
     IDENTITY_ACCESS_REVOKED,
     AccessRevoked,
@@ -40,7 +47,7 @@ from mowdeck_contracts.v1 import (
     Principal,
     PrincipalKind,
 )
-from mowdeck_contracts.v1.subjects import access_revoked_subject
+from mowdeck_contracts.v1.subjects import ALL_ACCESS_REVOKED, access_revoked_subject
 from mowdeck_service_kit.bus import BusError, BusMessage, JetStreamBus, publish_event
 from nats.aio.client import Client
 
@@ -50,6 +57,19 @@ pytestmark = pytest.mark.skipif(
 )
 
 REPO = Path(__file__).resolve().parents[3]
+
+
+def _generator() -> ModuleType:
+    """tools/repo-checks/scripts/nats_auth.py, the subject map the server's file comes from."""
+    path = REPO / "tools" / "repo-checks" / "scripts" / "nats_auth.py"
+    spec = importlib.util.spec_from_file_location("nats_auth_for_the_server_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+nats_auth = _generator()
 
 
 def _password(user: str) -> str:
@@ -351,6 +371,71 @@ async def test_every_token_verifier_hears_a_revocation_and_only_identity_sends_o
         await identity.close()
         await planner.close()
         await restarted.close()
+
+
+TOKEN_VERIFIERS = sorted(
+    user for user, access in nats_auth.USERS.items() if ALL_ACCESS_REVOKED in access.consume
+)
+"""Every user whose service verifies access tokens, from the map itself (a new one is covered
+without a change here)."""
+
+
+def test_every_service_that_verifies_tokens_is_in_the_map() -> None:
+    assert len(TOKEN_VERIFIERS) >= 11
+    assert {"identity", "realtime", "fleet", "scheduler", "telemetry"} <= set(TOKEN_VERIFIERS)
+
+
+@pytest.mark.parametrize("user", TOKEN_VERIFIERS)
+async def test_every_token_verifier_creates_the_deny_list_consumer(
+    streams: None, user: str
+) -> None:
+    """The v0.69.4 deploy: the deny list's ephemeral consumer is created through
+    ``$JS.API.CONSUMER.CREATE.EVENTS.<name>.event.identity.access.revoked.*`` (a filter ending
+    in ``*``, in the API subject). Each user creates it exactly as its service does, on a
+    server that runs the generated file, and the server records no permission error."""
+    errors: list[str] = []
+    bus = _bus(user)
+    await bus.connect()
+    bus._client()._error_cb = _record(errors)  # the server's -ERR lines, as nats-py reports them
+    feed = RevocationFeed(RevocationList(), retry_seconds=60)
+    try:
+        await feed.start(bus)
+        assert feed.subscribed, f"{user}: the deny list's consumer was refused"
+        assert await feed.readiness_check().check() is True
+        await bus._client().flush()
+    finally:
+        await feed.stop()
+        await bus.close()
+    assert not [e for e in errors if "permissions violation" in e], errors
+
+
+async def test_a_refused_deny_list_consumer_fails_open(streams: None) -> None:
+    """The same request from a user the server does not allow it (a NATS that still runs the
+    permissions of an older release looks like this): the server refuses it with a permissions
+    violation, the feed reports it and does not raise, so the service would start."""
+    assert "camera-relay" not in TOKEN_VERIFIERS
+    errors: list[str] = []
+    bus = _bus("camera-relay")
+    await bus.connect()
+    bus._client()._error_cb = _record(errors)
+    feed = RevocationFeed(RevocationList(), retry_seconds=60)
+    try:
+        await feed.start(bus)
+        assert not feed.subscribed
+        assert await feed.readiness_check().check() is False
+    finally:
+        await feed.stop()
+        await bus.close()
+    assert any(
+        "permissions violation" in e and "event.identity.access.revoked.*" in e for e in errors
+    ), errors
+
+
+def _record(errors: list[str]) -> Callable[[Exception], Awaitable[None]]:
+    async def on_error(exc: Exception) -> None:
+        errors.append(str(exc).lower())
+
+    return on_error
 
 
 async def test_only_the_streams_job_changes_streams(streams: None) -> None:

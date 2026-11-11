@@ -23,7 +23,10 @@
 #      no "mower offline / back online" pair (best effort: the first deploy of a build that
 #      already has the window runs the old notifications image, which has no window; the script
 #      then warns and goes on)
-#   8. docker compose up -d --no-build --wait
+#   8. when the release changed nats/ (users and permissions, ADR 0074) and NATS is running: reload
+#      it (SIGHUP) and wait up to ${MOWDECK_NATS_RELOAD_SECONDS:-10} s for its "Reloaded server
+#      configuration" (a running NATS keeps the permissions it read at its start), then
+#      docker compose up -d --no-build --wait
 #   9. close the window (also when step 8 fails: a real outage must be reported), then print the
 #      state of every service and fail when one is not running and healthy.
 #
@@ -125,6 +128,14 @@ main() {
   if [ "$dry_run" -eq 0 ] && [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     die "the checkout has local changes to tracked files; commit or stash them first"
   fi
+  # NATS reads nats/ (users and permissions, ADR 0074) only when it starts or reloads, and
+  # `up` recreates it only when its service definition changed. Remember whether the release
+  # changes the files, so step 8 can reload a running server before the services start.
+  local nats_changed=1 # a dry run shows the reload step
+  if [ "$dry_run" -eq 0 ]; then
+    nats_changed=0
+    git diff --quiet HEAD "v$version" -- nats/ || nats_changed=1
+  fi
   run git checkout --detach "v$version"
 
   step "4/9 verify the release images and the secrets it needs"
@@ -147,6 +158,42 @@ main() {
 
   step "6/9 pull"
   run docker compose "${files[@]}" pull
+
+  # A running NATS keeps the permissions it read at its start: without the reload the services
+  # of the new release are refused what the release newly allows them (the v0.69.4 deploy:
+  # "permissions violation for publish to $JS.API.CONSUMER.CREATE..."). A reload keeps every
+  # connection; a NATS that is not running reads the new files when `up` starts it.
+  reload_nats() {
+    if [ "$dry_run" -eq 1 ]; then
+      echo "deploy: [dry-run] if the release changes nats/: reload the running NATS (SIGHUP)" \
+        "and wait for its confirmation"
+      return 0
+    fi
+    if [ -z "$(docker compose "${files[@]}" ps --status running --quiet nats)" ]; then
+      step "nats/ changed; NATS is not running, up starts it with the new files"
+      return 0
+    fi
+    step "nats/ changed: reload the running NATS"
+    local since log waited=0 limit="${MOWDECK_NATS_RELOAD_SECONDS:-10}"
+    since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    docker compose "${files[@]}" kill -s HUP nats || die "could not signal NATS to reload"
+    while :; do
+      log="$(docker compose "${files[@]}" logs --no-color --since "$since" nats 2>&1 || true)"
+      case "$log" in
+        *"Failed to reload"*)
+          die "NATS refused the new configuration (docker compose logs nats); no service was restarted"
+          ;;
+        *"Reloaded server configuration"*)
+          step "NATS reloaded its users and permissions"
+          return 0
+          ;;
+      esac
+      [ "$waited" -lt "$limit" ] ||
+        die "NATS did not confirm the reload within $limit s (docker compose logs nats); no service was restarted"
+      sleep 1
+      waited=$((waited + 1))
+    done
+  }
 
   close_window() {
     if [ "$opened" -eq 1 ]; then
@@ -173,6 +220,9 @@ main() {
   fi
 
   step "8/9 up --wait"
+  if [ "$nats_changed" -eq 1 ]; then
+    reload_nats
+  fi
   run docker compose "${files[@]}" up -d --no-build --wait
 
   step "9/9 close the maintenance window and check the services"

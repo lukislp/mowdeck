@@ -96,8 +96,8 @@ def build_app(
             plans.attach(active_bus)
             app.state.plan_subscription = await plans.subscribe()
         if active_bus is not None and isinstance(verifier, JwtTokenVerifier):
-            # The deny list of deleted users and erased accounts (ADR 0082).
-            app.state.revocation_events = await verifier.attach(active_bus)
+            # The deny list of deleted users and erased accounts (ADR 0082); fails open.
+            await verifier.attach(active_bus)
         if active_bus is not None:
             app.state.realtime_subscriptions = await subscribe_all(
                 active_bus, hub, _invalidation_cache(app.state.authorizer)
@@ -115,6 +115,8 @@ def build_app(
         for task in tasks:
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        if isinstance(verifier, JwtTokenVerifier):
+            await verifier.detach()
         subscriptions: RealtimeSubscriptions | None = app.state.realtime_subscriptions
         if subscriptions is not None:
             for subscription in subscriptions.all():
@@ -140,7 +142,10 @@ def build_app(
         settings,
         DESCRIPTOR,
         routers=[router],
-        readiness_checks=[ReadinessCheck(name="subscriptions", check=subscriptions_active)],
+        readiness_checks=[
+            ReadinessCheck(name="subscriptions", check=subscriptions_active),
+            *([verifier.readiness_check()] if isinstance(verifier, JwtTokenVerifier) else []),
+        ],
         on_startup=[startup],
         on_shutdown=[shutdown],
         bus=bus,

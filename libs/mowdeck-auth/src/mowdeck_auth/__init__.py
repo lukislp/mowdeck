@@ -26,7 +26,7 @@ from mowdeck_auth.resolver import (
     install_auth,
     principal_resolver_from_env,
 )
-from mowdeck_auth.revocation import RevocationList, subscribe_revocations
+from mowdeck_auth.revocation import RevocationFeed, RevocationList, subscribe_revocations
 from mowdeck_auth.settings import DEFAULT_AUDIENCE, DEFAULT_ISSUER, AuthSettings
 from mowdeck_auth.step_up import (
     ReauthRequired,
@@ -53,6 +53,7 @@ __all__ = [
     "JwtVerifier",
     "KeySource",
     "ReauthRequired",
+    "RevocationFeed",
     "RevocationList",
     "SigningKey",
     "StaticKeySource",

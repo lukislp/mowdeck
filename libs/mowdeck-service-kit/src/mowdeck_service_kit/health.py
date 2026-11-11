@@ -12,6 +12,11 @@
   the service is shutting down. Used by the Kubernetes readiness probe and by operators. The
   service also evaluates it every ``readiness_interval_seconds`` itself (:func:`watch_readiness`)
   for the metric ``mowdeck_readiness_check_up`` and a log line when it changes.
+
+  A check that is not ``required`` reports a degraded mode the service runs on by design (the
+  token deny list that fails open, ADR 0082): it shows as ``degraded`` in ``/readyz`` (still
+  200), as 0 in the metric and in a log line when it changes, but never makes the service
+  unready or keeps it from starting.
 * ``GET /metrics``: Prometheus metrics (when ``metrics_enabled``).
 * ``GET /.well-known/mowdeck-module``: the service's :class:`ModuleDescriptor`.
 """
@@ -50,12 +55,14 @@ class ReadinessCheck:
     """A named readiness check.
 
     ``check`` fails when it raises or returns ``False``; anything else counts as success. It is
-    cancelled after ``timeout_seconds``.
+    cancelled after ``timeout_seconds``. A failing check that is not ``required`` marks the
+    service as degraded instead of not ready (see the module documentation).
     """
 
     name: str
     check: CheckFunction
     timeout_seconds: float = 2.0
+    required: bool = True
 
 
 def as_readiness_check(check: ReadinessCheck | CheckFunction) -> ReadinessCheck:
@@ -73,6 +80,12 @@ class CheckOutcome:
     ok: bool
     duration_ms: float
     error: str | None = None
+    required: bool = True
+
+    @property
+    def blocking(self) -> bool:
+        """True when this outcome makes the service unready (a required check failed)."""
+        return not self.ok and self.required
 
 
 async def run_check(check: ReadinessCheck) -> CheckOutcome:
@@ -93,7 +106,13 @@ async def run_check(check: ReadinessCheck) -> CheckOutcome:
         ok = result is not False
         outcome_error = None if ok else "check returned false"
     duration_ms = round((time.perf_counter() - started) * 1000, 2)
-    return CheckOutcome(name=check.name, ok=ok, duration_ms=duration_ms, error=outcome_error)
+    return CheckOutcome(
+        name=check.name,
+        ok=ok,
+        duration_ms=duration_ms,
+        error=outcome_error,
+        required=check.required,
+    )
 
 
 def readiness_checks(app: FastAPI) -> list[ReadinessCheck]:
@@ -129,11 +148,13 @@ async def evaluate_readiness(app: FastAPI) -> list[CheckOutcome]:
     """Run every readiness check of ``app`` once, record the outcome and return it.
 
     Records the gauges of :class:`ReadinessMetrics`, logs a change between ready and not ready
-    (with the failing checks' names) and marks the service as started the first time every check
-    passes (``app.state.started``, read by ``/startupz``).
+    (with the failing checks' names) and of the degraded checks, and marks the service as
+    started the first time every required check passes (``app.state.started``, read by
+    ``/startupz``).
     """
     outcomes = list(await asyncio.gather(*(run_check(c) for c in readiness_checks(app))))
-    ready = all(o.ok for o in outcomes)
+    ready = not any(o.blocking for o in outcomes)
+    _log_degradation(app, outcomes)
     metrics: ReadinessMetrics | None = getattr(app.state, "readiness_metrics", None)
     if metrics is not None:
         for outcome in outcomes:
@@ -155,6 +176,25 @@ async def evaluate_readiness(app: FastAPI) -> list[CheckOutcome]:
     return outcomes
 
 
+def _log_degradation(app: FastAPI, outcomes: list[CheckOutcome]) -> None:
+    """Log when the set of failing checks that are not required changes."""
+    degraded = sorted(f"{o.name}: {o.error}" for o in outcomes if not o.ok and not o.required)
+    previous: list[str] | None = getattr(app.state, "last_degraded", None)
+    if degraded != (previous or []):
+        if degraded:
+            _log.error("service degraded", degraded=degraded)
+        elif previous:
+            _log.info("service no longer degraded")
+    app.state.last_degraded = degraded
+
+
+def readiness_status(outcomes: list[CheckOutcome]) -> Literal["ok", "degraded", "fail"]:
+    """``fail`` when a required check failed, ``degraded`` when only others did, else ``ok``."""
+    if any(o.blocking for o in outcomes):
+        return "fail"
+    return "degraded" if any(not o.ok for o in outcomes) else "ok"
+
+
 async def watch_readiness(app: FastAPI, interval_seconds: float) -> None:
     """Evaluate the readiness every ``interval_seconds`` until cancelled (the first time at
     once): keeps the metrics current and logs dependency trouble even when nothing polls
@@ -172,7 +212,7 @@ def _readiness_body(outcomes: list[CheckOutcome], status: str) -> dict[str, Any]
         "status": status,
         "checks": {
             o.name: {
-                "status": "ok" if o.ok else "fail",
+                "status": "ok" if o.ok else "fail" if o.required else "degraded",
                 "duration_ms": o.duration_ms,
                 **({"error": o.error} if o.error else {}),
             }
@@ -207,9 +247,9 @@ def build_health_router(descriptor: ModuleDescriptor, *, metrics: bool) -> APIRo
         if getattr(app.state, "draining", False):
             return JSONResponse({"status": "draining", "checks": {}}, status_code=503)
         outcomes = await evaluate_readiness(app)
-        status: Literal["ok", "fail"] = "ok" if all(o.ok for o in outcomes) else "fail"
+        status = readiness_status(outcomes)
         return JSONResponse(
-            _readiness_body(outcomes, status), status_code=200 if status == "ok" else 503
+            _readiness_body(outcomes, status), status_code=503 if status == "fail" else 200
         )
 
     if metrics:

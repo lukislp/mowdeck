@@ -50,6 +50,13 @@ case "$*" in
     exit 0
     ;;
   *" up "*) [ "${FAKE_UP_FAIL:-}" = 1 ] && exit 1 ;;
+  *"ps --status running --quiet nats"*) [ "${FAKE_NATS_STOPPED:-}" = 1 ] || echo nats123 ;;
+  *" logs "*" nats"*)
+    case "${FAKE_NATS_RELOAD:-ok}" in
+      ok) echo "nats-1  | [INF] Reloaded server configuration (sha256:abc)" ;;
+      fail) echo "nats-1  | [ERR] Failed to reload server configuration: parse error" ;;
+    esac
+    ;;
 esac
 exit 0
 """
@@ -58,6 +65,7 @@ FAKE_GIT = """#!/usr/bin/env bash
 echo "git $*" >> "$FAKE_LOG"
 case "$*" in
   *"status --porcelain"*) printf '%s' "${FAKE_DIRTY:-}" ;;
+  *"diff --quiet"*) exit "${FAKE_NATS_CHANGED:-0}" ;;
 esac
 exit 0
 """
@@ -212,6 +220,54 @@ def test_deploy_checks_the_nats_passwords_of_the_release(stack: Stack) -> None:
     assert not stack.calls(" pull")
     assert not stack.calls("maintenance")
     assert "MOWDECK_VERSION=0.1.0" in (stack.root / "stack" / ".env").read_text("utf-8")
+
+
+def test_deploy_reloads_nats_when_the_release_changes_its_permissions(stack: Stack) -> None:
+    """The v0.69.4 deploy: `up` does not recreate NATS (its service definition did not change),
+    and a running NATS keeps the permissions it read at its start, so the new services were
+    refused their new consumer. The script reloads NATS after the checkout, before `up`."""
+    result = stack.run("0.2.0", FAKE_NATS_CHANGED="1")
+    assert result.returncode == 0, result.stderr
+    diff = stack.calls("git diff --quiet HEAD v0.2.0 -- nats/")
+    hup = stack.calls(" kill -s HUP nats")
+    logs = stack.calls(" logs --no-color --since ")
+    assert len(diff) == len(hup) == 1, stack.log
+    assert diff[0] < stack.calls("git checkout --detach v0.2.0")[0]
+    assert stack.calls("maintenance open")[0] < hup[0] < logs[0] < stack.calls(" up -d")[0]
+    assert "-f docker-compose.yml -f docker-compose.release.yml" in stack.log[hup[0]]
+    assert "NATS reloaded its users and permissions" in result.stdout
+
+
+def test_deploy_leaves_nats_alone_when_its_files_did_not_change(stack: Stack) -> None:
+    result = stack.run("0.2.0")
+    assert result.returncode == 0, result.stderr
+    assert stack.calls("git diff --quiet HEAD v0.2.0 -- nats/")
+    assert not stack.calls("kill -s HUP")
+    assert stack.calls(" up -d")
+
+
+def test_a_stopped_nats_reads_the_new_files_when_up_starts_it(stack: Stack) -> None:
+    result = stack.run("0.2.0", FAKE_NATS_CHANGED="1", FAKE_NATS_STOPPED="1")
+    assert result.returncode == 0, result.stderr
+    assert not stack.calls("kill -s HUP")
+    assert "NATS is not running" in result.stdout
+    assert stack.calls(" up -d")
+
+
+@pytest.mark.parametrize(
+    ("reload", "message"), [("fail", "refused the new configuration"), ("silent", "within 1 s")]
+)
+def test_a_failed_nats_reload_stops_before_up(stack: Stack, reload: str, message: str) -> None:
+    """NATS keeps the old configuration when the new one does not parse; starting the services
+    then would only restart-loop them. The window is closed again."""
+    result = stack.run(
+        "0.2.0", FAKE_NATS_CHANGED="1", FAKE_NATS_RELOAD=reload, MOWDECK_NATS_RELOAD_SECONDS="1"
+    )
+    assert result.returncode != 0
+    assert message in result.stderr
+    assert stack.calls("kill -s HUP nats")
+    assert not stack.calls(" up -d")
+    assert stack.calls("maintenance close")
 
 
 def test_deploy_refuses_an_incomplete_backup(stack: Stack) -> None:
