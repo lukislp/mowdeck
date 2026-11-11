@@ -18,7 +18,7 @@ dependencies = [
   "mowdeck-contracts",
   "mowdeck-control",
   # PyMammotion changes fast: exact pin, upgraded deliberately (ADR 0019).
-  "pymammotion==0.10.13",
+  "pymammotion==0.10.14",
   # Imported by pymammotion (transport/cloud.py) but not declared by it, still in 0.10.13 (spike R4).
   "packaging>=24.0",
 ]
