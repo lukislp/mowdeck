@@ -8,7 +8,7 @@ serial number, name, model, ``online``, ``protocol``, MQTT topics) and keeps the
 MQTT report in ``last_status.payload``: ``cfg`` (its configuration) and ``dat`` (its live data).
 pyworxcloud updates that payload in place with every MQTT message, so a :class:`WorxMower` read
 from the product item is always the newest report. The field names follow the reverse
-engineered protocol as pyworxcloud 6.4.2 decodes it:
+engineered protocol as pyworxcloud 6.5.0 decodes it:
 
 ========  ============================================================================
 ``dat``   ``ls`` status code, ``le`` error code, ``bt`` battery (``p`` percent, ``c``

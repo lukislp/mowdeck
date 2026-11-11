@@ -57,7 +57,7 @@ def test_pyproject_declares_the_adapter() -> None:
     data = tomllib.loads((PACKAGE_ROOT / "pyproject.toml").read_text("utf-8"))
     project = data["project"]
     assert project["license"] == "GPL-3.0-only"
-    assert "pyworxcloud==6.4.2" in project["dependencies"]
+    assert "pyworxcloud==6.5.0" in project["dependencies"]
     assert project["entry-points"]["mowdeck.cloud_providers"] == {
         "worx": "mowdeck_control_worx.plugin:SPEC"
     }

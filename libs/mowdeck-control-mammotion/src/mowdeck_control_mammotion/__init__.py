@@ -31,7 +31,7 @@ from mowdeck_control_mammotion.options import BleProxyOptions, CloudOptions, Opt
 from mowdeck_control_mammotion.port import ClientPort, MammotionPort
 
 __version__ = "0.1.0"
-PYMAMMOTION_VERSION = "0.10.13"
+PYMAMMOTION_VERSION = "0.10.14"
 """The exact PyMammotion release this adapter was written and tested against."""
 
 __all__ = [
