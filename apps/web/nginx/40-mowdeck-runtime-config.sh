@@ -16,6 +16,10 @@
 #                             description, Open Graph), so link previews, crawlers and visitors
 #                             without JavaScript see the label too; otherwise only a comment.
 #                             Only text in <head> changes, no script: the CSP hashes stay valid.
+#   /tmp/mowdeck/access-log.conf  included in the server block of default.conf: in a demo the
+#                             access log without client address, browser, query and referrer
+#                             (log_format mowdeck_demo of default.conf); otherwise only a comment
+#                             and the image's default access log stays
 #   /tmp/mowdeck/hsts.conf    the map of $mowdeck_hsts (http level of default.conf): the value of
 #                             Strict-Transport-Security for a request that reached the gateway
 #                             over HTTPS (X-Forwarded-Proto https), empty (no header) otherwise
@@ -201,6 +205,18 @@ if [ -n "$demo_json" ]; then
   } > "$out/demo.conf"
 else
   echo "# Not a demo: the page is served as built." > "$out/demo.conf"
+fi
+
+# The access log of a demo keeps no visitor data (docs/ops/demo.md, "What the demo stores about a
+# visitor"): the image's default format prints the client address, the X-Forwarded-For the
+# gateway passes on (the visitor) and the browser string.
+if [ -n "$demo_json" ]; then
+  {
+    echo "# Public demo (MOWDECK_WEB_DEMO_MODE=true): access log without client address and browser."
+    echo "access_log /dev/stdout mowdeck_demo;"
+  } > "$out/access-log.conf"
+else
+  echo "# Not a demo: the image's default access log." > "$out/access-log.conf"
 fi
 
 # The API explorer (ADR 0072): off unless asked for. explorer.conf is included by the /_explorer/
