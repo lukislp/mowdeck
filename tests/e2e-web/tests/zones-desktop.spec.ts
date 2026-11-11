@@ -15,7 +15,15 @@
  */
 import { expect, test, type APIRequestContext } from '@playwright/test';
 
-import { RUN, actor, loginByUi, registerByApi, watchCsp, type Actor } from './support';
+import {
+  RUN,
+  actor,
+  loginByUi,
+  registerByApi,
+  watchCsp,
+  type Actor,
+  acknowledgeSafety,
+} from './support';
 
 const FLEET = '/api/v1/fleet';
 const TELEMETRY = '/api/v1/telemetry';
@@ -140,6 +148,7 @@ test('zones: draw a zone around a GPS mower without a vendor map, see it is insi
 
     // "Start here" sends the linked vendor zone start; the fake mower mows zone 1.
     await row.getByTestId('zone-start').click();
+    await acknowledgeSafety(page);
     await expect
       .poll(
         async () => {

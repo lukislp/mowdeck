@@ -51,6 +51,7 @@
   import { areaNamer, mapLabels } from '#lib/mower/map-labels.js';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import { mowers as states } from '#lib/stores/mowers.svelte.js';
   import { toasts } from '#lib/stores/ui.svelte.js';
   import {
@@ -330,6 +331,7 @@
 
   async function startIn(zone: VirtualZone): Promise<void> {
     if (!zone.start_plan_ref) return;
+    if (!(await safety.ask('start_mow'))) return;
     await sendCommand(id, { kind: 'start_mow', plan_ref: zone.start_plan_ref });
   }
 

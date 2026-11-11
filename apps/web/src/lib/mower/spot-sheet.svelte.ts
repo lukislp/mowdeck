@@ -83,6 +83,8 @@ export interface SpotSheetDeps {
   preview(request: PlanRequest, signal: AbortSignal): Promise<PreviewOut>;
   /** `POST /planner/plans`. */
   plan(request: PlanRequest): Promise<PlanOut>;
+  /** The safety acknowledgement; `covered`: the blades confirmation already said it. */
+  acknowledge(covered: boolean): Promise<boolean>;
   /** Send `spot_mow` or `spot_stop`; false when it did not go out. */
   command(command: SpotMowCommand | { kind: 'spot_stop' }): Promise<boolean>;
   /** The planned path on the map: a start seeds it with the preview. */
@@ -415,6 +417,7 @@ export class SpotSheetFlow {
     this.starting = true;
     this.startError = null;
     try {
+      if (!(await this.deps.acknowledge(this.bladesOn))) return;
       const plan = await this.deps.plan(request);
       const target = ctx.reference ? spotTarget(spot, ctx.reference) : null;
       const sent = await this.deps.command(spotCommand({ plan, settings, bladesAllowed, target }));
