@@ -175,8 +175,13 @@ class Store(Protocol):
         """The steps of a proposal, in order."""
         ...
 
-    async def record_request(self, request: ProviderRequest) -> None:
-        """Store the cost accounting of one model call."""
+    async def record_request(self, request: ProviderRequest) -> bool:
+        """Store the cost accounting of one model call; True when it was stored.
+
+        A request that names a proposal is stored only while that proposal exists, decided
+        together with the insert: an analysis that outlives its proposal (the account was
+        erased meanwhile, ADR 0082) leaves no row of the account behind and learns from False
+        that its result has nowhere to go."""
         ...
 
     async def count_requests(
@@ -254,10 +259,17 @@ class Store(Protocol):
         ...
 
     async def purge_account(self, account_id: UUID) -> int:
-        """Delete every row of an account in one transaction (demo sandbox purge, ADR 0081):
-        proposals with their images and drive steps, provider requests, own providers,
-        preferences and opt-ins, and the error watch of its mowers. Returns the number of rows
-        removed."""
+        """Delete every row of an account in one transaction (the purge of an expired demo
+        sandbox, ADR 0076, and of a deleted account, ADR 0082): proposals with their images
+        and drive steps, provider requests, own providers with their encrypted keys, the
+        preferences with the opt-ins and the consent to a cloud model, and the error watch of
+        its mowers. Returns the number of rows removed."""
+        ...
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """The rows of the account in every table, by table name: the tables that name the
+        account and the images and drive steps of its proposals. Tables without one are left
+        out, so an account Vision holds nothing of answers ``{}`` (ADR 0082)."""
         ...
 
 
@@ -336,8 +348,8 @@ class MowerView(Protocol):
         ...
 
     def forget_account(self, account_id: UUID) -> set[UUID]:
-        """Drop what is kept of the account's mowers (demo sandbox purge; open watches stay);
-        returns those mowers."""
+        """Drop what is kept of the account's mowers (an account purge; open watches stay,
+        they end with their execution); returns those mowers."""
         ...
 
 

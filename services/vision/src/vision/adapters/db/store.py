@@ -14,6 +14,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import PrincipalKind, PrincipalRef, VisionTask, VisionTrigger
+from mowdeck_service_kit.db import account_row_counts, account_tables
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -39,6 +40,10 @@ from vision.domain.models import (
 )
 
 _REF_FIELDS = ("requested_by", "approved_by", "decided_by")
+
+
+PROPOSAL_CHILDREN = (tables.proposal_images, tables.proposal_steps)
+"""The tables without an account column: their rows belong to a proposal and go with it."""
 
 
 def _ref(value: Any) -> PrincipalRef | None:
@@ -352,9 +357,21 @@ class SqlStore:
             result.append(ProposalStep(**v))
         return result
 
-    async def record_request(self, request: ProviderRequest) -> None:
-        """Insert one cost accounting row."""
+    async def record_request(self, request: ProviderRequest) -> bool:
+        """Insert one cost accounting row. A row that names a proposal is inserted while that
+        proposal is held ``FOR KEY SHARE``: an account purge running at the same time either
+        waits and then deletes this row too, or has removed the proposal, and nothing is
+        inserted."""
+        p = tables.proposals
         async with self.engine.begin() as conn:
+            if request.proposal_id is not None:
+                held = await conn.execute(
+                    sa.select(p.c.id)
+                    .where(p.c.id == request.proposal_id)
+                    .with_for_update(read=True, key_share=True)
+                )
+                if held.first() is None:
+                    return False
             await conn.execute(
                 sa.insert(tables.provider_requests).values(
                     id=request.id,
@@ -374,6 +391,7 @@ class SqlStore:
                     created_at=request.created_at,
                 )
             )
+        return True
 
     async def count_requests(
         self,
@@ -641,6 +659,24 @@ class SqlStore:
         async with self.engine.connect() as conn:
             return int((await conn.execute(query)).scalar_one())
 
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every table of the schema that has an ``account_id`` column, plus the
+        images and steps (no account column) of the account's proposals."""
+        p = tables.proposals
+        mine = sa.select(p.c.id).where(p.c.account_id == account_id)
+        async with self.engine.connect() as conn:
+            counts = await account_row_counts(conn, account_tables(tables.metadata), account_id)
+            for child in PROPOSAL_CHILDREN:
+                query = (
+                    sa.select(sa.func.count())
+                    .select_from(child)
+                    .where(child.c.proposal_id.in_(mine))
+                )
+                found = int((await conn.execute(query)).scalar_one())
+                if found:
+                    counts[child.name] = found
+        return counts
+
     async def purge_account(self, account_id: UUID) -> int:
         """One transaction, one set based ``DELETE`` per table: the images and steps (no
         account column) go by the account's proposals before the proposals themselves, so the
@@ -649,7 +685,7 @@ class SqlStore:
         mine = sa.select(p.c.id).where(p.c.account_id == account_id)
         removed = 0
         async with self.engine.begin() as conn:
-            for child in (tables.proposal_images, tables.proposal_steps):
+            for child in PROPOSAL_CHILDREN:
                 result = await conn.execute(sa.delete(child).where(child.c.proposal_id.in_(mine)))
                 removed += int(result.rowcount or 0)
             for table in (
