@@ -19,6 +19,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import ModuleDescriptor
 from pydantic import BaseModel
 
+from identity.domain.erasure import AccountErasure
 from identity.domain.models import (
     Account,
     ApiToken,
@@ -226,9 +227,21 @@ class Tx(Protocol):
         """The demo sandboxes of the public demo (ADR 0076)."""
         ...
 
+    @property
+    def erasures(self) -> Table[AccountErasure]:
+        """The purges of deleted accounts (ADR 0082)."""
+        ...
+
     async def purge_audit(self, account_id: UUID) -> int:
         """Delete the audit rows of one demo sandbox account (ADR 0076), past the append-only
         rule that holds for every other delete; returns how many."""
+        ...
+
+    async def scrub_audit(self, account_id: UUID) -> int:
+        """Remove the personal fields from the audit rows of an erased account and keep the rows
+        (ADR 0082): the actor name and address, and every ``details`` key that is not on
+        ``AUDIT_DETAILS_KEPT``. The only change the append-only rule allows besides the demo
+        purge; idempotent; returns how many rows changed."""
         ...
 
 
@@ -321,6 +334,19 @@ class SandboxProvisioner(Protocol):
 
     async def purge(self, service: str, account_id: UUID) -> None:
         """Delete everything ``service`` holds of the account; raises on failure."""
+        ...
+
+
+class AccountEraser(Protocol):
+    """Tells the services to delete what they hold of an account (ADR 0082).
+
+    ``erase`` sends the request of one service and returns how many rows it deleted. It is
+    idempotent on the service's side and raises on any failure (no answer, ``ok=False``), so the
+    caller retries.
+    """
+
+    async def erase(self, service: str, account_id: UUID) -> int:
+        """Ask ``service`` to delete everything of the account; raises when it did not confirm."""
         ...
 
 

@@ -22,11 +22,17 @@ from identity.application.authenticators import (
     PasswordAuthenticator,
 )
 from identity.application.deps import Deps
+from identity.application.erasure import ErasureConfig, ErasureService
 from identity.application.external import ExternalIdentityService
 from identity.application.onboarding import OnboardingService
 from identity.application.passkeys import PasskeyService
 from identity.application.platform import PlatformService
-from identity.application.ports import OAuthClient, PasskeyCeremonies, SandboxProvisioner
+from identity.application.ports import (
+    AccountEraser,
+    OAuthClient,
+    PasskeyCeremonies,
+    SandboxProvisioner,
+)
 from identity.application.ratelimit import TokenBucketLimiter
 from identity.application.roles import RoleService
 from identity.application.sandboxes import SandboxConfig, SandboxService
@@ -57,6 +63,13 @@ class Services:
     ceremonies: PasskeyCeremonies | None = None
     sandboxes: SandboxService | None = None
     """Demo sandboxes (ADR 0076); None everywhere but a demo with sandboxes on."""
+
+    erasure: ErasureService | None = None
+    """The purge of deleted accounts (ADR 0082); None where it is not wired (the demo, tests)."""
+
+    def enable_erasure(self, eraser: AccountEraser, config: ErasureConfig) -> None:
+        """Turn on the purge of accounts whose grace period is over."""
+        self.erasure = ErasureService(self.deps, eraser, config)
 
     def enable_sandboxes(self, provisioner: SandboxProvisioner, config: SandboxConfig) -> None:
         """Turn on the demo sandboxes ("Try the demo" gives every visitor an own account)."""

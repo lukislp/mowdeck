@@ -393,6 +393,7 @@ flowchart LR
 
 | Subject | Stream | Publishes or requests | Subscribes or answers |
 |---|---|---|---|
+| `account.erase.*` | core | identity | - |
 | `camera.mower.*.relay.*` | CAMERA | camera-relay | fleet |
 | `command.mower.*` | COMMANDS | fleet, realtime, vision | device-gateway, notifications, vision |
 | `command.result.mower.*` | COMMANDS | device-gateway | fleet, realtime, telemetry, vision |
@@ -574,7 +575,7 @@ flowchart LR
     db_billing[("billing<br/>2 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>14 migrations")]
-    db_identity[("identity<br/>10 migrations")]
+    db_identity[("identity<br/>11 migrations")]
     db_notifications[("notifications<br/>9 migrations")]
     db_planner[("planner<br/>2 migrations")]
     db_scheduler[("scheduler<br/>4 migrations")]

@@ -19,6 +19,7 @@ from pydantic import Field, SecretStr, model_validator
 from identity.adapters.apple import load_signing_key
 from identity.adapters.crypto import DEV_KEK, parse_kek
 from identity.application.context import AppleLogin, GitHubLogin, IdentityConfig, RegistrationMode
+from identity.application.erasure import ErasureConfig
 from identity.application.sandboxes import SandboxConfig
 from identity.domain.models import RelyingParty, oauth_callback_url
 
@@ -231,6 +232,35 @@ class Settings(ServiceSettings):
     identity_demo_sandbox_sweep_seconds: float = Field(default=60, ge=1)
     """Interval of the sweep that deletes idle and expired sandboxes."""
 
+    identity_erasure_enabled: bool = False
+    """Account erasure (ADR 0082): purge accounts whose deletion grace period is over. **Off by
+    default** until every service answers ``account.erase.<service>`` (the follow-up steps of the
+    ADR; the default turns true with the last one). While off nothing starts a purge: an account
+    scheduled for deletion stays ``deleting`` and restorable, also after ``delete_after``, exactly
+    as before. Never on in the public demo."""
+
+    identity_erasure_services: str = (
+        "fleet,scheduler,telemetry,notifications,vision,planner,entitlements"
+    )
+    """Account erasure (ADR 0082): the services, comma separated and in the order they are asked,
+    that must confirm before Identity deletes an account's own rows. An installation that runs
+    Billing adds ``billing`` (Compose profile ``billing``). Listing a service that is not
+    deployed holds every purge back (an unanswered request is retried forever), so the list names
+    what the installation runs. Fleet comes first."""
+
+    identity_erasure_sweep_seconds: float = Field(default=60, ge=1)
+    """Interval of the sweep that purges accounts whose grace period is over."""
+
+    identity_erasure_timeout_seconds: float = Field(default=10, gt=0, le=300)
+    """How long one erasure request to a service may take before it counts as failed."""
+
+    identity_erasure_settle_seconds: float = Field(default=30, ge=0, le=3600)
+    """Wait after the first service (Fleet) confirmed, so the mowers' last states have landed
+    before the other services delete."""
+
+    identity_erasure_stall_hours: float = Field(default=1, gt=0, le=720)
+    """A purge that is still unfinished after this long is logged as an error on every attempt."""
+
     identity_maintenance_seconds: float = Field(default=60, ge=1)
     """Interval of the maintenance loop (key rotation, key reload, attempt purge)."""
 
@@ -275,6 +305,21 @@ class Settings(ServiceSettings):
     def sandboxes_enabled(self) -> bool:
         """Demo sandboxes are on: demo mode and ``identity_demo_sandboxes``."""
         return self.demo_mode and self.identity_demo_sandboxes
+
+    @property
+    def erasure_enabled(self) -> bool:
+        """The purge of deleted accounts is switched on (``identity_erasure_enabled``) and this
+        is no public demo (nobody deletes accounts there; the sandboxes have their own purge)."""
+        return self.identity_erasure_enabled and not self.demo_mode
+
+    def erasure_config(self) -> ErasureConfig:
+        """The services that must confirm an account erasure and its timings (ADR 0082)."""
+        services = tuple(s.strip() for s in self.identity_erasure_services.split(",") if s.strip())
+        return ErasureConfig(
+            services=tuple(dict.fromkeys(services)),
+            settle=timedelta(seconds=self.identity_erasure_settle_seconds),
+            stall_after=timedelta(hours=self.identity_erasure_stall_hours),
+        )
 
     def sandbox_config(self) -> SandboxConfig:
         """The limits and timings of the demo sandboxes (ADR 0076)."""

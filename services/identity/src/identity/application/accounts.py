@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Accounts: registration, renaming, deletion with a grace period, reconcile."""
+"""Accounts: registration, renaming, scheduled deletion with a grace period, reconcile."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +30,7 @@ from identity.domain.credentials import (
     validate_password,
     validate_username,
 )
+from identity.domain.erasure import deletion_blocked_by, deletion_scheduled
 from identity.domain.errors import (
     AuthenticationFailed,
     ConflictError,
@@ -105,6 +106,17 @@ async def account_subjects(tx: Tx, account_id: UUID) -> set[Subject]:
     }
     subjects |= {api_token(t.id) for t in await tx.api_tokens.find(account_id=account_id)}
     return subjects
+
+
+async def ensure_not_scheduled_for_deletion(tx: Tx, account_id: UUID) -> None:
+    """409 while the account is ``deleting`` or ``purging`` (ADR 0082): nobody may be added to
+    it and no API token created for it. The one guard of every use case that does either
+    (sub-users, API tokens, widget credentials, personal access tokens, later invitations);
+    what the owner may still do (stop mowers, rename, restore) is not touched."""
+    account = await tx.accounts.get(id=account_id)
+    if account is not None and deletion_scheduled(account):
+        msg = "the account is scheduled for deletion; cancel the deletion first"
+        raise ConflictError(msg)
 
 
 def validate_name(name: str) -> str:
@@ -266,11 +278,14 @@ class AccountService:
     async def request_deletion(
         self, account_id: UUID, password: str | None, ctx: RequestContext
     ) -> Account:
-        """Lock the account for the grace period (owner only, password re-entry or a recent
+        """Schedule the deletion of the account (owner only, password re-entry or a recent
         step-up confirmation, ADR 0057).
 
-        API tokens are revoked and the sessions of other members end; the owner keeps access
-        to restore the account. The purge after the grace period is a later job.
+        Refused (409) while the account has other members: the owner removes them first. The
+        account is locked for the grace period: API tokens are revoked and the owner, the only
+        member, keeps every permission (the mowers keep running on their schedules and must stay
+        stoppable) and can restore the account (``restore``). After the grace
+        period ``ErasureService`` purges it in every service (ADR 0082).
         """
         if ctx.principal is None:
             msg = "login required"
@@ -292,8 +307,17 @@ class AccountService:
             tx = work.tx
             work.account_id = account_id
             acct = await self._load(tx, account_id)
-            if acct.status is AccountStatus.DELETING:
+            if acct.status is not AccountStatus.ACTIVE:
                 msg = "the account is already scheduled for deletion"
+                raise ConflictError(msg)
+            others = deletion_blocked_by(
+                await tx.memberships.find(account_id=account_id), ctx.principal.subject
+            )
+            if others:
+                msg = (
+                    f"the account still has {others} other member(s): remove them first, "
+                    "a deletion never removes people implicitly"
+                )
                 raise ConflictError(msg)
             acct.status = AccountStatus.DELETING
             acct.delete_after = now + self.deps.config.deletion_grace

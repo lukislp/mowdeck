@@ -28,7 +28,7 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_service_kit.entitlements import require_limit
 
-from identity.application.accounts import ensure_unique_user
+from identity.application.accounts import ensure_not_scheduled_for_deletion, ensure_unique_user
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import Tx
@@ -124,6 +124,7 @@ class UserService:
         async with self.deps.uow() as work:
             work.account_id = account_id
             tx = work.tx
+            await ensure_not_scheduled_for_deletion(tx, account_id)
             if self.deps.entitlements is not None:
                 members = await tx.memberships.count(account_id=account_id)
                 await require_limit(self.deps.entitlements, account_id, "max_users", members)

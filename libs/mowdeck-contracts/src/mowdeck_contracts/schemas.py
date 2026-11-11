@@ -110,6 +110,8 @@ V1_MODELS: Mapping[str, type[BaseModel]] = {
     "EntitlementCheckReply": v1.EntitlementCheckReply,
     "EntitlementSnapshot": v1.EntitlementSnapshot,
     "PlanChanged": v1.PlanChanged,
+    "AccountEraseRequest": v1.AccountEraseRequest,
+    "AccountEraseReply": v1.AccountEraseReply,
     "PlanSetRequest": v1.PlanSetRequest,
     "PlanSetReply": v1.PlanSetReply,
     "SubscriptionChanged": v1.SubscriptionChanged,
