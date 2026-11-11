@@ -34,9 +34,11 @@ from identity.application.ports import (
     SandboxProvisioner,
 )
 from identity.application.ratelimit import TokenBucketLimiter
+from identity.application.reauth import Reauthenticator
 from identity.application.roles import RoleService
 from identity.application.sandboxes import SandboxConfig, SandboxService
 from identity.application.security import SecurityService
+from identity.application.self_deletion import SelfDeletionService
 from identity.application.sessions import SessionService
 from identity.application.users import UserService
 
@@ -59,6 +61,7 @@ class Services:
     external: ExternalIdentityService = field(init=False)
     onboarding: OnboardingService = field(init=False)
     security: SecurityService = field(init=False)
+    self_deletion: SelfDeletionService = field(init=False)
     ip_limiter: TokenBucketLimiter | None = None
     ceremonies: PasskeyCeremonies | None = None
     sandboxes: SandboxService | None = None
@@ -90,6 +93,9 @@ class Services:
         self.external = ExternalIdentityService(self.deps, self.sessions, limiter)
         self.onboarding = OnboardingService(self.deps)
         self.security = SecurityService(self.deps)
+        self.self_deletion = SelfDeletionService(
+            self.deps, self.accounts, self.users, Reauthenticator(self.deps, limiter)
+        )
 
 
 def build_services(

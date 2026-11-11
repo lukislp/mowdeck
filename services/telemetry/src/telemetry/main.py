@@ -52,6 +52,7 @@ from telemetry.adapters.bus.tracking import (
     BusTrackingGateway,
     subscribe_notifications,
 )
+from telemetry.adapters.bus.user_erasure import subscribe_user_erasure
 from telemetry.adapters.db.store import SqlStore
 from telemetry.adapters.db.tracking_store import SqlTrackingStore
 from telemetry.adapters.db.zone_store import SqlZoneStore
@@ -67,6 +68,7 @@ from telemetry.application.services import Services, build_services
 from telemetry.application.tracking import Tracking
 from telemetry.application.tracking_map import BaseLayer, TrackingMap, street_layer
 from telemetry.application.tracking_ports import TrackingGateway, TrackingStore
+from telemetry.application.user_erasure import user_erasure
 from telemetry.application.zone_ports import ZoneStore
 from telemetry.module import DESCRIPTOR
 from telemetry.settings import Settings
@@ -194,8 +196,14 @@ def build_app(
                 *([tracking.clear_areas] if tracking is not None else []),
             ],
         )
+        forget_user = user_erasure(tracking_store, active_clock)
         services = dataclasses.replace(
-            services, tracking=tracking, errors=explanations, demo=demo, erasure=erasure
+            services,
+            tracking=tracking,
+            errors=explanations,
+            demo=demo,
+            erasure=erasure,
+            user_erasure=forget_user,
         )
         app.state.telemetry = services
         app.state.directory_seeded = False
@@ -213,6 +221,7 @@ def build_app(
             subscriptions.append(await subscribe_notifications(active_bus, tracking))
         if active_bus is not None:
             subscriptions.append(await subscribe_erasure(active_bus, erasure))
+            subscriptions.append(await subscribe_user_erasure(active_bus, forget_user))
         app.state.subscriptions = subscriptions
         if background_tasks:
             tasks.extend(

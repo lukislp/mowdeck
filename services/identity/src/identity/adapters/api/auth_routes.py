@@ -36,6 +36,8 @@ from identity.adapters.api.schemas import (
     RefreshIn,
     RegisteredOut,
     RegisterIn,
+    SelfDeletionIn,
+    SelfDeletionOut,
     TokenExchangeIn,
     TokenOut,
     UiAreaOut,
@@ -45,6 +47,7 @@ from identity.adapters.api.schemas import (
 from identity.application.accounts import Registration
 from identity.application.onboarding import OnboardingChoice
 from identity.application.sessions import TokenPair
+from identity.domain.erasure import SelfDeletion
 from identity.domain.models import OnboardingStatus
 
 router = APIRouter(prefix="/identity", tags=["identity: sessions"])
@@ -341,6 +344,42 @@ async def me(services: ServicesDep, ctx: Ctx) -> MeOut:
     """The caller: claims of the current token, user data and memberships."""
     assert ctx.principal is not None  # noqa: S101 - Ctx requires a principal
     return MeOut.of(await services.sessions.me(ctx.principal))
+
+
+@router.delete(
+    "/me",
+    responses={
+        202: {
+            "model": SelfDeletionOut,
+            "description": "The caller owns the account: it is scheduled for deletion.",
+        }
+    },
+)
+async def delete_me(
+    response: Response, services: ServicesDep, ctx: Ctx, body: SelfDeletionIn | None = None
+) -> SelfDeletionOut:
+    """Delete yourself (ADR 0082). The server applies the operation of the caller's role, so a
+    client needs one call:
+
+    * a member **without the owner relation** (sub-users included) is deleted at once and for
+      good: **200** with `operation: "user"`. The user, every sign-in method, session and
+      personal token go, the roles and permissions are removed, the other services drop the
+      user's own data; what the user created in the account stays with the account, without
+      their name. The account goes on. There is no grace period and no way back;
+    * the **owner** deletes the account: **202** with `operation: "account"` and `delete_after`,
+      exactly `DELETE /accounts/{id}` (409 while the account has other members or is already
+      scheduled; the owner cancels with `POST /accounts/{id}/restore`).
+
+    Needs a login session and the password in the body or, without it, a recent step-up
+    confirmation (401 `reauth-required`); API tokens and service identities get 403
+    `step-up-unavailable`. Refused in the public demo (403 `demo-mode`)."""
+    done = await services.self_deletion.delete_me(body.password if body else None, ctx)
+    response.headers["Cache-Control"] = "no-store"
+    if done.operation is SelfDeletion.ACCOUNT:
+        response.status_code = 202
+    else:
+        drop_refresh_cookie(response)  # the session is gone with the user
+    return SelfDeletionOut.of(done)
 
 
 @router.get("/me/onboarding")

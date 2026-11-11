@@ -244,6 +244,14 @@ class Tx(Protocol):
         purge; idempotent; returns how many rows changed."""
         ...
 
+    async def scrub_user_audit(self, user_id: UUID) -> int:
+        """Remove the personal fields from the audit rows about one deleted user and keep the
+        rows (ADR 0082, "delete me"): the rows the user acted in or is the target of, by the
+        rule of ``identity.domain.erasure.audit_fields_after_user_scrub`` (another actor's name
+        and address stay). Through the same sanctioned path as :meth:`scrub_audit`; idempotent;
+        returns how many rows changed."""
+        ...
+
 
 class Store(Protocol):
     """Opens transactions. Leaving the context commits; an exception rolls back."""
