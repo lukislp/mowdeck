@@ -20,6 +20,7 @@ import {
   waitForMap,
   watchCsp,
   type Actor,
+  acknowledgeSafety,
 } from './support';
 
 const SCHEDULER = '/api/v1/scheduler';
@@ -134,6 +135,7 @@ test('schedule options: offered like the start sheet, saved, sent at the run', a
     (r) => r.url().endsWith(`${SCHEDULER}/schedules`) && r.request().method() === 'POST',
   );
   await page.getByTestId('sched-save').click();
+  await acknowledgeSafety(page);
   const createdResponse = await created;
   expect(createdResponse.status(), await createdResponse.text()).toBe(201);
   const schedule = (await createdResponse.json()) as {
@@ -164,6 +166,7 @@ test('schedule options: offered like the start sheet, saved, sent at the run', a
   await row.getByTestId('schedule-run').click();
   const sheet = page.getByTestId('run-sheet');
   await sheet.getByTestId('run-confirm').click();
+  await acknowledgeSafety(page);
   await expect(sheet.getByTestId('run-result').locator('[data-value="started"]')).toBeVisible({
     timeout: 30_000,
   });

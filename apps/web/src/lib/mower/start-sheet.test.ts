@@ -88,6 +88,7 @@ function fake(
     setpoint?: (kind: string) => boolean;
     start?: boolean;
     dock?: boolean;
+    acknowledge?: boolean;
   } = {},
 ): Fake {
   const f: Fake = {
@@ -106,6 +107,10 @@ function fake(
       setpoint: async (command) => {
         f.sent.push(command.kind);
         return options.setpoint ? options.setpoint(command.kind) : true;
+      },
+      acknowledge: async () => {
+        f.sent.push('acknowledge');
+        return options.acknowledge ?? true;
       },
       start: async () => {
         f.sent.push('start_mow');
@@ -319,10 +324,33 @@ describe('StartSheetFlow', () => {
     flow.open();
     flow.setpointDraft = { bladeMm: 60, speedMps: 0.5 };
     await flow.start();
-    expect(f.sent).toEqual(['set_blade_height', 'set_speed', 'start_mow']);
+    expect(f.sent).toEqual(['acknowledge', 'set_blade_height', 'set_speed', 'start_mow']);
     expect(flow.picking).toBe(false);
     expect(flow.picked).toEqual([]);
     expect(flow.starting).toBe(false);
+  });
+
+  it('sends nothing, not even a setpoint, when the safety acknowledgement is declined', async () => {
+    const f = fake({ acknowledge: false });
+    const flow = new StartSheetFlow(f.deps);
+    flow.picked = ['a'];
+    flow.open();
+    flow.setpointDraft = { bladeMm: 60, speedMps: 0.5 };
+    await flow.start();
+    expect(f.sent).toEqual(['acknowledge']);
+    // The sheet stays open with the picks, so the user can start again.
+    expect(flow.picking).toBe(true);
+    expect(flow.picked).toEqual(['a']);
+    expect(flow.starting).toBe(false);
+  });
+
+  it('asks the acknowledgement once per start', async () => {
+    const f = fake();
+    const flow = new StartSheetFlow(f.deps);
+    flow.picked = ['a'];
+    flow.open();
+    await flow.start();
+    expect(f.sent.filter((entry) => entry === 'acknowledge')).toHaveLength(1);
   });
 
   it('sends only the setpoints that changed and stops when one does not go out', async () => {
@@ -332,7 +360,7 @@ describe('StartSheetFlow', () => {
     flow.open();
     flow.setpointDraft = { bladeMm: 50, speedMps: 0.5 };
     await flow.start();
-    expect(f.sent).toEqual(['set_speed']);
+    expect(f.sent).toEqual(['acknowledge', 'set_speed']);
     // The sheet stays open for another try.
     expect(flow.picking).toBe(true);
     expect(flow.picked).toEqual(['a']);
@@ -481,7 +509,7 @@ describe('StartSheetFlow', () => {
     expect(flow.rainConfirmed).toBe(true);
     flow.startClick();
     await flush();
-    expect(f.sent).toEqual(['start_mow']);
+    expect(f.sent).toEqual(['acknowledge', 'start_mow']);
     expect(flow.picking).toBe(false);
     expect(flow.rainConfirmed).toBe(false);
   });
@@ -505,7 +533,7 @@ describe('StartSheetFlow', () => {
     plain.open();
     plain.startClick();
     await flush();
-    expect(dry.sent).toEqual(['start_mow']);
+    expect(dry.sent).toEqual(['acknowledge', 'start_mow']);
   });
 
   it('docks with the choice and drops the path only when the job ends', async () => {
@@ -620,7 +648,7 @@ describe('StartSheetFlow job options', () => {
       options: { detection: null, obstacleLaps: null, order: null, progress: 50 },
     };
     await flow.start();
-    expect(f.sent).toEqual(['start_mow']);
+    expect(f.sent).toEqual(['acknowledge', 'start_mow']);
     expect(f.saved).toEqual([]);
   });
 

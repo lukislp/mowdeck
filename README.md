@@ -29,6 +29,7 @@ What a mower can do (patterns, cameras, lights, RTK, manual drive, reverse, extr
 - Live status with battery, blades, speed, signal and RTK fix quality, refreshed faster while the mower works; online or offline from a link heartbeat, so a docked mower that reports rarely still shows as online.
 - Map with your zones, the charging station, the mower's heading and track, the mower's own computed mow path, and heatmap layers for coverage, RTK, WLAN and mobile signal with a list of missed spots.
 - Commands confirmed by the mower's real state: start, pause, resume, emergency stop, "to the station" with the choice to end the job or keep it paused.
+- A safety check before anything that starts blades or moves the mower remotely (a start, a resume, a spot run, a manual drive session, an enabled schedule): the area must be clear of people, children and animals, and you supervise the mower as its manual says. Stop, pause, dock and the emergency stop are never asked or delayed.
 - Start sheet: mowing pattern, angle, border laps, spacing, blade height and speed per run, remembered per mower; a path preview before you start; a rain warning with the expected duration.
 - Area names you choose, model limits read from the mower (cutting height, speed), real model names in the mower list.
 - Optional aerial photo under the map from an open-data WMS or a tile server you configure, fetched and cached by your own server (browsers never contact the source).

@@ -1,0 +1,5 @@
+{
+  "pr": 367,
+  "de": "Neu: Vor jedem Start fragt MowDeck einmal nach, ob der Bereich frei von Menschen, Kindern und Tieren ist. Das gilt für Mähen, Fortsetzen, Spot-Mähen, Fernsteuern und aktive Zeitpläne. Stopp, Pause, Station und der Notstopp fragen nie.",
+  "en": "New: before every start MowDeck asks once whether the area is clear of people, children and animals. It applies to mowing, resuming, spot mowing, manual driving and enabled schedules. Stop, pause, dock and the emergency stop never ask."
+}

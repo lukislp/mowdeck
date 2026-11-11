@@ -21,6 +21,8 @@ import {
 } from './drive-calibration';
 
 export interface DriveCalibrationDeps {
+  /** The safety acknowledgement before the mower drives; false when the user declined. */
+  acknowledge(): Promise<boolean>;
   /** Send a mower command; false when it did not go out (the sender toasts the reason). */
   command(command: { kind: 'drive_calibrate' } | { kind: 'spot_stop' }): Promise<boolean>;
   /** `PUT /mowers/{id}/drive-calibration`. */
@@ -94,6 +96,7 @@ export class DriveCalibrationFlow {
     this.starting = true;
     this.#before = this.status?.run_id ?? null;
     try {
+      if (!(await this.deps.acknowledge())) return;
       const sent = await this.deps.command({ kind: 'drive_calibrate' });
       if (sent) {
         this.#launchedAt = Date.now();

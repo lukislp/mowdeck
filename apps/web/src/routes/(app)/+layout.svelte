@@ -18,6 +18,7 @@
   import { operatorAccess } from '#lib/operator/access.svelte.js';
   import { m } from '#lib/paraglide/messages.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
+  import SafetySheet from '#lib/safety/SafetySheet.svelte';
   import { builtIn, navModules, registry, visibleModules } from '#lib/shell/registry.svelte.js';
   import { tour } from '#lib/tour/runtime.js';
   import TourOverlay from '#lib/tour/TourOverlay.svelte';
@@ -124,6 +125,7 @@
     {@render children()}
   </AppShell>
   <WhatsNewSheet />
+  <SafetySheet />
   <TourOverlay />
 {:else}
   <div class="boot" role="status" aria-live="polite">

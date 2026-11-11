@@ -44,6 +44,7 @@ import {
   videoFingerprint,
   waitForMap,
   watchCsp,
+  acknowledgeSafety,
 } from './support';
 
 const SESSION = /\/api\/v1\/fleet\/mowers\/[^/]+\/camera\/session$/;
@@ -263,6 +264,7 @@ test('drive view over the relay: a frozen source holds the mower and latches the
   await expect(light).toHaveAttribute('data-state', 'on', { timeout: 15_000 });
 
   await page.getByTestId('drive-start').click();
+  await acknowledgeSafety(page);
   await expect(page.getByTestId('drive-state')).toHaveText('Fahrt aktiv');
   const pad = page.getByTestId('joystick');
   await pushForward(page, pad);

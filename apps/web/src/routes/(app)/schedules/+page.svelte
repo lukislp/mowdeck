@@ -13,6 +13,7 @@
   import FirstTimeHint from '#lib/onboarding/FirstTimeHint.svelte';
   import { m } from '#lib/paraglide/messages.js';
   import { getLocale } from '#lib/paraglide/runtime.js';
+  import { safety } from '#lib/safety/gate.svelte.js';
   import { outcomeLook, verdictLook } from '#lib/schedules/labels.js';
   import { parsePreview } from '#lib/schedules/preview.js';
   import { mowSummary } from '#lib/schedules/mow-options.js';
@@ -103,6 +104,11 @@
   }
 
   async function setEnabled(schedule: Schedule, enabled: boolean): Promise<void> {
+    // Enabling means the mower starts unattended again; switching off needs no question.
+    if (enabled && !(await safety.ask('schedule_enable'))) {
+      replace({ ...schedule });
+      return;
+    }
     busy = schedule.id;
     try {
       replace(
@@ -154,6 +160,10 @@
     if (!runTarget) return;
     const id = runTarget.id;
     runBusy = true;
+    if (!(await safety.ask('schedule_run_now'))) {
+      runBusy = false;
+      return;
+    }
     runProblem = null;
     try {
       const result = await unwrap(

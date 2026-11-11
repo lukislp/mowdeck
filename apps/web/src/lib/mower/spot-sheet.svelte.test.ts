@@ -85,6 +85,7 @@ function setup(contextPatch: Partial<SpotSheetContext> = {}) {
   const deps = {
     preview: vi.fn(async () => previewOut()),
     plan: vi.fn(async () => ({ spot_plan: { plan_hash: 'h1' } }) as unknown as PlanOut),
+    acknowledge: vi.fn<SpotSheetDeps['acknowledge']>(async () => true),
     command: vi.fn<SpotSheetDeps['command']>(async () => true),
     paths: { replace: vi.fn() },
     now: () => NOW,
@@ -218,6 +219,39 @@ describe('spot sheet flow', () => {
     expect(deps.command).toHaveBeenCalledWith(
       expect.objectContaining({ blades: true, confirm_blades: true }),
     );
+    stop();
+  });
+
+  it('asks the safety acknowledgement before planning and sends nothing when declined', async () => {
+    const { flow, deps, fire, stop } = setup();
+    deps.acknowledge.mockResolvedValueOnce(false);
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    await flow.start();
+    expect(deps.acknowledge).toHaveBeenCalledWith(false);
+    expect(deps.plan).not.toHaveBeenCalled();
+    expect(deps.command).not.toHaveBeenCalled();
+    // The sheet stays: the user can start again.
+    expect(flow.mode).toBe('circle');
+    expect(flow.starting).toBe(false);
+    stop();
+  });
+
+  it('a run with blades on is covered by the blades confirmation', async () => {
+    const { flow, deps, fire, stop } = setup({
+      capabilities: { manual_drive: true, manual_drive_blades: true, cutting_width_mm: 220 },
+      state: readyState({ connection: 'simulator' }),
+    });
+    flow.begin();
+    flow.mapTap([10, 10]);
+    flushSync();
+    await fire();
+    flow.setBlades(true);
+    flow.settings = { ...flow.settings, confirmBlades: true };
+    await flow.start();
+    expect(deps.acknowledge).toHaveBeenCalledWith(true);
     stop();
   });
 
