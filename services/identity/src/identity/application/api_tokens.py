@@ -33,6 +33,7 @@ from mowdeck_contracts.v1 import (
     PrincipalKind,
 )
 
+from identity.application.accounts import ensure_not_scheduled_for_deletion
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.application.ports import In
@@ -127,6 +128,7 @@ class ApiTokenService:
         async with self.deps.uow() as work:
             work.account_id = account_id
             tx = work.tx
+            await ensure_not_scheduled_for_deletion(tx, account_id)
             catalogue = await self.deps.catalogue.current(tx)
             checked: list[TokenGrant] = []
             for grant in grants:
@@ -223,6 +225,7 @@ class ApiTokenService:
         async with self.deps.uow() as work:
             work.account_id = account_id
             tx = work.tx
+            await ensure_not_scheduled_for_deletion(tx, account_id)
             existing = [
                 t
                 for t in await tx.api_tokens.find(account_id=account_id)
@@ -347,6 +350,7 @@ class ApiTokenService:
         async with self.deps.uow() as work:
             work.account_id = account_id
             tx = work.tx
+            await ensure_not_scheduled_for_deletion(tx, account_id)
             active = [
                 t
                 for t in await tx.api_tokens.find(account_id=account_id, created_by=actor.subject)

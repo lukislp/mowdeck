@@ -601,13 +601,6 @@ async def test_audit_query_filters_and_pagination() -> None:
 async def test_account_rename_delete_with_grace_and_restore() -> None:
     async with harness() as h:
         lukas = await h.register("lukas")
-        operator = await h.role_id(lukas, "operator")
-        anna_id, _ = await h.subuser(
-            lukas,
-            "anna",
-            [{"role_id": str(operator), "level": {"type": "account", "id": str(lukas.account_id)}}],
-        )
-        anna_login = await h.login("anna")
         renamed = await h.client.patch(
             lukas.url(), headers=lukas.headers, json={"name": "New name"}
         )
@@ -620,13 +613,6 @@ async def test_account_rename_delete_with_grace_and_restore() -> None:
         twice = await h.client.request(
             "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
         )
-        anna_refresh = await h.client.post(
-            f"{API}/session/refresh", json={"refresh_token": anna_login["refresh_token"]}
-        )
-        anna_relogin = await h.client.post(
-            f"{API}/session", json={"username": "anna", "password": PASSWORD}
-        )
-        anna_tuples = h.tuples_of(f"user:{anna_id}")
         owner_tuples = h.tuples_of(f"user:{lukas.user_id}")
         owner_login = await h.login("lukas")
         restored = await h.client.post(
@@ -635,22 +621,117 @@ async def test_account_rename_delete_with_grace_and_restore() -> None:
         restore_again = await h.client.post(
             lukas.url("/restore"), headers=bearer(owner_login["access_token"])
         )
-        anna_back = h.tuples_of(f"user:{anna_id}")
     assert renamed.json()["name"] == "New name"
     assert wrong.status_code == 401
     assert deleted.status_code == 202
     assert deleted.json()["status"] == "deleting" and deleted.json()["delete_after"]
     assert twice.status_code == 409
-    assert anna_refresh.status_code == 401
-    assert anna_relogin.status_code == 401
-    assert anna_tuples == set()
     assert owner_tuples == {
         f"account:{lukas.account_id}#member",
         f"account:{lukas.account_id}#owner",
     }
     assert restored.json()["status"] == "active"
     assert restore_again.status_code == 409
-    assert f"account:{lukas.account_id}#grant_mower_control" in anna_back
+
+
+async def test_an_owner_with_other_members_cannot_delete_the_account() -> None:
+    """ADR 0082: a deletion never removes people implicitly; the owner removes them first."""
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        operator = await h.role_id(lukas, "operator")
+        anna_id, _ = await h.subuser(
+            lukas,
+            "anna",
+            [{"role_id": str(operator), "level": {"type": "account", "id": str(lukas.account_id)}}],
+        )
+        blocked = await h.client.request(
+            "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
+        )
+        still_active = await h.client.get(lukas.url(), headers=lukas.headers)
+        removed = await h.client.delete(lukas.url(f"/users/{anna_id}"), headers=lukas.headers)
+        deleted = await h.client.request(
+            "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
+        )
+    assert blocked.status_code == 409
+    assert "remove them first" in blocked.json()["detail"]
+    assert still_active.json()["status"] == "active"
+    assert removed.status_code == 204
+    assert deleted.status_code == 202
+
+
+async def test_during_the_grace_period_the_owner_keeps_full_access() -> None:
+    """ADR 0082: the mowers keep running on their schedules, so the owner must still be able
+    to stop one: every permission stays, sign-in and normal actions work, restore works."""
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        level = {"type": "account", "id": str(lukas.account_id)}
+        token = await h.client.post(
+            lukas.url("/api-tokens"),
+            headers=lukas.headers,
+            json={"name": "ha", "grants": [{"level": level, "permissions": ["mower.view"]}]},
+        )
+        assert token.status_code == 201, token.text
+        deleted = await h.client.request(
+            "DELETE", lukas.url(), headers=lukas.headers, json={"password": PASSWORD}
+        )
+        assert deleted.status_code == 202
+        login = await h.login("lukas")  # a fresh sign-in works
+        head = bearer(login["access_token"])
+        me = await h.client.get(f"{API}/me", headers=head)
+        asked = [
+            {"relation": relation, "object": f"account:{lukas.account_id}"}
+            for relation in ("can_control", "can_emergency_stop", "can_manage_mowers", "member")
+        ]
+        permissions = await h.client.post(
+            f"{API}/me/permissions", headers=head, json={"checks": asked}
+        )
+        account = await h.client.get(lukas.url(), headers=head)
+        renamed = await h.client.patch(lukas.url(), headers=head, json={"name": "Still mine"})
+        roles = await h.client.get(lukas.url("/roles"), headers=head)
+        tuples = h.tuples_of(f"user:{lukas.user_id}")
+        exchange = await h.client.post(f"{API}/token", json={"token": token.json()["token"]})
+        token_tuples = h.tuples_of(f"api_token:{token.json()['id']}")
+        restored = await h.client.post(lukas.url("/restore"), headers=head)
+    assert me.status_code == 200
+    assert permissions.json() == [True, True, True, True]  # as for an active account
+    assert account.status_code == roles.status_code == renamed.status_code == 200
+    assert account.json()["status"] == "deleting"
+    assert tuples == {
+        f"account:{lukas.account_id}#member",
+        f"account:{lukas.account_id}#owner",
+    }
+    assert exchange.status_code == 401  # the API tokens are revoked
+    assert token_tuples == set()
+    assert restored.status_code == 200 and restored.json()["status"] == "active"
+
+
+async def test_only_the_owner_schedules_or_cancels_a_deletion() -> None:
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        operator = await h.role_id(lukas, "operator")
+        _, anna_token = await h.subuser(
+            lukas,
+            "anna",
+            [{"role_id": str(operator), "level": {"type": "account", "id": str(lukas.account_id)}}],
+        )
+        anna = bearer(anna_token)
+        delete = await h.client.request(
+            "DELETE", lukas.url(), headers=anna, json={"password": PASSWORD}
+        )
+        restore = await h.client.post(lukas.url("/restore"), headers=anna)
+        other = await h.register("bob")
+        foreign = await h.client.request(
+            "DELETE", lukas.url(), headers=other.headers, json={"password": PASSWORD}
+        )
+        pat = await h.client.post(
+            lukas.url("/api-tokens"),
+            headers=lukas.headers,
+            json={"name": "ha", "grants": []},
+        )
+    assert delete.status_code == 403
+    assert restore.status_code == 403
+    assert foreign.status_code == 404
+    assert pat.status_code in (201, 422)
 
 
 async def test_reconcile_repairs_drift_and_catalogue_is_served() -> None:

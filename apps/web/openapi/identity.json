@@ -3081,7 +3081,7 @@
     },
     "/api/v1/identity/accounts/{account_id}": {
       "delete": {
-        "description": "Request deletion (owner): locked for the grace period. Needs the password in the body\nor, without it, a recent step-up confirmation.",
+        "description": "Schedule the deletion (owner): locked for the grace period (the owner keeps every\npermission), purged in every service after it (ADR 0082). 409 while other members exist.\nNeeds the password in the body or, without it, a recent step-up confirmation.",
         "operationId": "delete_account_api_v1_identity_accounts__account_id__delete",
         "parameters": [
           {

@@ -79,8 +79,9 @@ async def delete_account(
     ctx: Ctx,
     body: AccountDeleteIn | None = None,
 ) -> AccountOut:
-    """Request deletion (owner): locked for the grace period. Needs the password in the body
-    or, without it, a recent step-up confirmation."""
+    """Schedule the deletion (owner): locked for the grace period (the owner keeps every
+    permission), purged in every service after it (ADR 0082). 409 while other members exist.
+    Needs the password in the body or, without it, a recent step-up confirmation."""
     password = body.password if body else None
     return AccountOut.of(await services.accounts.request_deletion(account_id, password, ctx))
 

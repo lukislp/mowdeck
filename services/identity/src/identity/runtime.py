@@ -20,6 +20,7 @@ from mowdeck_authz import (
     TupleBackend,
 )
 from mowdeck_contracts.v1 import utc_now
+from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.bus import EventBus
 from mowdeck_service_kit.db import create_engine
 from mowdeck_service_kit.entitlements import Entitlements, EntitlementsClient, client_from_settings
@@ -27,6 +28,7 @@ from prometheus_client import CollectorRegistry
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from identity.adapters.apple import AppleOAuthClient
+from identity.adapters.bus.erasure import BusAccountEraser
 from identity.adapters.bus.publisher import BusEventPublisher
 from identity.adapters.crypto import AesGcmKeyCipher, Argon2PasswordHasher, parse_kek
 from identity.adapters.db.store import SqlStore
@@ -39,6 +41,7 @@ from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
 from identity.application.keys import KeyManager
 from identity.application.ports import (
+    AccountEraser,
     Clock,
     ModuleSource,
     OAuthClient,
@@ -61,6 +64,9 @@ def key_cipher(settings: Settings) -> AesGcmKeyCipher:
     return AesGcmKeyCipher(parse_kek(settings.identity_key_encryption_key.get_secret_value()))
 
 
+_log = get_logger("identity.runtime")
+
+
 @dataclass
 class Runtime:
     """Collaborators of Identity; defaults are PostgreSQL, OpenFGA and Argon2id."""
@@ -79,6 +85,8 @@ class Runtime:
     """Tests: a fake Apple (``httpx.MockTransport``) behind the configured endpoints."""
     provisioner: SandboxProvisioner | None = None
     """Demo sandboxes (ADR 0076): fills and empties them; the HTTP provisioner unless given."""
+    eraser: AccountEraser | None = None
+    """Account erasure (ADR 0082): asks the services to delete; the NATS eraser unless given."""
     engine: AsyncEngine | None = field(default=None, init=False)
     connection: FgaConnection | None = field(default=None, init=False)
     keys: KeyManager = field(init=False)
@@ -148,6 +156,18 @@ class Runtime:
             ceremonies=PyWebAuthnCeremonies(),
             oauth=self.oauth_clients(),
         )
+        if not self.settings.erasure_enabled:
+            if not self.settings.demo_mode:
+                _log.info(
+                    "account erasure is switched off: accounts scheduled for deletion stay "
+                    "locked and restorable (MOWDECK_IDENTITY_ERASURE_ENABLED=false)"
+                )
+        else:
+            self.services.enable_erasure(
+                self.eraser
+                or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),
+                self.settings.erasure_config(),
+            )
         if self.settings.sandboxes_enabled:
             self.services.enable_sandboxes(
                 self.provisioner or self.http_provisioner(), self.settings.sandbox_config()

@@ -542,6 +542,7 @@ async def test_background_tasks_run_and_stop() -> None:
         update={
             "identity_maintenance_seconds": 0.01,
             "identity_reconcile_seconds": 0.01,
+            "identity_erasure_enabled": True,
             "identity_catalogue_refresh_seconds": 0.01,
         }
     )
@@ -553,7 +554,12 @@ async def test_background_tasks_run_and_stop() -> None:
     for t in tasks:
         t.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
-    assert [t.get_name() for t in tasks] == ["catalogue", "maintenance", "reconcile"]
+    assert [t.get_name() for t in tasks] == [
+        "catalogue",
+        "maintenance",
+        "account-erasure",
+        "reconcile",
+    ]
 
 
 async def test_app_with_background_tasks_starts_and_stops() -> None:

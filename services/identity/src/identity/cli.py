@@ -12,6 +12,8 @@
 * ``retire-key KID``: drop a signing key at once (emergency); tokens it signed fail.
 * ``list-keys``: the signing keys and their status.
 * ``reconcile [--account ID]``: make OpenFGA match the database.
+* ``erasures [--all]``: the purges of deleted accounts that are not finished (ADR 0082): state,
+  which services confirmed, attempts and the last error; ``--all`` adds the finished ones.
 * ``grant-platform-admin USERNAME [--revoke]``: make a user an operator admin
   (``platform:main#operator_admin``: manages accounts and plans, sees no mower data).
 
@@ -33,6 +35,7 @@ from mowdeck_service_kit.logging import configure_logging
 
 from identity.application.accounts import Registration
 from identity.application.context import SYSTEM
+from identity.domain.erasure import AccountErasure
 from identity.domain.errors import IdentityError
 from identity.runtime import Runtime
 from identity.settings import Settings
@@ -48,6 +51,19 @@ def read_password() -> str:
     if not sys.stdin.isatty():
         return sys.stdin.readline().rstrip("\r\n")
     return getpass.getpass("Password: ")
+
+
+def erasure_line(erasure: AccountErasure) -> str:
+    """One line per purge: account, state, services that confirmed of those required, retries."""
+    line = (
+        f"{erasure.account_id}  {erasure.state.value:<8}  started {erasure.started_at.isoformat()}"
+        f"  confirmed {len(erasure.confirmed)}/{len(erasure.required)}"
+    )
+    if erasure.completed_at is not None:
+        return f"{line}  erased {erasure.completed_at.isoformat()}"
+    waiting = ", ".join(erasure.open_services)
+    line += f"  waiting for {waiting}  attempts {erasure.attempts}"
+    return f"{line}  last error: {erasure.last_error}" if erasure.last_error else line
 
 
 def parser() -> argparse.ArgumentParser:
@@ -72,6 +88,8 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("list-keys", help="list the signing keys")
     reconcile = commands.add_parser("reconcile", help="make OpenFGA match the database")
     reconcile.add_argument("--account", type=UUID)
+    erasures = commands.add_parser("erasures", help="the purges of deleted accounts")
+    erasures.add_argument("--all", action="store_true", help="include the finished purges")
     platform = commands.add_parser(
         "grant-platform-admin", help="make a user an operator admin (platform:main)"
     )
@@ -119,6 +137,13 @@ async def run_command(args: argparse.Namespace, runtime: Runtime) -> str:
             else:
                 result = await services.accounts.reconcile_all()
             return f"reconciled: {result.writes} tuples written, {result.deletes} deleted"
+        case "erasures":
+            if services.erasure is None:
+                return "account erasure is not enabled on this installation"
+            purges = await services.erasure.records(open_only=not args.all)
+            if not purges:
+                return "no purge is open" if not args.all else "no account was erased yet"
+            return "\n".join(erasure_line(purge) for purge in purges)
         case "grant-platform-admin":
             user_id = await services.platform.set_admin(
                 args.username, SYSTEM, grant=not args.revoke

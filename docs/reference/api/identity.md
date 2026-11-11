@@ -46,7 +46,7 @@ Rename the account (`can_manage_users`).
 
 **Delete Account**
 
-Request deletion (owner): locked for the grace period. Needs the password in the body or, without it, a recent step-up confirmation.
+Schedule the deletion (owner): locked for the grace period (the owner keeps every permission), purged in every service after it (ADR 0082). 409 while other members exist. Needs the password in the body or, without it, a recent step-up confirmation.
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |

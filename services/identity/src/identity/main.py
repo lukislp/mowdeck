@@ -39,6 +39,7 @@ from identity.adapters.api.deps import install_error_mapping
 from identity.adapters.api.routes import DEMO_POLICY, ROUTERS, jwks_document
 from identity.adapters.bus.subscriptions import subscribe_all
 from identity.application.ports import (
+    AccountEraser,
     Clock,
     Lt,
     ModuleSource,
@@ -80,6 +81,7 @@ def build_app(
     github_transport: httpx.AsyncBaseTransport | None = None,
     apple_transport: httpx.AsyncBaseTransport | None = None,
     provisioner: SandboxProvisioner | None = None,
+    eraser: AccountEraser | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA and Argon2id."""
     runtime = Runtime(
@@ -94,6 +96,7 @@ def build_app(
         github_transport=github_transport,
         apple_transport=apple_transport,
         provisioner=provisioner,
+        eraser=eraser,
     )
     keys = runtime.keys
     verifier = JwtVerifier(
@@ -199,6 +202,13 @@ def start_background_tasks(settings: Settings, runtime: Runtime) -> list[asyncio
             asyncio.create_task(
                 sandboxes.run_sweep(settings.identity_demo_sandbox_sweep_seconds),
                 name="sandbox-sweep",
+            )
+        )
+    erasure = services.erasure
+    if erasure is not None:  # the purge of deleted accounts (ADR 0082)
+        tasks.append(
+            asyncio.create_task(
+                erasure.run(settings.identity_erasure_sweep_seconds), name="account-erasure"
             )
         )
     if settings.identity_reconcile_seconds > 0:

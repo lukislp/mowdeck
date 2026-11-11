@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Reply on ``account.erase.<service>``: ``ok`` once the service holds nothing of the\naccount any more (``deleted`` rows removed, 0 when it was already empty), or ``ok=False``\nwith an ``error`` (Identity asks again).",
+  "properties": {
+    "deleted": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Deleted",
+      "type": "integer"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "AccountEraseReply",
+  "type": "object"
+}
