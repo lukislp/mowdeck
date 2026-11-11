@@ -65,7 +65,6 @@ FAKE_GIT = """#!/usr/bin/env bash
 echo "git $*" >> "$FAKE_LOG"
 case "$*" in
   *"status --porcelain"*) printf '%s' "${FAKE_DIRTY:-}" ;;
-  *"diff --quiet"*) exit "${FAKE_NATS_CHANGED:-0}" ;;
 esac
 exit 0
 """
@@ -222,32 +221,26 @@ def test_deploy_checks_the_nats_passwords_of_the_release(stack: Stack) -> None:
     assert "MOWDECK_VERSION=0.1.0" in (stack.root / "stack" / ".env").read_text("utf-8")
 
 
-def test_deploy_reloads_nats_when_the_release_changes_its_permissions(stack: Stack) -> None:
+def test_deploy_reloads_the_permissions_of_the_running_nats_before_up(stack: Stack) -> None:
     """The v0.69.4 deploy: `up` does not recreate NATS (its service definition did not change),
     and a running NATS keeps the permissions it read at its start, so the new services were
-    refused their new consumer. The script reloads NATS after the checkout, before `up`."""
-    result = stack.run("0.2.0", FAKE_NATS_CHANGED="1")
-    assert result.returncode == 0, result.stderr
-    diff = stack.calls("git diff --quiet HEAD v0.2.0 -- nats/")
-    hup = stack.calls(" kill -s HUP nats")
-    logs = stack.calls(" logs --no-color --since ")
-    assert len(diff) == len(hup) == 1, stack.log
-    assert diff[0] < stack.calls("git checkout --detach v0.2.0")[0]
-    assert stack.calls("maintenance open")[0] < hup[0] < logs[0] < stack.calls(" up -d")[0]
-    assert "-f docker-compose.yml -f docker-compose.release.yml" in stack.log[hup[0]]
-    assert "NATS reloaded its users and permissions" in result.stdout
-
-
-def test_deploy_leaves_nats_alone_when_its_files_did_not_change(stack: Stack) -> None:
-    result = stack.run("0.2.0")
-    assert result.returncode == 0, result.stderr
-    assert stack.calls("git diff --quiet HEAD v0.2.0 -- nats/")
-    assert not stack.calls("kill -s HUP")
-    assert stack.calls(" up -d")
+    refused their new consumer. The script reloads NATS after the checkout, before `up`, on
+    every deploy (a rerun after a failed one finds the new files already checked out)."""
+    for attempt in (1, 2):
+        result = stack.run("0.2.0")
+        assert result.returncode == 0, result.stderr
+        hup = stack.calls(" kill -s HUP nats")
+        logs = stack.calls(" logs --no-color --since ")
+        ups = stack.calls(" up -d")
+        assert len(hup) == len(ups) == attempt, stack.log
+        assert stack.calls("git checkout --detach v0.2.0")[-1] < hup[-1]
+        assert stack.calls("maintenance open")[-1] < hup[-1] < logs[-1] < ups[-1]
+        assert "-f docker-compose.yml -f docker-compose.release.yml" in stack.log[hup[-1]]
+        assert "NATS reloaded its users and permissions" in result.stdout
 
 
 def test_a_stopped_nats_reads_the_new_files_when_up_starts_it(stack: Stack) -> None:
-    result = stack.run("0.2.0", FAKE_NATS_CHANGED="1", FAKE_NATS_STOPPED="1")
+    result = stack.run("0.2.0", FAKE_NATS_STOPPED="1")
     assert result.returncode == 0, result.stderr
     assert not stack.calls("kill -s HUP")
     assert "NATS is not running" in result.stdout
@@ -260,9 +253,7 @@ def test_a_stopped_nats_reads_the_new_files_when_up_starts_it(stack: Stack) -> N
 def test_a_failed_nats_reload_stops_before_up(stack: Stack, reload: str, message: str) -> None:
     """NATS keeps the old configuration when the new one does not parse; starting the services
     then would only restart-loop them. The window is closed again."""
-    result = stack.run(
-        "0.2.0", FAKE_NATS_CHANGED="1", FAKE_NATS_RELOAD=reload, MOWDECK_NATS_RELOAD_SECONDS="1"
-    )
+    result = stack.run("0.2.0", FAKE_NATS_RELOAD=reload, MOWDECK_NATS_RELOAD_SECONDS="1")
     assert result.returncode != 0
     assert message in result.stderr
     assert stack.calls("kill -s HUP nats")
