@@ -165,7 +165,7 @@ USERS: dict[str, Access] = {
         ),
     ),
     "identity": Access(
-        publish=(*_PLANS, "event.identity.>"),
+        publish=(*_PLANS, "account.erase.*", "event.identity.>"),
         consume=(*_GRANTS, *_PLAN_CHANGES),
     ),
     "notifications": Access(
@@ -380,7 +380,7 @@ def summary(users: Mapping[str, Access] = USERS) -> str:
 _SUBSCRIBE = {"subscribe", "_subscribe", "subscribe_batch"}
 _REQUEST = {"request", "_request"}
 _PUBLISH = {"publish", "_publish", "emit", "connection_event", "_connection_event"}
-_CORE = {"fleet", "gateway", "entitlements", "tracks", "relay", "presence"}
+_CORE = {"account", "fleet", "gateway", "entitlements", "tracks", "relay", "presence"}
 """First tokens of the core NATS subjects (request/reply, and ``presence.accounts``)."""
 _SUBJECT = re.compile(r"[a-z_][a-z0-9_*>-]*(\.[a-z0-9_*>-]+)+")
 

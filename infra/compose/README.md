@@ -130,6 +130,7 @@ Refresh and logout need a valid refresh cookie anyway; their looser limit keeps 
 | --- | --- | --- |
 | `IDENTITY_KEY_ENCRYPTION_KEY` | a marked development value | **Required.** 256-bit key (base64) that encrypts the signing keys at rest; generate your own for any real installation and keep a backup. Identity refuses the development value with `MOWDECK_ENVIRONMENT=prod` |
 | `IDENTITY_REGISTRATION` | `open` | `open`, or `closed` (only the first account; more owners with the CLI) |
+| `IDENTITY_ERASURE_ENABLED` | `false` | Purge accounts whose deletion grace period is over ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md)); off until every service answers the erasure request |
 | `IDENTITY_ARGON2_PROFILE` | `rfc9106_low` | `owasp_min` for small hosts |
 | `IDENTITY_REFRESH_COOKIE_SECURE` | `false` | `true` behind HTTPS (see [HTTPS](#https)) |
 | `IDENTITY_PUBLIC_URL` | empty (passkeys off) | The address users open MowDeck at, for example `https://mowdeck.example.org`; passkeys are bound to its host name (HTTPS and a host name, not an IP; plain HTTP only for `http://localhost`), and the GitHub and Apple callbacks are built from it ([Passkeys](../../docs/ops/passkeys.md)) |

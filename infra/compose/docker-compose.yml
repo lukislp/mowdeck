@@ -430,6 +430,7 @@ services:
       MOWDECK_IDENTITY_KEY_ENCRYPTION_KEY: ${IDENTITY_KEY_ENCRYPTION_KEY:?set IDENTITY_KEY_ENCRYPTION_KEY in infra/compose/.env}
       MOWDECK_IDENTITY_REGISTRATION: ${IDENTITY_REGISTRATION:-open}
       MOWDECK_IDENTITY_ARGON2_PROFILE: ${IDENTITY_ARGON2_PROFILE:-rfc9106_low}
+      MOWDECK_IDENTITY_ERASURE_ENABLED: ${IDENTITY_ERASURE_ENABLED:-false}
       # Optional modules add their URL in IDENTITY_EXTRA_MODULE_URLS (comma separated), e.g. the
       # Matter server on the host network: https://host.docker.internal:8790 (ADR 0063).
       MOWDECK_IDENTITY_MODULE_URLS: https://device-gateway:8000,https://fleet:8000,https://telemetry:8000,https://realtime:8000,https://notifications:8000,https://scheduler:8000,https://entitlements:8000,https://planner:8000,https://vision:8000,${IDENTITY_EXTRA_MODULE_URLS:-}

@@ -89,6 +89,10 @@ ENTITLEMENTS_CHECK = "entitlements.check"
 ENTITLEMENTS_PLAN_SET = "entitlements.plan.set"
 """Core NATS request subject (internal, Billing only): ``PlanSetRequest`` in, ``PlanSetReply``
 out."""
+ACCOUNT_ERASE_PREFIX = "account.erase"
+"""Prefix of the core NATS requests with which Identity tells a service to delete everything it
+holds of an account (ADR 0082): ``account.erase.<service>``, ``AccountEraseRequest`` in,
+``AccountEraseReply`` out. No stream captures them."""
 TELEMETRY_POSITIONS_QUERY = "tracks.positions.query"
 """Core NATS request subject (internal, answered by Telemetry): ``PositionTrackRequest`` in,
 ``PositionTrackReply`` out. Deliberately not below ``telemetry.``: the ``TELEMETRY`` stream
@@ -525,3 +529,14 @@ def stream_for_subject(subject: str) -> StreamSpec | None:
         if stream.captures(subject):
             return stream
     return None
+
+
+def account_erase_subject(service_id: str) -> str:
+    """Subject of the erasure request of one service: ``account.erase.<service>`` (the service's
+    name, the Compose service name; ``service_id`` so the subject scan reads it as a wildcard)."""
+    _check_tokens(service_id, "service")
+    return f"{ACCOUNT_ERASE_PREFIX}.{service_id}"
+
+
+ALL_ACCOUNT_ERASE = f"{ACCOUNT_ERASE_PREFIX}.*"
+"""Wildcard for the erasure requests of every service."""
