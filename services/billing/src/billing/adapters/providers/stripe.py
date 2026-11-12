@@ -24,7 +24,7 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
   ``GET /v1/refunds?payment_intent=`` (or ``charge=``). The refund is ``POST /v1/refunds`` on
   the PaymentIntent (or charge) with ``amount``, ``reason=requested_by_customer``, the metadata
   of the erasure and an ``Idempotency-Key`` header; Stripe refunds in the payment's currency to
-  the original payment method. A refusal with one of :data:`PERMANENT_REFUND_CODES` is
+  the original payment method. A refusal of the request (any ``InvalidRequestError``) is
   ``RefundImpossible``; a reused key with other parameters (``IdempotencyError``: the amount
   shrank between two attempts) is ``ProviderUnavailable``, and the next attempt finds the
   refund by its metadata. Then ``DELETE /v1/subscriptions/{id}`` with ``invoice_now=false`` and
