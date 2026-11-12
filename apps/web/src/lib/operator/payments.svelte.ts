@@ -19,7 +19,8 @@ import {
 
 export interface PaymentsLoaders {
   summary(months: number): Promise<PaymentsSummary>;
-  deletions(months: number): Promise<DeletionStats>;
+  /** In `tz`, the zone of Billing's summary, so both count the same months. */
+  deletions(months: number, tz: string | undefined): Promise<DeletionStats>;
   /** Open manual refunds and those settled in the last 30 days. */
   refunds(): Promise<ManualRefund[]>;
   settle(id: string): Promise<ManualRefund>;
@@ -28,9 +29,11 @@ export interface PaymentsLoaders {
 export const defaultPaymentsLoaders: PaymentsLoaders = {
   summary: (months) =>
     unwrap(billingApi.GET('/api/v1/billing/operator/payments', { params: { query: { months } } })),
-  deletions: (months) =>
+  deletions: (months, tz) =>
     unwrap(
-      identityApi.GET('/api/v1/identity/platform/deletions', { params: { query: { months } } }),
+      identityApi.GET('/api/v1/identity/platform/deletions', {
+        params: { query: tz ? { months, tz } : { months } },
+      }),
     ),
   refunds: () =>
     unwrap(
@@ -77,11 +80,14 @@ export class PaymentsDashboard {
   async load(months: WindowMonths = this.months): Promise<void> {
     this.months = months;
     this.loading = true;
-    const [summary, deletions, refunds] = await Promise.allSettled([
+    const [summary, refunds] = await Promise.allSettled([
       this.#loaders.summary(months),
-      this.#loaders.deletions(months),
       this.#loaders.refunds(),
     ]);
+    // Identity counts in Billing's zone (MOWDECK_BILLING_REPORT_TIMEZONE): one setting, the same
+    // months on both sides. Without Billing's answer Identity uses its default zone.
+    const zone = summary.status === 'fulfilled' ? summary.value.time_zone : undefined;
+    const [deletions] = await Promise.allSettled([this.#loaders.deletions(months, zone)]);
     if (summary.status === 'fulfilled') {
       this.summary = summary.value;
       this.problem = null;

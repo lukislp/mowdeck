@@ -69,7 +69,7 @@ Mark a manual refund as paid back. Settling again keeps the first time; 404 for 
 
 **Payments**
 
-The payments dashboard: revenue per month and currency (gross, refunds, net), the subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by reason, failed payments, open and overdue invoices and disputes. Months are calendar months in UTC, amounts in the smallest currency unit and never added across currencies. Built from Billing's own data (the payments ledger written from webhooks since the deploy that added it, the subscription and invoice rows); Stripe is not asked. No answer names an account.
+The payments dashboard: revenue per month and currency (gross, refunds, net), the subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by reason, failed payments, open and overdue invoices and disputes. Months are calendar months in the installation's report zone (`time_zone`: MOWDECK_BILLING_REPORT_TIMEZONE), amounts in the smallest currency unit and never added across currencies. Built from Billing's own data (the payments ledger written from webhooks since the deploy that added it, the subscription and invoice rows); Stripe is not asked. No answer names an account.
 
 | Parameter | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
@@ -355,7 +355,7 @@ Failed payments, open and overdue invoices, past-due subscriptions and disputes.
 | `revenue` | array of [CurrencyRevenueOut](#currencyrevenueout) | yes |  |
 | `since` | string (date-time) or null | yes | The oldest fact of the ledger: the statistics start with the deploy that added it; null while there is none. |
 | `subscriptions` | [SubscriptionStatsOut](#subscriptionstatsout) | yes |  |
-| `time_zone` | string | yes | The time zone of the month buckets (UTC). |
+| `time_zone` | string | yes | IANA time zone of the month buckets (MOWDECK_BILLING_REPORT_TIMEZONE), e.g. Europe/Berlin; the web app passes it to Identity's deletion statistics. |
 
 ### PlanCountOut
 
@@ -414,7 +414,7 @@ One month of one currency, amounts in the smallest unit.
 | --- | --- | --- | --- |
 | `gross` | integer | yes | Paid invoices, tax included. |
 | `invoices` | integer | yes |  |
-| `month` | string | yes | YYYY-MM in UTC. |
+| `month` | string | yes | YYYY-MM, a calendar month in the report zone. |
 | `net` | integer | yes | Gross minus refunded. |
 | `refunded` | integer | yes | Refunds created this month that take money back. |
 | `refunds` | integer | yes |  |

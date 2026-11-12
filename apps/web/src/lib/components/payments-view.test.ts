@@ -18,7 +18,7 @@ const MONTHS = ['2026-10', '2026-11'];
 function summary(overrides: Partial<PaymentsSummary> = {}): PaymentsSummary {
   return {
     generated_at: '2026-11-12T09:00:00Z',
-    time_zone: 'UTC',
+    time_zone: 'Europe/Berlin',
     months: MONTHS,
     since: '2026-10-01T00:00:00Z',
     currencies: [{ code: 'eur', exponent: 2 }],
@@ -110,7 +110,7 @@ const EMPTY: PaymentsSummary = summary({
 });
 
 const DELETIONS: DeletionStats = {
-  time_zone: 'UTC',
+  time_zone: 'Europe/Berlin',
   months: [
     { month: '2026-10', scheduled: 2, restored: 1, completed: 0 },
     { month: '2026-11', scheduled: 1, restored: 0, completed: 1 },
@@ -161,6 +161,10 @@ describe('PaymentsView', () => {
     const given = loaders();
     await shown(true, given);
     expect(given.summary).toHaveBeenCalledWith(12);
+    // Identity counts the months in Billing's zone, and the page says which zone that is.
+    expect(given.deletions).toHaveBeenCalledWith(12, 'Europe/Berlin');
+    expect(screen.getByTestId('payments-zone').textContent).toContain('Europe/Berlin');
+    expect(screen.getByText('12 months · Europe/Berlin')).toBeTruthy();
     expect(screen.getByTestId('payments-kpi-mrr').textContent).toContain('€79.20');
     expect(screen.getByTestId('payments-kpi-active').textContent).toContain('8');
     expect(screen.getByTestId('payments-kpi-net').textContent).toContain('€10.00');
@@ -258,6 +262,6 @@ describe('PaymentsView', () => {
     const window = screen.getByTestId('payments-window');
     await fireEvent.click(within(window).getByText('24 mo.'));
     await waitFor(() => expect(given.summary).toHaveBeenLastCalledWith(24));
-    expect(given.deletions).toHaveBeenLastCalledWith(24);
+    expect(given.deletions).toHaveBeenLastCalledWith(24, 'Europe/Berlin');
   });
 });

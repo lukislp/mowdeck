@@ -13,9 +13,10 @@ The service only runs when billing is enabled for the installation (Compose prof
 """
 
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from mowdeck_service_kit import ServiceSettings
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 
 
 class Settings(ServiceSettings):
@@ -75,10 +76,24 @@ class Settings(ServiceSettings):
 
     billing_ledger_key: SecretStr | None = None
     """Key of the keyed hashes in the payments ledger (ADR 0083): they find a refund or a
-    dispute again without storing its Stripe id. Any long random string, kept like a password.
-    Empty: derived from ``MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET``; set it on its own so that
-    rotating the webhook secret does not count a refund or a dispute still open a second
-    time."""
+    dispute again without storing its Stripe id. Required, at least 32 characters (e.g.
+    ``openssl rand -base64 32``), kept like a password; usually as ``_FILE``. Billing refuses
+    to start without it. Changing it later counts a refund or a dispute that is still open a
+    second time."""
+
+    billing_report_timezone: str = "Europe/Berlin"
+    """IANA time zone of the month buckets of the payments dashboard (ADR 0083), e.g.
+    ``Europe/Berlin`` or ``UTC``. An unknown zone refuses the start."""
+
+    @field_validator("billing_report_timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            msg = f"MOWDECK_BILLING_REPORT_TIMEZONE: unknown IANA time zone {value!r}"
+            raise ValueError(msg) from exc
+        return value
 
     billing_optional_services: str = ""
     """The optional services this installation runs, comma separated, exactly as Identity gets

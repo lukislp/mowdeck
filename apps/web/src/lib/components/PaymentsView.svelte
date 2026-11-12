@@ -4,7 +4,7 @@
 <!--
   The payments dashboard of the operator console (ADR 0083): the readouts band, then four ledger
   sections (revenue and subscriptions, refunds, payment problems, account deletions) for the
-  chosen window of UTC months. `billing` false (Billing does not run here; the console hides the
+  chosen window of months in Billing's report zone (named on the page). `billing` false (Billing does not run here; the console hides the
   tab then) shows a notice and loads nothing.
 -->
 <script lang="ts">
@@ -42,7 +42,9 @@
 
 <TopBar
   title={m.op_pay_title()}
-  meta={billing ? m.op_pay_window({ count: dashboard.months }) : undefined}
+  meta={billing && summary
+    ? m.op_pay_window({ count: dashboard.months, zone: summary.time_zone })
+    : undefined}
 >
   {#snippet actions()}
     {#if billing}
@@ -80,6 +82,7 @@
           ? m.op_pay_since({ date: formatDate(summary.since) })
           : m.op_pay_since_none()}
       </span>
+      <span data-testid="payments-zone">{m.op_pay_zone({ zone: summary.time_zone })}</span>
       <span>{m.op_pay_privacy()}</span>
     </p>
     <PaymentsRevenue {summary} {money} {locale} />

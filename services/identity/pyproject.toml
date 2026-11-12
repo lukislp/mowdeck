@@ -24,6 +24,8 @@ dependencies = [
   "cryptography>=44.0.0",
   "httpx>=0.28.1",
   "pyjwt[crypto]>=2.10.1",
+  # IANA time zones for the deletion statistics (the slim image has no system zoneinfo).
+  "tzdata>=2025.2",
   "webauthn>=3.0.1",
 ]
 

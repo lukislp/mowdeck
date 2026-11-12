@@ -22,10 +22,9 @@ customer and its subscription at the payment provider.
 
 import asyncio
 import contextlib
-import hashlib
-import hmac
 from collections.abc import Mapping
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from mowdeck_auth import principal_resolver_from_env
@@ -84,18 +83,24 @@ def load_prices(settings: Settings) -> PriceTable:
     return table
 
 
-LEDGER_KEY_LABEL = b"mowdeck-billing-ledger-v1"
-"""Derives the ledger key from the webhook secret when no key of its own is set."""
+LEDGER_KEY_MIN_LENGTH = 32
+"""The shortest ledger key Billing accepts (``openssl rand -base64 32`` gives 44 characters)."""
 
 
 def ledger_key(settings: Settings) -> bytes:
-    """The key of the payments ledger's keyed hashes (ADR 0083)."""
-    own = settings.billing_ledger_key.get_secret_value() if settings.billing_ledger_key else ""
-    if own:
-        return own.encode()
-    secret = settings.billing_stripe_webhook_secret
-    webhook = secret.get_secret_value() if secret else ""
-    return hmac.new(webhook.encode(), LEDGER_KEY_LABEL, hashlib.sha256).digest()
+    """The key of the payments ledger's keyed hashes (ADR 0083). Required: without it Billing
+    refuses to start, like without the Stripe secret key."""
+    secret = settings.billing_ledger_key
+    key = secret.get_secret_value().strip() if secret else ""
+    if len(key) < LEDGER_KEY_MIN_LENGTH:
+        msg = (
+            "MOWDECK_BILLING_LEDGER_KEY (or _FILE) is required: at least "
+            f"{LEDGER_KEY_MIN_LENGTH} random characters, e.g. `openssl rand -base64 32` "
+            "(Compose: BILLING_LEDGER_KEY in infra/compose/.env; Helm: "
+            "secrets.BILLING_LEDGER_KEY). It keys the payments ledger (ADR 0083); keep it."
+        )
+        raise ValueError(msg)
+    return key.encode()
 
 
 def build_provider(settings: Settings) -> PaymentProvider:
@@ -133,6 +138,7 @@ def build_app(
     clock: Clock | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA, NATS and the provider."""
+    key = ledger_key(settings)  # refuses before anything is opened
     engine = None
     if store is None:
         if settings.database_url is None:
@@ -189,7 +195,8 @@ def build_app(
                 automatic_tax=settings.billing_automatic_tax,
                 app_url=settings.billing_app_url,
                 price_cache_seconds=settings.billing_price_cache_seconds,
-                ledger_key=ledger_key(settings),
+                ledger_key=key,
+                report_timezone=ZoneInfo(settings.billing_report_timezone),
             ),
             clock=clock or utc_now,
         )

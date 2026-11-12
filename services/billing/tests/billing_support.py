@@ -50,6 +50,7 @@ from billing.settings import Settings
 API = "/api/v1/billing"
 WEBHOOK = f"{API}/webhooks/stripe"
 SECRET = "whsec_test_secret"  # noqa: S105 - test value
+LEDGER_KEY = "ledger-key-for-tests-only-0123456789"  # test value, 36 characters
 T0 = datetime(2026, 10, 10, 8, 0, tzinfo=UTC)
 PRICES = PriceTable(currency="eur", prices={"home": "price_home", "fleet": "price_fleet", "x": ""})
 PLANS = [
@@ -86,6 +87,7 @@ def make_settings(**overrides: Any) -> Settings:
         "nats_enabled": False,
         "billing_provider": "fake",
         "billing_stripe_webhook_secret": SECRET,
+        "billing_ledger_key": LEDGER_KEY,
         "billing_entitlements_url": "",
         **overrides,
     }

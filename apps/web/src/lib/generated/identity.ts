@@ -1225,8 +1225,10 @@ export type paths = {
         /**
          * Platform Deletions
          * @description Account deletions of the last ``months`` months (operator admins): scheduled, restored
-         *     and completed per calendar month in UTC, and how many are in the grace period or being
-         *     erased now. No account id, no name.
+         *     and completed per local calendar month in the IANA zone ``tz`` (the web app passes the
+         *     ``time_zone`` of Billing's payments dashboard, so both count the same months; 422 for an
+         *     unknown zone), and how many are in the grace period or being erased now. No account id, no
+         *     name.
          */
         get: operations["platform_deletions_api_v1_identity_platform_deletions_get"];
         put?: never;
@@ -1613,7 +1615,7 @@ export type components = {
         };
         /**
          * DeletionMonthOut
-         * @description Account deletions of one month (UTC).
+         * @description Account deletions of one month of the asked zone.
          */
         DeletionMonthOut: {
             /**
@@ -1623,7 +1625,7 @@ export type components = {
             completed: number;
             /**
              * Month
-             * @description YYYY-MM in UTC.
+             * @description YYYY-MM, a calendar month in ``time_zone``.
              */
             month: string;
             /**
@@ -1656,7 +1658,7 @@ export type components = {
             purging: number;
             /**
              * Time Zone
-             * @default UTC
+             * @description IANA zone of the month buckets (the ``tz`` asked for).
              */
             time_zone: string;
         };
@@ -5033,6 +5035,7 @@ export interface operations {
         parameters: {
             query?: {
                 months?: number;
+                tz?: string;
             };
             header?: never;
             path?: never;

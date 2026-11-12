@@ -39,7 +39,7 @@ in the transaction that applies the event. Disputes (``charge.dispute.*``) write
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, tzinfo
 from uuid import UUID, uuid4
 
 from mowdeck_contracts.v1 import (
@@ -122,6 +122,8 @@ class BillingConfig:
     claim_lease_seconds: float = 120.0
     ledger_key: bytes = b""
     """The key of the keyed hashes in the payments ledger (ADR 0083)."""
+    report_timezone: tzinfo = UTC
+    """The zone of the dashboard's month buckets (``MOWDECK_BILLING_REPORT_TIMEZONE``)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,7 +202,7 @@ class BillingService:
         self.clock = clock
         self.ledger = PaymentLedger(store, provider.name, config.ledger_key, config.prices, clock)
         self.manual_refunds = ManualRefunds(store, clock, self.ledger)
-        self.payments = PaymentsDashboard(store, clock, self.prices)
+        self.payments = PaymentsDashboard(store, clock, self.prices, config.report_timezone)
         self._cache = _PriceCache()
         self._cache_lock = asyncio.Lock()
 

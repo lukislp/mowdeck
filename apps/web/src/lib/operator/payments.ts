@@ -3,7 +3,7 @@
 
 /**
  * The payments dashboard of the operator console (ADR 0083): types of the Billing and Identity
- * answers and the pure presentation rules. Billing aggregates (per UTC month and currency, never
+ * answers and the pure presentation rules. Billing aggregates (per month of its report zone and currency, never
  * across currencies); this module only formats, groups for tables and compares the plans with
  * the configured prices.
  *
@@ -87,7 +87,7 @@ function monthDate(month: string): Date {
   return new Date(Date.UTC(year ?? 1970, (index ?? 1) - 1, 1));
 }
 
-/** "Nov 26" (axis and table rows); the month is a UTC calendar month. */
+/** "Nov 26" (axis and table rows): only the label of a `YYYY-MM` key, whatever its zone. */
 export function monthLabel(month: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'short',

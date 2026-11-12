@@ -385,7 +385,7 @@ async def test_dashboard_summary_from_webhooks() -> None:
         body = (await h.client.get(PAYMENTS, params={"months": 2}, headers=operator.headers)).json()
 
     assert body["months"] == ["2026-10", "2026-11"]
-    assert body["time_zone"] == "UTC"
+    assert body["time_zone"] == "Europe/Berlin"
     assert body["since"] is not None
     assert body["currencies"] == [{"code": "eur", "exponent": 2}]
     (eur,) = body["revenue"]

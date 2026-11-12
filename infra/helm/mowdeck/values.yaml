@@ -229,6 +229,8 @@ config:
   BILLING_PRICE_IDS: ""
   # Days after the last paid period before a payment problem ends the plan (status grace).
   BILLING_GRACE_DAYS: "14"
+  # -- IANA time zone of the months on the operator's payments dashboard (ADR 0083).
+  BILLING_REPORT_TIMEZONE: Europe/Berlin
   # Public URL of the web app for the return links of Checkout and the portal. Empty:
   # https://<ingress.host> when a host is set, otherwise the request's origin.
   BILLING_APP_URL: ""
@@ -343,7 +345,7 @@ secrets:
   #   database-url-entitlements, database-url-billing, database-url-planner,
   #   database-url-vision          postgresql://user:pass@host:5432/db
   #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
-  #   billing-ledger-key           only with services.billing (may be empty)
+  #   billing-ledger-key           only with services.billing (at least 32 characters)
   #   vision-secrets-key, vision-default-api-key   (may be empty)
   #   relay-frames-token            only with services.cameraRelay (may be empty)
   #   matter-api-tokens             only with services.matterServer (one API token per line)
@@ -371,8 +373,9 @@ secrets:
   BILLING_STRIPE_SECRET_KEY: ""
   # -- Signing secret of the Stripe webhook endpoint (whsec_...); empty: every webhook is refused.
   BILLING_STRIPE_WEBHOOK_SECRET: ""
-  # -- Key of the keyed hashes in Billing's payments ledger (ADR 0083). Empty: derived from the
-  # webhook secret; set it so that rotating that secret does not count an open dispute twice.
+  # -- Key of the keyed hashes in Billing's payments ledger (ADR 0083): at least 32 random
+  # characters (openssl rand -base64 32). Required when services.billing.enabled; keep it, a new
+  # key counts an open refund or dispute twice.
   BILLING_LEDGER_KEY: ""
   # -- 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts in Fleet
   # (ADR 0034). Empty: no linked accounts, so no new cloud mowers. Keep a backup.

@@ -45,6 +45,8 @@ set_env OPENFGA_AUTHN_PRESHARED_KEYS "$(openssl rand -hex 24)"
 set_env IDENTITY_KEY_ENCRYPTION_KEY "$(openssl rand -base64 32)"
 set_env FLEET_CREDENTIAL_ENCRYPTION_KEY "$(openssl rand -base64 32)"
 set_env VISION_SECRETS_KEY "$(openssl rand -base64 32)"
+# The payments ledger of Billing (ADR 0083); Billing refuses to start without it.
+set_env BILLING_LEDGER_KEY "$(openssl rand -base64 32)"
 # One password per NATS user (ADR 0074); the script prints only variable names.
 "$compose_dir/nats-passwords.sh" "$target"
 

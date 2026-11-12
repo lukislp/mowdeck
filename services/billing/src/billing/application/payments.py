@@ -12,7 +12,7 @@ object.
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, tzinfo
 
 from mowdeck_contracts.v1 import SubscriptionStatus
 
@@ -20,7 +20,7 @@ from billing.application.ports import Clock, Store
 from billing.domain.ledger import FactKind, PaymentFact
 from billing.domain.models import PlanPrice
 from billing.domain.statistics import (
-    TIME_ZONE,
+    DEFAULT_ZONE,
     CurrencyRevenue,
     DisputeMonth,
     FailureMonth,
@@ -85,6 +85,11 @@ class PaymentsSummary:
         return {c for c in found if c}
 
 
+def zone_name(zone: tzinfo) -> str:
+    """The IANA name of a zone (``Europe/Berlin``), ``UTC`` for the UTC singleton."""
+    return str(getattr(zone, "key", None) or zone.tzname(None) or "UTC")
+
+
 class PaymentsDashboard:
     """Reads and aggregates; writes nothing."""
 
@@ -93,36 +98,39 @@ class PaymentsDashboard:
         store: Store,
         clock: Clock,
         prices: Callable[[], Awaitable[dict[str, PlanPrice]]],
+        zone: tzinfo = DEFAULT_ZONE,
     ) -> None:
         self._store = store
         self._clock = clock
         self._prices = prices
+        self._zone = zone
 
     async def summary(self, months: int = DEFAULT_MONTHS) -> PaymentsSummary:
         """The dashboard of the last ``months`` months (this one included)."""
         now = self._clock()
-        window = recent_months(now, months)
+        zone = self._zone
+        window = recent_months(now, months, zone)
         async with self._store.transaction() as tx:
-            facts = await tx.payment_facts(window_start(now, months))
+            facts = await tx.payment_facts(window_start(now, months, zone))
             since = await tx.first_fact_at()
             tallies = await tx.subscription_tally()
             invoices = await tx.open_invoices()
         prices = await self._prices()
         return PaymentsSummary(
             generated_at=now,
-            time_zone=str(TIME_ZONE),
+            time_zone=zone_name(zone),
             months=window,
             since=since,
-            revenue=revenue(facts, window),
+            revenue=revenue(facts, window, zone),
             plans=plan_counts(tallies),
             mrr=mrr(tallies, prices),
-            flow=subscription_flow(facts, window),
-            refunds=refunds_by_month(facts, window),
-            failures=failures_by_month(facts, window),
+            flow=subscription_flow(facts, window, zone),
+            refunds=refunds_by_month(facts, window, zone),
+            failures=failures_by_month(facts, window, zone),
             recent_failures=latest(facts, FactKind.PAYMENT_FAILED, RECENT_LIMIT),
             backlog=invoice_backlog(invoices, now),
             past_due=sum(t.count for t in tallies if t.status is SubscriptionStatus.PAST_DUE),
-            disputes=disputes_by_month(facts, window),
+            disputes=disputes_by_month(facts, window, zone),
             open_disputes=open_disputes(facts),
             closed_disputes=closed_disputes(facts, RECENT_LIMIT),
         )

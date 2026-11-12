@@ -13,7 +13,7 @@ Billing needs data only the operator has. Nothing here is legal or tax advice; h
 | 3 | Price ids into MowDeck: `BILLING_PRICE_IDS=home=price_...,fleet=price_...` (or `infra/billing/prices.yaml`) | `.env` / Helm `config.BILLING_PRICE_IDS` |
 | 4 | Customer portal: enable it and choose what customers may do (update payment method, view invoices, switch between your plan prices, cancel at period end) | Stripe: Settings, Billing, Customer portal |
 | 5 | Webhook endpoint `https://<your host>/api/v1/billing/webhooks/stripe` with the events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`; copy its signing secret `whsec_...` | Stripe: Developers, Webhooks |
-| 6 | Secrets: `BILLING_STRIPE_SECRET_KEY` (a restricted key with write access to Customers, Checkout Sessions, Customer portal, Subscriptions and Charges and Refunds, and read access to Prices, Invoices and Invoice payments, is enough; Stripe's [permission list](https://docs.stripe.com/stripe-apps/reference/permissions) has no separate resource for customer balance transactions, which are part of Customers, and one resource "Charges and Refunds" for listing charges and creating refunds) and `BILLING_STRIPE_WEBHOOK_SECRET`, plus `BILLING_LEDGER_KEY` (any long random string, e.g. `openssl rand -base64 32`; the key of the payments ledger, [ADR 0083](../adr/0083-payments-ledger-and-operator-dashboard.md); empty: derived from the webhook secret); in production as files (`MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE`) or Helm `secrets.BILLING_STRIPE_*` | `.env` / Helm |
+| 6 | Secrets: `BILLING_STRIPE_SECRET_KEY` (a restricted key with write access to Customers, Checkout Sessions, Customer portal, Subscriptions and Charges and Refunds, and read access to Prices, Invoices and Invoice payments, is enough; Stripe's [permission list](https://docs.stripe.com/stripe-apps/reference/permissions) has no separate resource for customer balance transactions, which are part of Customers, and one resource "Charges and Refunds" for listing charges and creating refunds) and `BILLING_STRIPE_WEBHOOK_SECRET`, plus `BILLING_LEDGER_KEY` (**required**: at least 32 random characters, `openssl rand -base64 32`; the key of the payments ledger, [ADR 0083](../adr/0083-payments-ledger-and-operator-dashboard.md); Billing refuses to start without it; keep it with your other secrets); in production as files (`MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE`) or Helm `secrets.BILLING_STRIPE_*` | `.env` / Helm |
 | 7 | Stripe Tax for EU VAT: confirm the head office address, choose the product tax code and the tax behaviour (inclusive or exclusive), add your registrations (your country, and the **EU OSS** registration once cross-border B2C sales exceed EUR 10,000 a year); then `BILLING_AUTOMATIC_TAX=true`. Without a registration Stripe calculates 0 tax. B2B customers with a valid EU VAT id get the reverse charge | Stripe: Tax; your tax office (OSS registration at the BZSt in Germany) |
 | 8 | Invoices: company name, address and VAT id on invoices (Stripe: Settings, Business details and Invoice template); business customers enter their tax id in Checkout (MowDeck asks business accounts for it) | Stripe |
 | 9 | Impressum (company, address, contact, register entry, VAT id, responsible person) | `apps/web/static/legal/imprint.md` |
@@ -34,6 +34,7 @@ ENTITLEMENTS_BILLING_ENABLED=true
 BILLING_PROVIDER=stripe
 BILLING_STRIPE_SECRET_KEY=sk_test_...
 BILLING_STRIPE_WEBHOOK_SECRET=whsec_...
+BILLING_LEDGER_KEY=...            # required: openssl rand -base64 32
 BILLING_PRICE_IDS=home=price_...,fleet=price_...
 BILLING_APP_URL=https://mowdeck.example.org
 
@@ -123,20 +124,22 @@ curl -s -H "$AUTH" "https://<your host>/api/v1/billing/operator/manual-refunds?s
 
 ## Payments dashboard
 
-Where Billing runs, the operator console has a **Payments** tab (operator admins only; account owners get 403 from both services, and the tab is not there without Billing). It shows the last 6, 12 or 24 calendar months in **UTC**, every amount per currency (never added across currencies):
+Where Billing runs, the operator console has a **Payments** tab (operator admins only; account owners get 403 from both services, and the tab is not there without Billing). It shows the last 6, 12 or 24 calendar months in the zone `BILLING_REPORT_TIMEZONE` (IANA name, default `Europe/Berlin`, checked at start; the page says which zone; Identity's deletion counts use the same zone, the web app passes it), every amount per currency (never added across currencies):
 
 1. **Revenue and subscriptions:** gross (paid invoices, tax included), tax, refunds and net per month; subscriptions per plan in trial, active and past due (live); the MRR (list prices of active and past-due subscriptions normalised to a month: yearly ÷ 12); new and ended subscriptions per month.
 2. **Refunds:** per month by reason (account deletion, other or manual), the refunds to pay back by hand (above) and those paid back in the last 30 days.
 3. **Payment problems:** failed payment attempts per month and the latest ones, past-due subscriptions, open and overdue invoices, open and recently decided disputes with the end of their evidence period.
 4. **Account deletions** per month (scheduled, restored, completed; from Identity, counts only) and how many are in the grace period or being erased now.
 
-The figures come from Billing's own data, never from a live Stripe query: the anonymous **payments ledger** written from the webhooks ([ADR 0083](../adr/0083-payments-ledger-and-operator-dashboard.md)), and the live subscription and invoice rows. The ledger holds no account, customer, name, e-mail or Stripe id; it finds a refund or dispute again by a keyed hash of its id (key `BILLING_LEDGER_KEY`, else derived from the webhook secret), which is cleared 180 days after the fact last changed. Facts of erased accounts stay as anonymous numbers; invoices and payments stay in Stripe.
+The figures come from Billing's own data, never from a live Stripe query: the anonymous **payments ledger** written from the webhooks ([ADR 0083](../adr/0083-payments-ledger-and-operator-dashboard.md)), and the live subscription and invoice rows. The ledger holds no account, customer, name, e-mail or Stripe id; it finds a refund or dispute again by a keyed hash of its id (key `BILLING_LEDGER_KEY`, required), which is cleared 180 days after the fact last changed. Facts of erased accounts stay as anonymous numbers; invoices and payments stay in Stripe.
 
 **The statistics start with the deploy that adds the ledger:** nothing is imported from before, and the tab says since when it records. The webhook endpoint needs the events `refund.created` and `charge.dispute.created`, `.updated`, `.closed` (checklist step 5); without them refunds made in the Stripe dashboard and disputes are missing. The figures are statistics, not bookkeeping: fees, payouts and the tax reports are in Stripe.
 
 The **Plans** tab shows each plan's Stripe price (amount, currency, interval) read only, and warns about an offered plan without a price, a price Stripe did not answer for, and a configured price whose plan is not offered. Prices are changed in Stripe and the price file.
 
 API (operator admins): `GET /api/v1/billing/operator/payments?months=12` (1 to 36), `GET /api/v1/billing/operator/prices`, `GET /api/v1/identity/platform/deletions?months=12`.
+
+**Upgrading an installation that already runs Billing:** set `BILLING_LEDGER_KEY` (Compose `.env`, `openssl rand -base64 32`; Helm `secrets.BILLING_LEDGER_KEY` or the key `billing-ledger-key` of your `existingSecret`) before the upgrade, or Billing does not start and its log says `MOWDECK_BILLING_LEDGER_KEY (or _FILE) is required`. `BILLING_REPORT_TIMEZONE` is optional (default `Europe/Berlin`).
 
 ## Without a Stripe account
 

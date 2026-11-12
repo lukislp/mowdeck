@@ -21,9 +21,11 @@ from identity.application.deps import Deps
 from identity.domain.credentials import normalize_username
 from identity.domain.deletion_stats import (
     ACCOUNT_RESTORED,
+    DEFAULT_ZONE,
     DELETION_REQUESTED,
     DeletionMonth,
     deletions_by_month,
+    report_zone,
 )
 from identity.domain.erasure import ErasureState
 from identity.domain.errors import AuthzUnavailable, NotFoundError
@@ -53,6 +55,8 @@ class DeletionStats:
     """Account deletions per month and where the open ones stand now (counts only)."""
 
     months: list[DeletionMonth]
+    time_zone: str
+    """The IANA zone of the month buckets."""
     in_grace: int
     """Deletions requested whose grace period runs: the owner can still restore them."""
     purging: int
@@ -84,10 +88,12 @@ class PlatformService:
                 items.append(PlatformAccount(acct, owner.username if owner else None))
         return PlatformAccountPage(items, len(accounts), offset, limit)
 
-    async def deletion_stats(self, months: int) -> DeletionStats:
+    async def deletion_stats(self, months: int, zone_name: str = DEFAULT_ZONE) -> DeletionStats:
         """Account deletions of the last ``months`` months for the payments dashboard (ADR
         0083): scheduled, restored and completed per month, from the audit rows (which stay,
-        scrubbed, after an erasure) and the erasure records (ADR 0082). No account is named."""
+        scrubbed, after an erasure) and the erasure records (ADR 0082), in local months of the
+        zone ``zone_name`` (``InvalidInput`` for an unknown one). No account is named."""
+        zone = report_zone(zone_name)
         async with self.deps.store.transaction() as tx:
             requested = await tx.audit.find(action=DELETION_REQUESTED, outcome="success")
             restored = await tx.audit.find(action=ACCOUNT_RESTORED, outcome="success")
@@ -100,7 +106,9 @@ class PlatformService:
                 completed=[e.completed_at for e in erasures if e.completed_at is not None],
                 now=self.deps.clock(),
                 months=months,
+                zone=zone,
             ),
+            time_zone=zone_name,
             in_grace=in_grace,
             purging=sum(1 for e in erasures if e.state is ErasureState.PURGING),
         )

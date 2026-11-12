@@ -161,7 +161,8 @@ async def payments(
     """The payments dashboard: revenue per month and currency (gross, refunds, net), the
     subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by
     reason, failed payments, open and overdue invoices and disputes. Months are calendar months
-    in UTC, amounts in the smallest currency unit and never added across currencies. Built from
+    in the installation's report zone (``time_zone``: MOWDECK_BILLING_REPORT_TIMEZONE), amounts
+    in the smallest currency unit and never added across currencies. Built from
     Billing's own data (the payments ledger written from webhooks since the deploy that added
     it, the subscription and invoice rows); Stripe is not asked. No answer names an account."""
     del principal

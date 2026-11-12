@@ -9,6 +9,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from fractions import Fraction
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from mowdeck_contracts.v1 import SubscriptionStatus
@@ -60,6 +61,7 @@ from billing.domain.statistics import (
 )
 
 NOW = datetime(2026, 11, 12, 9, 30, tzinfo=UTC)
+BERLIN = ZoneInfo("Europe/Berlin")
 KEY = b"ledger-test-key"
 
 
@@ -84,15 +86,52 @@ def ts(month: int, day: int = 15, hour: int = 12, year: int = 2026) -> datetime:
 # --- months --------------------------------------------------------------------------------
 
 
-def test_months_are_utc_calendar_months_ending_with_now() -> None:
+def test_months_are_calendar_months_ending_with_now() -> None:
     assert recent_months(NOW, 3) == ["2026-09", "2026-10", "2026-11"]
     assert recent_months(datetime(2026, 2, 1, tzinfo=UTC), 3) == ["2025-12", "2026-01", "2026-02"]
     assert recent_months(NOW, 1) == ["2026-11"]
     assert window_start(NOW, 12) == datetime(2025, 12, 1, tzinfo=UTC)
-    # 00:30 on 1 December in Berlin is still 30 November in UTC: the bucket is UTC's.
-    berlin = timezone(timedelta(hours=1))
-    assert month_of(datetime(2026, 12, 1, 0, 30, tzinfo=berlin)) == "2026-11"
+    # Without a zone the buckets are UTC's: 00:30 on 1 December at +01:00 is still November.
+    plus_one = timezone(timedelta(hours=1))
+    assert month_of(datetime(2026, 12, 1, 0, 30, tzinfo=plus_one)) == "2026-11"
     assert month_of(datetime(2026, 12, 1, 0, 0, tzinfo=UTC)) == "2026-12"
+
+
+def test_months_in_berlin_follow_local_midnight_across_dst() -> None:
+    # 00:30 on 1 December in Berlin (23:30 UTC the day before) lands in December.
+    assert month_of(datetime(2026, 11, 30, 23, 30, tzinfo=UTC), BERLIN) == "2026-12"
+    assert month_of(datetime(2026, 11, 30, 22, 59, tzinfo=UTC), BERLIN) == "2026-11"
+    # Summer time (+02:00) starts on 29 March 2026: 00:30 on 1 April is 22:30 UTC on 31 March.
+    assert month_of(datetime(2026, 3, 31, 22, 30, tzinfo=UTC), BERLIN) == "2026-04"
+    assert month_of(datetime(2026, 3, 31, 21, 59, tzinfo=UTC), BERLIN) == "2026-03"
+    # Winter time (+01:00) is back on 25 October 2026: 1 November starts at 23:00 UTC.
+    assert month_of(datetime(2026, 10, 31, 23, 0, tzinfo=UTC), BERLIN) == "2026-11"
+    assert month_of(datetime(2026, 10, 31, 22, 59, tzinfo=UTC), BERLIN) == "2026-10"
+    # The hour that repeats on 25 October stays in October.
+    assert month_of(datetime(2026, 10, 25, 0, 30, tzinfo=UTC), BERLIN) == "2026-10"
+    assert month_of(datetime(2026, 10, 25, 1, 30, tzinfo=UTC), BERLIN) == "2026-10"
+    # The window starts at local midnight of its first month, with that month's offset.
+    late = datetime(2026, 11, 30, 23, 30, tzinfo=UTC)
+    assert recent_months(late, 2, BERLIN) == ["2026-11", "2026-12"]
+    assert window_start(late, 2, BERLIN) == datetime(2026, 10, 31, 23, 0, tzinfo=UTC)
+    assert window_start(datetime(2026, 4, 2, tzinfo=UTC), 1, BERLIN) == datetime(
+        2026, 3, 31, 22, 0, tzinfo=UTC
+    )
+    assert window_start(datetime(2026, 8, 2, tzinfo=UTC), 6, BERLIN) == datetime(
+        2026, 2, 28, 23, 0, tzinfo=UTC
+    )
+
+
+def test_aggregates_use_the_given_zone() -> None:
+    at = datetime(2026, 10, 31, 23, 30, tzinfo=UTC)  # 00:30 on 1 November in Berlin
+    facts = [fact(FactKind.INVOICE_PAID, at, currency="eur", amount=990)]
+    months = ["2026-10", "2026-11"]
+    (in_berlin,) = revenue(facts, months, BERLIN)
+    assert [m.gross for m in in_berlin.months] == [0, 990]
+    (in_utc,) = revenue(facts, months)
+    assert [m.gross for m in in_utc.months] == [990, 0]
+    flow = subscription_flow([fact(FactKind.SUBSCRIPTION_STARTED, at)], months, BERLIN)
+    assert [(f.month, f.started) for f in flow] == [("2026-10", 0), ("2026-11", 1)]
 
 
 # --- revenue -------------------------------------------------------------------------------

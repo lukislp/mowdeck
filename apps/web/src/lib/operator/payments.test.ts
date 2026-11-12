@@ -58,7 +58,7 @@ describe('money', () => {
 });
 
 describe('months and tables', () => {
-  it('labels UTC months', () => {
+  it('labels months', () => {
     expect(monthLabel('2026-11', 'en')).toBe('Nov 26');
     expect(monthLong('2026-01', 'de')).toBe('Januar 2026');
   });

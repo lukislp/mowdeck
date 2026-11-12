@@ -897,7 +897,7 @@
             "$ref": "#/components/schemas/SubscriptionStatsOut"
           },
           "time_zone": {
-            "description": "The time zone of the month buckets (UTC).",
+            "description": "IANA time zone of the month buckets (MOWDECK_BILLING_REPORT_TIMEZONE), e.g. Europe/Berlin; the web app passes it to Identity's deletion statistics.",
             "title": "Time Zone",
             "type": "string"
           }
@@ -1123,7 +1123,7 @@
             "type": "integer"
           },
           "month": {
-            "description": "YYYY-MM in UTC.",
+            "description": "YYYY-MM, a calendar month in the report zone.",
             "title": "Month",
             "type": "string"
           },
@@ -1689,7 +1689,7 @@
     },
     "/api/v1/billing/operator/payments": {
       "get": {
-        "description": "The payments dashboard: revenue per month and currency (gross, refunds, net), the\nsubscriptions per plan and status with the MRR, new and ended subscriptions, refunds by\nreason, failed payments, open and overdue invoices and disputes. Months are calendar months\nin UTC, amounts in the smallest currency unit and never added across currencies. Built from\nBilling's own data (the payments ledger written from webhooks since the deploy that added\nit, the subscription and invoice rows); Stripe is not asked. No answer names an account.",
+        "description": "The payments dashboard: revenue per month and currency (gross, refunds, net), the\nsubscriptions per plan and status with the MRR, new and ended subscriptions, refunds by\nreason, failed payments, open and overdue invoices and disputes. Months are calendar months\nin the installation's report zone (``time_zone``: MOWDECK_BILLING_REPORT_TIMEZONE), amounts\nin the smallest currency unit and never added across currencies. Built from\nBilling's own data (the payments ledger written from webhooks since the deploy that added\nit, the subscription and invoice rows); Stripe is not asked. No answer names an account.",
         "operationId": "payments_api_v1_billing_operator_payments_get",
         "parameters": [
           {

@@ -519,7 +519,7 @@
         "type": "object"
       },
       "DeletionMonthOut": {
-        "description": "Account deletions of one month (UTC).",
+        "description": "Account deletions of one month of the asked zone.",
         "properties": {
           "completed": {
             "description": "Erasures every service confirmed (ADR 0082).",
@@ -527,7 +527,7 @@
             "type": "integer"
           },
           "month": {
-            "description": "YYYY-MM in UTC.",
+            "description": "YYYY-MM, a calendar month in ``time_zone``.",
             "title": "Month",
             "type": "string"
           },
@@ -572,12 +572,13 @@
             "type": "integer"
           },
           "time_zone": {
-            "default": "UTC",
+            "description": "IANA zone of the month buckets (the ``tz`` asked for).",
             "title": "Time Zone",
             "type": "string"
           }
         },
         "required": [
+          "time_zone",
           "months",
           "in_grace",
           "purging"
@@ -6386,7 +6387,7 @@
     },
     "/api/v1/identity/platform/deletions": {
       "get": {
-        "description": "Account deletions of the last ``months`` months (operator admins): scheduled, restored\nand completed per calendar month in UTC, and how many are in the grace period or being\nerased now. No account id, no name.",
+        "description": "Account deletions of the last ``months`` months (operator admins): scheduled, restored\nand completed per local calendar month in the IANA zone ``tz`` (the web app passes the\n``time_zone`` of Billing's payments dashboard, so both count the same months; 422 for an\nunknown zone), and how many are in the grace period or being erased now. No account id, no\nname.",
         "operationId": "platform_deletions_api_v1_identity_platform_deletions_get",
         "parameters": [
           {
@@ -6399,6 +6400,18 @@
               "minimum": 1,
               "title": "Months",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "Europe/Berlin",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Tz",
+              "type": "string"
             }
           }
         ],

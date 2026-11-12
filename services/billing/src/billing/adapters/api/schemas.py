@@ -193,7 +193,7 @@ class CurrencyOut(BaseModel):
 class RevenueMonthOut(BaseModel):
     """One month of one currency, amounts in the smallest unit."""
 
-    month: str = Field(description="YYYY-MM in UTC.")
+    month: str = Field(description="YYYY-MM, a calendar month in the report zone.")
     gross: int = Field(description="Paid invoices, tax included.")
     tax: int = Field(description="Tax in the paid invoices (0 without Stripe Tax).")
     refunded: int = Field(description="Refunds created this month that take money back.")
@@ -371,7 +371,10 @@ class PaymentsSummaryOut(BaseModel):
     Billing's own data; no account, customer or provider object id."""
 
     generated_at: datetime
-    time_zone: str = Field(description="The time zone of the month buckets (UTC).")
+    time_zone: str = Field(
+        description="IANA time zone of the month buckets (MOWDECK_BILLING_REPORT_TIMEZONE), e.g. "
+        "Europe/Berlin; the web app passes it to Identity's deletion statistics."
+    )
     months: list[str] = Field(description="The window, oldest first (YYYY-MM).")
     since: datetime | None = Field(
         description="The oldest fact of the ledger: the statistics start with the deploy that "

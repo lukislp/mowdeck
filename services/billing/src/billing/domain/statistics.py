@@ -6,7 +6,10 @@ Billing's live subscription and invoice rows. Pure: the caller passes the rows a
 
 Rules:
 
-* **Months** are calendar months in **UTC** (:data:`TIME_ZONE`), keyed ``YYYY-MM``; a window of
+* **Months** are local calendar months in the configured zone
+  (``MOWDECK_BILLING_REPORT_TIMEZONE``, default ``Europe/Berlin``; :data:`DEFAULT_ZONE` when a
+  caller names none), keyed ``YYYY-MM``, computed with ``zoneinfo`` so that daylight saving
+  time never moves an instant into another month; a window of
   ``n`` months ends with the month of ``now``. A fact belongs to the month of its
   ``occurred_at``: a paid invoice to the month it was paid, a refund to the month it was
   created, a dispute to the month it was opened.
@@ -43,8 +46,9 @@ from billing.domain.ledger import (
 )
 from billing.domain.models import PlanPrice
 
-TIME_ZONE: tzinfo = UTC
-"""The time zone of the month buckets."""
+DEFAULT_ZONE: tzinfo = UTC
+"""The zone of the month buckets when the caller names none (Billing passes
+``MOWDECK_BILLING_REPORT_TIMEZONE``)."""
 
 MRR_STATUSES = frozenset({SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE})
 """Subscriptions that count towards the MRR: billed now."""
@@ -65,23 +69,26 @@ INTERVALS_PER_MONTH = {
 """How many intervals of a price fall into one month (the MRR normalisation)."""
 
 
-def month_of(at: datetime) -> str:
-    """The month bucket of an instant (``YYYY-MM`` in :data:`TIME_ZONE`)."""
-    return at.astimezone(TIME_ZONE).strftime("%Y-%m")
+def month_of(at: datetime, zone: tzinfo = DEFAULT_ZONE) -> str:
+    """The month bucket of an instant: ``YYYY-MM`` of its local date in ``zone``. The local
+    date comes from the zone's rules for that instant (``zoneinfo``), so a summer and a winter
+    offset are both right and a DST change never moves an instant into another month."""
+    return at.astimezone(zone).strftime("%Y-%m")
 
 
-def recent_months(now: datetime, count: int) -> list[str]:
-    """The ``count`` months up to and including the month of ``now``, oldest first."""
-    local = now.astimezone(TIME_ZONE)
+def recent_months(now: datetime, count: int, zone: tzinfo = DEFAULT_ZONE) -> list[str]:
+    """The ``count`` months up to and including the local month of ``now``, oldest first."""
+    local = now.astimezone(zone)
     index = local.year * 12 + local.month - 1
     return [f"{i // 12:04d}-{i % 12 + 1:02d}" for i in range(index - count + 1, index + 1)]
 
 
-def window_start(now: datetime, count: int) -> datetime:
-    """The first instant of the oldest month of :func:`recent_months`."""
-    first = recent_months(now, count)[0]
+def window_start(now: datetime, count: int, zone: tzinfo = DEFAULT_ZONE) -> datetime:
+    """The first instant of the oldest month of :func:`recent_months`: local midnight of its
+    first day in ``zone`` (no zone changes its offset at midnight on the first)."""
+    first = recent_months(now, count, zone)[0]
     year, month = (int(part) for part in first.split("-"))
-    return datetime(year, month, 1, tzinfo=TIME_ZONE)
+    return datetime(year, month, 1, tzinfo=zone)
 
 
 def round_half_up(amount: Fraction) -> int:
@@ -133,13 +140,13 @@ class CurrencyRevenue:
 
 
 def _in_window(
-    facts: Iterable[PaymentFact], kind: FactKind, months: Sequence[str]
+    facts: Iterable[PaymentFact], kind: FactKind, months: Sequence[str], zone: tzinfo
 ) -> list[tuple[str, PaymentFact]]:
     wanted = set(months)
     found = []
     for fact in facts:
         if fact.kind is kind:
-            month = month_of(fact.occurred_at)
+            month = month_of(fact.occurred_at, zone)
             if month in wanted:
                 found.append((month, fact))
     return found
@@ -150,17 +157,19 @@ def is_effective_refund(fact: PaymentFact) -> bool:
     return fact.kind is FactKind.REFUND and fact.status in EFFECTIVE_REFUND_STATUSES
 
 
-def revenue(facts: Iterable[PaymentFact], months: Sequence[str]) -> list[CurrencyRevenue]:
+def revenue(
+    facts: Iterable[PaymentFact], months: Sequence[str], zone: tzinfo = DEFAULT_ZONE
+) -> list[CurrencyRevenue]:
     """Gross, tax, refunds and net per month and currency; every currency with a paid invoice
     or a refund in the window gets every month (zeros included), currencies sorted."""
     facts = list(facts)
     gross: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0])
-    for month, fact in _in_window(facts, FactKind.INVOICE_PAID, months):
+    for month, fact in _in_window(facts, FactKind.INVOICE_PAID, months, zone):
         row = gross[(fact.currency or "", month)]
         row[0] += fact.amount
         row[1] += fact.tax or 0
         row[3] += 1
-    for month, fact in _in_window(facts, FactKind.REFUND, months):
+    for month, fact in _in_window(facts, FactKind.REFUND, months, zone):
         if is_effective_refund(fact):
             row = gross[(fact.currency or "", month)]
             row[2] += fact.amount
@@ -192,11 +201,13 @@ class RefundMonth:
     amount: int
 
 
-def refunds_by_month(facts: Iterable[PaymentFact], months: Sequence[str]) -> list[RefundMonth]:
+def refunds_by_month(
+    facts: Iterable[PaymentFact], months: Sequence[str], zone: tzinfo = DEFAULT_ZONE
+) -> list[RefundMonth]:
     """Sum and count per month, currency and reason; only groups with a refund, by month, then
     currency, then reason."""
     groups: dict[tuple[str, str, str], list[int]] = defaultdict(lambda: [0, 0])
-    for month, fact in _in_window(facts, FactKind.REFUND, months):
+    for month, fact in _in_window(facts, FactKind.REFUND, months, zone):
         if is_effective_refund(fact):
             group = groups[(month, fact.currency or "", fact.reason or "other")]
             group[0] += 1
@@ -220,10 +231,12 @@ class FailureMonth:
     amount: int
 
 
-def failures_by_month(facts: Iterable[PaymentFact], months: Sequence[str]) -> list[FailureMonth]:
+def failures_by_month(
+    facts: Iterable[PaymentFact], months: Sequence[str], zone: tzinfo = DEFAULT_ZONE
+) -> list[FailureMonth]:
     """Count and sum of failed attempts per month and currency, by month then currency."""
     groups: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0])
-    for month, fact in _in_window(facts, FactKind.PAYMENT_FAILED, months):
+    for month, fact in _in_window(facts, FactKind.PAYMENT_FAILED, months, zone):
         group = groups[(month, fact.currency or "")]
         group[0] += 1
         group[1] += fact.amount
@@ -284,10 +297,12 @@ class DisputeMonth:
     lost: int
 
 
-def disputes_by_month(facts: Iterable[PaymentFact], months: Sequence[str]) -> list[DisputeMonth]:
+def disputes_by_month(
+    facts: Iterable[PaymentFact], months: Sequence[str], zone: tzinfo = DEFAULT_ZONE
+) -> list[DisputeMonth]:
     """Disputes per month opened and currency, by month then currency."""
     groups: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0])
-    for month, fact in _in_window(facts, FactKind.DISPUTE, months):
+    for month, fact in _in_window(facts, FactKind.DISPUTE, months, zone):
         group = groups[(month, fact.currency or "")]
         group[0] += 1
         group[1] += fact.amount
@@ -330,14 +345,16 @@ class FlowMonth:
     ended: int
 
 
-def subscription_flow(facts: Iterable[PaymentFact], months: Sequence[str]) -> list[FlowMonth]:
+def subscription_flow(
+    facts: Iterable[PaymentFact], months: Sequence[str], zone: tzinfo = DEFAULT_ZONE
+) -> list[FlowMonth]:
     """New and ended subscriptions per month (every month of the window)."""
     facts = list(facts)
     started: dict[str, int] = defaultdict(int)
     ended: dict[str, int] = defaultdict(int)
-    for month, _ in _in_window(facts, FactKind.SUBSCRIPTION_STARTED, months):
+    for month, _ in _in_window(facts, FactKind.SUBSCRIPTION_STARTED, months, zone):
         started[month] += 1
-    for month, _ in _in_window(facts, FactKind.SUBSCRIPTION_ENDED, months):
+    for month, _ in _in_window(facts, FactKind.SUBSCRIPTION_ENDED, months, zone):
         ended[month] += 1
     return [FlowMonth(month, started[month], ended[month]) for month in months]
 
