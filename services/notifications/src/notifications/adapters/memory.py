@@ -88,6 +88,18 @@ INSTALLATION_DATA = frozenset({"maintenance"})
 ACCOUNT_DATA = tuple(f.name for f in dataclasses.fields(_Data) if f.name not in INSTALLATION_DATA)
 """The memory tables that hold rows of accounts (what the account erasure counts, ADR 0082)."""
 
+KEYED_DATA = frozenset({"tests", "silences"})
+"""The memory tables whose rows are bare values under a ``(user, account, ...)`` key."""
+
+
+def _user_of(name: str, key: Any, row: Any) -> tuple[UUID, UUID] | None:
+    """The user and account a memory row belongs to, None for a row of no user (the memory
+    counterpart of the ``user_id`` column: directory, watch, geofence and photos have none)."""
+    if name in KEYED_DATA:
+        return key[0], key[1]
+    user = getattr(row, "user_id", None)
+    return (user, row.account_id) if user is not None else None
+
 
 class _MemoryTx:
     def __init__(self, data: _Data) -> None:
@@ -619,11 +631,10 @@ class MemoryStore:
         """Counted over every memory table of an account (the maintenance window is the
         installation's); the two keyed by ``(user, account, ...)`` by their key."""
         data = self.data
-        keyed = {"tests", "silences"}
         counts: dict[str, int] = {}
         for name in ACCOUNT_DATA:
             rows: dict[Any, Any] = getattr(data, name)
-            if name in keyed:
+            if name in KEYED_DATA:
                 found = sum(1 for key in rows if key[1] == account_id)
             else:
                 found = sum(1 for row in rows.values() if row.account_id == account_id)
@@ -631,24 +642,41 @@ class MemoryStore:
                 counts[name] = found
         return counts
 
-    async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
-        def match(user: UUID, account: UUID) -> bool:
-            return user == user_id and (account_id is None or account == account_id)
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Like the SQL store: every memory table with rows of users, then the photos only the
+        deleted inbox items referenced."""
+
+        def mine(name: str, key: Any, row: Any) -> bool:
+            owner = _user_of(name, key, row)
+            return owner is not None and owner[0] == user_id and account_id in (None, owner[1])
 
         data = self.data
-        data.preferences = {k: v for k, v in data.preferences.items() if not match(*k)}
-        data.tests = {k: v for k, v in data.tests.items() if not match(*k)}
-        data.ntfy = {k: v for k, v in data.ntfy.items() if not match(*k)}
-        data.push = {k: v for k, v in data.push.items() if not match(v.user_id, v.account_id)}
-        data.apns = {k: v for k, v in data.apns.items() if not match(v.user_id, v.account_id)}
-        data.inbox = {k: v for k, v in data.inbox.items() if not match(v.user_id, v.account_id)}
-        data.deliveries = {
-            k: v for k, v in data.deliveries.items() if not match(v.user_id, v.account_id)
+        images = {
+            item.image_id
+            for key, item in data.inbox.items()
+            if item.image_id is not None and mine("inbox", key, item)
         }
-        data.silences = {k: v for k, v in data.silences.items() if not match(k[0], k[1])}
-        data.activity_devices = {
-            k: v for k, v in data.activity_devices.items() if not match(v.user_id, v.account_id)
-        }
-        data.live_activities = {
-            k: v for k, v in data.live_activities.items() if not match(v.user_id, v.account_id)
-        }
+        deleted = 0
+        for name in ACCOUNT_DATA:
+            rows: dict[Any, Any] = getattr(data, name)
+            gone = [key for key, row in rows.items() if mine(name, key, row)]
+            for key in gone:
+                del rows[key]
+            deleted += len(gone)
+        shown = {item.image_id for item in data.inbox.values()}
+        for image_id in images - shown:
+            deleted += data.images.pop(image_id, None) is not None
+        return deleted
+
+    async def user_rows(self, user_id: UUID) -> dict[str, int]:
+        """Counted over every memory table with rows of users, by memory table name."""
+        counts: dict[str, int] = {}
+        for name in ACCOUNT_DATA:
+            rows: dict[Any, Any] = getattr(self.data, name)
+            found = 0
+            for key, row in rows.items():
+                owner = _user_of(name, key, row)
+                found += owner is not None and owner[0] == user_id
+            if found:
+                counts[name] = found
+        return counts

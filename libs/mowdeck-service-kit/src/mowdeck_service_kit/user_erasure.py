@@ -43,7 +43,7 @@ from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Se
 from typing import Any
 from uuid import UUID
 
-from mowdeck_contracts.v1 import IDENTITY_USER_DELETED, EventEnvelope, UserChanged
+from mowdeck_contracts.v1 import IDENTITY_USER_DELETED, EventEnvelope, PrincipalRef, UserChanged
 from pydantic import ValidationError
 
 from mowdeck_service_kit.bus import BusMessage, DropMessage, MessageHandler
@@ -90,24 +90,41 @@ def is_ref_name(name: str) -> bool:
     return name == "owner" or name.endswith("_by")
 
 
-def _named(row: Any, user_id: UUID) -> Iterator[tuple[str, Mapping[str, Any]]]:
-    """The fields of a dataclass row that hold a reference with the name of ``user_id``."""
+def _as_mapping(value: Any) -> Mapping[str, Any] | None:
+    """A stored reference as its JSON shape: a mapping as it is, a ``PrincipalRef`` model (a
+    domain row that keeps the contract type) dumped; anything else is no reference."""
+    if isinstance(value, PrincipalRef):
+        return value.model_dump(mode="json")
+    return value if isinstance(value, Mapping) else None
+
+
+def _without_name(value: Any) -> Any:
+    """The reference without the person's name, in the type it was stored in."""
+    if isinstance(value, PrincipalRef):
+        return value.model_copy(update={REF_NAME: None})
+    return anonymous_ref(value)
+
+
+def _named(row: Any, user_id: UUID) -> Iterator[tuple[str, Any]]:
+    """The fields of a dataclass row that hold a reference with the name of ``user_id`` (a JSON
+    mapping or a ``PrincipalRef``)."""
     for field in dataclasses.fields(row):
         value = getattr(row, field.name)
-        if is_ref_name(field.name) and isinstance(value, Mapping) and names_user(value, user_id):
+        if is_ref_name(field.name) and names_user(_as_mapping(value), user_id):
             yield field.name, value
 
 
 def scrub_refs(rows: Iterable[Any], user_id: UUID, account_id: UUID | None = None) -> int:
     """Remove the name of ``user_id`` from the references of dataclass ``rows``, in place (a
-    memory store's rows); with ``account_id`` only in that account's rows. Returns how many
-    references changed."""
+    memory store's rows); with ``account_id`` only in that account's rows. A reference stored as
+    a ``PrincipalRef`` stays one, with ``display_name`` None. Returns how many references
+    changed."""
     changed = 0
     for row in rows:
         if account_id is not None and getattr(row, "account_id", account_id) != account_id:
             continue
         for name, ref in list(_named(row, user_id)):
-            setattr(row, name, anonymous_ref(ref))
+            setattr(row, name, _without_name(ref))
             changed += 1
     return changed
 

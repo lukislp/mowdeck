@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import PrincipalRef, VisionTrigger
+from mowdeck_service_kit.user_erasure import named_refs, scrub_refs
 
 from vision.domain.consent import Consent
 from vision.domain.errors import ConflictError
@@ -188,6 +189,38 @@ class MemoryStore:
         for key in [k for k in self.consents if k[0] == user_id]:
             del self.consents[key]
         return len(keys)
+
+    def _user_keys(self) -> dict[str, list[tuple[UUID, UUID]]]:
+        """The ``(user, account)`` keys of the memory tables that hold a user's own rows, under
+        the SQL store's table names (``user_preferences`` holds preferences, opt-in and
+        consent)."""
+        settings = {*self.preferences, *self.auto, *self.consents}
+        return {
+            "provider_requests": [(r.user_id, r.account_id) for r in self.requests],
+            "user_providers": list(self.providers),
+            "user_preferences": list(settings),
+        }
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        def mine(user: UUID, account: UUID) -> bool:
+            return user == user_id and account_id in (None, account)
+
+        before = sum(1 for keys in self._user_keys().values() for key in keys if mine(*key))
+        self.requests = [r for r in self.requests if not mine(r.user_id, r.account_id)]
+        self.providers = {k: v for k, v in self.providers.items() if not mine(*k)}
+        self.preferences = {k: v for k, v in self.preferences.items() if not mine(*k)}
+        self.auto = {k: v for k, v in self.auto.items() if not mine(*k)}
+        self.consents = {k: v for k, v in self.consents.items() if not mine(*k)}
+        return before + scrub_refs(self.proposals.values(), user_id, account_id)
+
+    async def user_leftovers(self, user_id: UUID) -> dict[str, int]:
+        counts = {
+            table: sum(1 for key in keys if key[0] == user_id)
+            for table, keys in self._user_keys().items()
+        }
+        names = named_refs(self.proposals.values(), user_id)
+        counts |= {f"proposals.{field}": found for field, found in names.items()}
+        return {place: found for place, found in counts.items() if found}
 
     async def get_preferences(self, user_id: UUID, account_id: UUID) -> UserPreferences | None:
         found = self.preferences.get((user_id, account_id))

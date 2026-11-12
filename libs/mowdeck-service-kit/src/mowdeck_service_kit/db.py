@@ -14,7 +14,18 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 from uuid import UUID
 
-from sqlalchemy import Column, MetaData, String, Table, func, literal, select, text, update
+from sqlalchemy import (
+    Column,
+    MetaData,
+    String,
+    Table,
+    delete,
+    func,
+    literal,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
@@ -174,6 +185,38 @@ def user_tables(metadata: MetaData) -> tuple[Table, ...]:
     """The tables of ``metadata`` with a :data:`USER_COLUMN`: rows that are one user's own and
     go when the user is deleted (ADR 0082). Read from the schema, in dependency order."""
     return tuple(table for table in metadata.sorted_tables if USER_COLUMN in table.c)
+
+
+async def delete_user_rows(
+    conn: AsyncConnection,
+    tables: Iterable[Table],
+    user_id: UUID,
+    account_id: UUID | None = None,
+) -> int:
+    """Delete the rows of ``user_id`` in each of ``tables`` (every one needs a
+    :data:`USER_COLUMN`), children before parents; with ``account_id`` only that account's rows
+    (tables with an :data:`ACCOUNT_COLUMN`). Idempotent; returns how many rows went."""
+    deleted = 0
+    for table in reversed(tuple(tables)):
+        condition = table.c[USER_COLUMN] == user_id
+        if account_id is not None and ACCOUNT_COLUMN in table.c:
+            condition &= table.c[ACCOUNT_COLUMN] == account_id
+        deleted += int((await conn.execute(delete(table).where(condition))).rowcount)
+    return deleted
+
+
+async def user_row_counts(
+    conn: AsyncConnection, tables: Iterable[Table], user_id: UUID
+) -> dict[str, int]:
+    """The rows of ``user_id`` in each of ``tables`` (every one needs a :data:`USER_COLUMN`), by
+    table name; tables without such a row are left out."""
+    counts: dict[str, int] = {}
+    for table in tables:
+        statement = select(func.count()).select_from(table).where(table.c[USER_COLUMN] == user_id)
+        found = int((await conn.execute(statement)).scalar_one())
+        if found:
+            counts[table.name] = found
+    return counts
 
 
 def is_principal_ref_column(column: Column[Any]) -> bool:

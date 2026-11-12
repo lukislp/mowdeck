@@ -22,10 +22,12 @@ from mowdeck_contracts.v1.subjects import event_subject_for_type
 from mowdeck_service_kit.bus import InMemoryBus
 from mowdeck_service_kit.db import (
     async_database_url,
+    delete_user_rows,
     is_principal_ref_column,
     named_principal_refs,
     principal_ref_columns,
     scrub_principal_refs,
+    user_row_counts,
     user_tables,
 )
 from mowdeck_service_kit.user_erasure import (
@@ -192,6 +194,32 @@ def test_rows_in_memory_are_scrubbed_like_the_columns() -> None:
     assert named_refs(rows, ben) == {"issued_by": 1, "approved_by": 1}
 
 
+@dataclass
+class ModelRow:
+    """A domain row that keeps the contract type (Vision's proposals), not its JSON."""
+
+    account_id: UUID
+    requested_by: PrincipalRef
+    decided_by: PrincipalRef | None = None
+
+
+def test_rows_that_keep_a_principal_ref_model_are_scrubbed_in_their_type() -> None:
+    anna, ben, mine = uuid4(), uuid4(), uuid4()
+
+    def ref(user_id: UUID, name: str | None) -> PrincipalRef:
+        return PrincipalRef(subject=user_id, kind=PrincipalKind.USER, display_name=name)
+
+    rows = [ModelRow(mine, ref(anna, "Anna"), ref(ben, "Ben")), ModelRow(mine, ref(anna, None))]
+    before = named_refs(rows, anna)
+    changed = scrub_refs(rows, anna, mine)
+
+    assert before == {"requested_by": 1}
+    assert (changed, scrub_refs(rows, anna), named_refs(rows, anna)) == (1, 0, {})
+    assert rows[0].requested_by == ref(anna, None)
+    assert isinstance(rows[0].requested_by, PrincipalRef)
+    assert rows[0].decided_by == ref(ben, "Ben")
+
+
 # --- the handler -------------------------------------------------------------------------------
 
 
@@ -291,6 +319,7 @@ def schema(*, temporary: bool = False) -> MetaData:
         "ue_preferences",
         metadata,
         Column("user_id", Uuid, primary_key=True),
+        Column("account_id", Uuid, primary_key=True),
         Column("language", String(8)),
         prefixes=prefixes,
     )
@@ -391,3 +420,37 @@ async def test_the_scrub_removes_one_users_name_and_keeps_the_rows() -> None:
     assert "display_name" not in rows[2].issued_by
     assert owner["subject"] == str(anna) and "display_name" not in owner
     assert bens == {"ue_commands.approved_by": 1, "ue_commands.issued_by": 1}
+
+
+@pytest.mark.skipif(not DATABASE_URL, reason="needs MOWDECK_TEST_DATABASE_URL")
+async def test_a_users_own_rows_are_deleted_and_counted_from_the_schema() -> None:
+    metadata = schema(temporary=True)
+    tables = user_tables(metadata)
+    preferences = metadata.tables["ue_preferences"]
+    anna, ben, mine, other = uuid4(), uuid4(), uuid4(), uuid4()
+    engine = create_async_engine(async_database_url(DATABASE_URL or ""))
+    try:
+        async with engine.connect() as conn:
+            await conn.run_sync(metadata.create_all)
+            await conn.execute(
+                insert(preferences),
+                [
+                    {"user_id": anna, "account_id": mine, "language": "de"},
+                    {"user_id": anna, "account_id": other, "language": "en"},
+                    {"user_id": ben, "account_id": mine, "language": "en"},
+                ],
+            )
+            before = await user_row_counts(conn, tables, anna)
+            in_account = await delete_user_rows(conn, tables, anna, mine)
+            left = await user_row_counts(conn, tables, anna)
+            everywhere = await delete_user_rows(conn, tables, anna)
+            again = await delete_user_rows(conn, tables, anna)
+            after = await user_row_counts(conn, tables, anna)
+            bens = await user_row_counts(conn, tables, ben)
+            await conn.rollback()
+    finally:
+        await engine.dispose()
+    assert before == {"ue_preferences": 2}
+    assert (in_account, left) == (1, {"ue_preferences": 1})
+    assert (everywhere, again, after) == (1, 0, {})
+    assert bens == {"ue_preferences": 1}

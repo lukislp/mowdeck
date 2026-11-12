@@ -209,8 +209,23 @@ class Store(Protocol):
         ...
 
     async def delete_user(self, user_id: UUID) -> int:
-        """Forget a deleted or disabled user's providers and preferences (opt-ins included);
+        """Forget a disabled user's providers and preferences (opt-ins and consent included);
         returns how many providers."""
+        ...
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Remove what is personal of a deleted user (ADR 0082, "delete me"; in one account, or
+        in all when ``account_id`` is None): delete the rows of every table with a ``user_id``
+        column (own providers with their encrypted keys, preferences with the opt-ins and the
+        consent, provider requests) and remove the person's name from every stored principal
+        reference (who requested, approved and decided a proposal), keeping the proposals and
+        the opaque ids. Both read from the schema; one transaction; idempotent; returns how
+        many rows and references changed."""
+        ...
+
+    async def user_leftovers(self, user_id: UUID) -> dict[str, int]:
+        """What is still personal of a user, by table (own rows) and ``table.column`` (a
+        reference with the name); empty when nothing is."""
         ...
 
     async def get_preferences(self, user_id: UUID, account_id: UUID) -> UserPreferences | None:

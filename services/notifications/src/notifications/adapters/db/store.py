@@ -19,7 +19,13 @@ from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import NotificationKind, NotificationSeverity
-from mowdeck_service_kit.db import account_row_counts, account_tables
+from mowdeck_service_kit.db import (
+    account_row_counts,
+    account_tables,
+    delete_user_rows,
+    user_row_counts,
+    user_tables,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -1138,21 +1144,26 @@ class SqlStore:
         async with self.engine.connect() as conn:
             return await account_row_counts(conn, account_tables(tables.metadata), account_id)
 
-    async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Deleted over every table of the schema that has a ``user_id`` column, then the
+        photos only the deleted inbox items referenced."""
+        i, p = tables.inbox, tables.notification_images
+        mine = i.c.user_id == user_id
+        if account_id is not None:
+            mine = sa.and_(mine, i.c.account_id == account_id)
         async with self.engine.begin() as conn:
-            for table in (
-                tables.preferences,
-                tables.test_requests,
-                tables.push_subscriptions,
-                tables.apns_devices,
-                tables.ntfy_targets,
-                tables.inbox,
-                tables.deliveries,
-                tables.alarm_silences,
-                tables.live_activity_devices,
-                tables.live_activities,
-            ):
-                condition = table.c.user_id == user_id
-                if account_id is not None:
-                    condition = sa.and_(condition, table.c.account_id == account_id)
-                await conn.execute(sa.delete(table).where(condition))
+            shown = sa.select(i.c.image_id).where(mine, i.c.image_id.is_not(None))
+            images = {row[0] for row in await conn.execute(shown)}
+            deleted = await delete_user_rows(
+                conn, user_tables(tables.metadata), user_id, account_id
+            )
+            if images:
+                still_shown = sa.select(i.c.image_id).where(i.c.image_id.is_not(None))
+                orphans = sa.delete(p).where(p.c.id.in_(images), p.c.id.not_in(still_shown))
+                deleted += int((await conn.execute(orphans)).rowcount)
+        return deleted
+
+    async def user_rows(self, user_id: UUID) -> dict[str, int]:
+        """Counted over every table of the schema that has a ``user_id`` column."""
+        async with self.engine.connect() as conn:
+            return await user_row_counts(conn, user_tables(tables.metadata), user_id)

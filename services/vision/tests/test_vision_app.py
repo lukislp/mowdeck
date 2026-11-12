@@ -86,7 +86,9 @@ async def test_vision_app_startup_descriptor_and_shutdown() -> None:
         assert {f["key"] for f in descriptor["features"]} == {"ai_recover", "ai_recover_hosted"}
         assert descriptor["events"][0]["type"] == "vision.proposal.created"
         assert descriptor["permissions"] == []
-        assert len(app.state.subscriptions) == 8  # incl. vision-auto, the erasure, the authz cache
+        assert (
+            len(app.state.subscriptions) == 9
+        )  # incl. vision-auto, both erasures, the authz cache
         await asyncio.sleep(0.05)  # the sweeper ran once
     assert not bus.is_connected
 

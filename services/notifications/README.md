@@ -150,7 +150,8 @@ Metrics: `mowdeck_notifications_deliveries_total{channel, status}` (`sent`, `ret
 | --- | --- | --- | --- |
 | consumed | `telemetry.mower.*` | durable queue `notifications-states`, in batches | `MowerState`: the rules; one transaction per batch ([ADR 0078](../../docs/adr/0078-batched-state-ingestion.md)): each mower's directory account, geofence key and watch read once (watches locked in mower id order), the rules state by state in order, each changed watch written once, the events fanned out after the commit. The parsed geofence is kept in memory per stored version |
 | consumed | `event.mower.>` | durable queue `notifications-mowers` | `mower.registered`, `.updated`, `.removed` (`MowerRegistration`): directory with account and name; `mower.connected`, `.disconnected` (`MowerConnectionEvent`): offline rule |
-| consumed | `event.identity.>` | durable queue `notifications-identity` | `identity.user.disabled`, `.deleted` (`UserChanged`): delete the user's preferences, targets, inbox and deliveries (in that account); `identity.session.new_device` (`NewDeviceLogin`): `security_new_login` for that user |
+| consumed | `event.identity.>` | durable queue `notifications-identity` | `identity.user.disabled` (`UserChanged`): delete the user's preferences, targets, inbox and deliveries (in that account); `identity.session.new_device` (`NewDeviceLogin`): `security_new_login` for that user |
+| consumed | `event.identity.user.deleted` | durable queue `notifications-users` | `UserChanged`: forget the deleted user (see "A deleted user") |
 | consumed | `command.mower.*` | durable queue `notifications-commands` | `CommandEnvelope`: newest command time per mower (`issued_at`; manual drive frames, kind `manual_drive` or correlation id `drive:<session>`, also as drive time) |
 | consumed | `device.mower.>` | durable queue `notifications-device`, starting with the newest stored message per subject | `MowerMapSnapshot` on `.map`: the geofence; `.capabilities` ignored |
 | consumed | `event.telemetry.>` | durable queue `notifications-telemetry` | `telemetry.blade_hours.threshold` (`BladeHoursThreshold`): `blade_maintenance`; other telemetry events ignored |
@@ -255,6 +256,22 @@ When an account is deleted for good ([ADR 0082](../../docs/adr/0082-account-dele
 Not closed by this: with several replicas the cancelling and the memory reach the replica that answers (another one finishes a send it already started, at most `MOWDECK_NOTIFICATIONS_SEND_DEADLINE_SECONDS` later, and keeps its per-mower memory until `mower.removed` reaches it or the process ends); and a message of the account that arrives after the purge (a late state or map snapshot of a mower that is already gone) is stored like any other, because the service cannot tell an erased account from one it has not seen yet.
 
 Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), the cancelling in the outbox and the fan-out, and the row count of the `Store` port); the SQL is in `adapters/db/`.
+
+### A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"), Identity publishes `identity.user.deleted`. The account goes on, so its mower directory, watches, geofences and the maintenance window stay; what goes is everything that is the person's.
+
+- **Deleted, in one transaction:** the user's rows in every table with a `user_id` column, read from the schema (`mowdeck_service_kit.db.user_tables`): `preferences`, `test_requests`, `push_subscriptions`, `apns_devices`, `ntfy_targets`, `inbox`, `deliveries`, `alarm_silences`, `live_activity_devices` and `live_activities`, only in the account of the event. A table added later with a `user_id` column is deleted and counted without anybody listing it.
+- **Camera photos:** `notification_images` has no `user_id`; a photo is one row per event, shared by the inbox items of every recipient and reached only through one of them. The photos that only the user's deleted items showed go in the same transaction; a photo another member's item still shows stays.
+- **Nothing to scrub:** Notifications stores no principal reference (no `owner` or `<verb>_by` column) and no user's name in a notification text.
+- **Work in flight:** the sends to the user that the outbox of this replica had already claimed are cancelled, as for an erased account.
+- **Checked:** afterwards the user's rows are counted over the same tables (`Store.user_rows`); a row that is still there fails the event, so JetStream delivers it again. The use case is idempotent; a user the service never knew changes nothing.
+- **A still valid token writes nothing again:** Identity puts the user on the deny list first (ADR 0082, section 12), and the kit's token verification refuses the token; `tests/test_notifications_revoked_tokens.py` runs that with the real resolver, the real deny list and the real app, and shows that without the entry the token would have written preferences again.
+- **A disabled user** (`identity.user.disabled`, consumer `notifications-identity`) loses the same rows, without the count.
+
+`tests/test_notifications_user_erasure.py` pins the list of tables and that no column holds a name, so a change of the schema needs a decision here.
+
+Layers: `adapters/bus/user_erasure.py` subscribes (durable `notifications-users`) and hands the event to the kit's handler; the use case is `application/user_erasure.py` (the kit's `UserErasure` over `Store.forget_user`, `Store.user_rows` and the outbox); the SQL is in `adapters/db/`.
 
 ## Layers
 

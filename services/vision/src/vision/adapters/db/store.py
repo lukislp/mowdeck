@@ -14,7 +14,16 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import PrincipalKind, PrincipalRef, VisionTask, VisionTrigger
-from mowdeck_service_kit.db import account_row_counts, account_tables
+from mowdeck_service_kit.db import (
+    account_row_counts,
+    account_tables,
+    delete_user_rows,
+    named_principal_refs,
+    principal_ref_columns,
+    scrub_principal_refs,
+    user_row_counts,
+    user_tables,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -461,6 +470,25 @@ class SqlStore:
                 sa.delete(u).where(u.c.user_id == user_id, u.c.account_id == account_id)
             )
         return bool(result.rowcount)
+
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Deleted over every table of the schema that has a ``user_id`` column, scrubbed in
+        every column that stores a principal reference; one transaction."""
+        async with self.engine.begin() as conn:
+            deleted = await delete_user_rows(
+                conn, user_tables(tables.metadata), user_id, account_id
+            )
+            columns = principal_ref_columns(tables.metadata)
+            return deleted + await scrub_principal_refs(conn, columns, user_id, account_id)
+
+    async def user_leftovers(self, user_id: UUID) -> dict[str, int]:
+        """Counted over the same tables and columns."""
+        async with self.engine.connect() as conn:
+            rows = await user_row_counts(conn, user_tables(tables.metadata), user_id)
+            names = await named_principal_refs(
+                conn, principal_ref_columns(tables.metadata), user_id
+            )
+        return rows | names
 
     async def delete_user(self, user_id: UUID) -> int:
         """Forget a user's providers and preferences (opt-ins included)."""

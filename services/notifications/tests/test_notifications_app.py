@@ -97,8 +97,8 @@ async def test_notifications_app_startup_subscriptions_and_shutdown() -> None:
     async with lifespan_client(app) as client:
         assert (await client.get("/readyz")).status_code == 200
         assert (
-            len(app.state.subscriptions) == 11
-        )  # incl. entitlements.plan.changed, vision, tracking and the erasure
+            len(app.state.subscriptions) == 12
+        )  # incl. entitlements.plan.changed, vision, tracking and both erasures
     assert app.state.draining is True and not bus.is_connected
 
 

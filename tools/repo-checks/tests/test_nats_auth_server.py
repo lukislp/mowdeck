@@ -18,7 +18,9 @@ client, no subject outside the allow list, no other user's inbox, no consumer wi
 filter, no stream changes except by the ``streams`` user, and stored messages removed only by
 the owner of what they are about (ADR 0082): Fleet purges the subjects of a mower, Identity
 erases single domain events. Every user whose service verifies tokens creates the deny list's
-consumer as its code does, and a refused one fails open.
+consumer as its code does, and a refused one fails open. Every service that forgets a deleted
+user creates its durable consumer of ``identity.user.deleted`` with its own adapter and receives
+what Identity publishes.
 
 The server must be started for the test run with the file of the checkout (CI starts it in the
 job): a server that runs an older file still refuses what the new file allows, which is what
@@ -26,6 +28,7 @@ job): a server that runs an older file still refuses what the new file allows, w
 """
 
 import asyncio
+import importlib
 import importlib.util
 import json
 import os
@@ -41,14 +44,17 @@ import pytest
 from mowdeck_auth import RevocationFeed, RevocationList, subscribe_revocations
 from mowdeck_contracts.v1 import (
     IDENTITY_ACCESS_REVOKED,
+    IDENTITY_USER_DELETED,
     AccessRevoked,
     AccessScope,
     EventEnvelope,
     Principal,
     PrincipalKind,
+    UserChanged,
 )
 from mowdeck_contracts.v1.subjects import ALL_ACCESS_REVOKED, access_revoked_subject
 from mowdeck_service_kit.bus import BusError, BusMessage, JetStreamBus, publish_event
+from mowdeck_service_kit.user_erasure import UserErasure
 from nats.aio.client import Client
 
 URL = os.environ.get("MOWDECK_TEST_NATS_AUTH_URL")
@@ -429,6 +435,64 @@ async def test_a_refused_deny_list_consumer_fails_open(streams: None) -> None:
     assert any(
         "permissions violation" in e and "event.identity.access.revoked.*" in e for e in errors
     ), errors
+
+
+FORGETTING = sorted(
+    adapter.parents[4].name
+    for adapter in (REPO / "services").glob("*/src/*/adapters/bus/user_erasure.py")
+)
+"""Every service with the user erasure's adapter (ADR 0082, "delete me"), from the repository
+(a new one is covered without a change here)."""
+
+
+def test_every_service_that_forgets_a_user_is_found() -> None:
+    assert {"fleet", "notifications", "scheduler", "telemetry", "vision"} <= set(FORGETTING)
+
+
+@pytest.mark.parametrize("service", FORGETTING)
+async def test_every_service_that_forgets_a_user_receives_the_event(
+    streams: None, service: str
+) -> None:
+    """Each service subscribes with its own adapter (``subscribe_user_erasure``: the durable
+    ``<service>-users`` on ``event.identity.user.deleted``), on a server that runs the generated
+    file, and its use case gets the user of the event Identity publishes."""
+    adapter = importlib.import_module(f"{service}.adapters.bus.user_erasure")
+    forgotten: list[tuple[object, object]] = []
+
+    async def forget(user_id: object, account_id: object) -> int:
+        forgotten.append((user_id, account_id))
+        return 0
+
+    async def nothing_left(_: object) -> dict[str, int]:
+        return {}
+
+    errors: list[str] = []
+    bus, identity = _bus(service), _bus("identity")
+    await asyncio.gather(bus.connect(), identity.connect())
+    bus._client()._error_cb = _record(errors)
+    user_id, account_id = uuid4(), uuid4()
+    try:
+        subscription = await adapter.subscribe_user_erasure(bus, UserErasure(forget, nothing_left))
+        envelope = EventEnvelope[UserChanged](
+            type=IDENTITY_USER_DELETED,
+            version=2,
+            producer="identity",
+            account_id=account_id,
+            payload=UserChanged(user_id=user_id, account_id=account_id, reason="self"),
+        )
+        await publish_event(identity, envelope)
+        for _ in range(100):
+            if (user_id, account_id) in forgotten:
+                break
+            await asyncio.sleep(0.05)
+        info = await bus._jetstream().consumer_info("EVENTS", adapter.USERS_CONSUMER)
+        await subscription.unsubscribe()
+    finally:
+        await asyncio.gather(bus.close(), identity.close())
+    assert (user_id, account_id) in forgotten
+    assert f"{service}-users" == adapter.USERS_CONSUMER
+    assert info.config.filter_subject == "event.identity.user.deleted"
+    assert not [e for e in errors if "permissions violation" in e], errors
 
 
 def _record(errors: list[str]) -> Callable[[Exception], Awaitable[None]]:

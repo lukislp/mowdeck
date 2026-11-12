@@ -75,8 +75,8 @@ class Outbox:
         self._clock = clock
         self._observer = observer
         self._in_flight: dict[str, set[asyncio.Task[None]]] = {}
-        self._sending: dict[asyncio.Task[None], UUID] = {}
-        """The account of every delivery being sent right now."""
+        self._sending: dict[asyncio.Task[None], tuple[UUID, UUID]] = {}
+        """The account and the user of every delivery being sent right now."""
         self._finished = asyncio.Event()
         self._progress_at = clock()
         """Last time the outbox had nothing to do or finished a delivery."""
@@ -156,8 +156,16 @@ class Outbox:
         replica claimed before must not leave afterwards. A send that already reached the
         channel's server cannot be taken back.
         """
-        for task, owner in list(self._sending.items()):
+        for task, (owner, _) in list(self._sending.items()):
             if owner == account_id:
+                task.cancel()
+
+    def forget_user(self, user_id: UUID) -> None:
+        """Cancel the running sends to a user who was deleted (ADR 0082, "delete me"), for the
+        same reason as :meth:`forget_account`: their deliveries are deleted, and what this
+        replica claimed before must not reach the person's devices afterwards."""
+        for task, (_, recipient) in list(self._sending.items()):
+            if recipient == user_id:
                 task.cancel()
 
     def stalled_for(self, now: datetime | None = None) -> timedelta | None:
@@ -172,7 +180,7 @@ class Outbox:
         task = asyncio.create_task(self._run(delivery), name=f"delivery-{delivery.id}")
         group = self._in_flight.setdefault(delivery.channel, set())
         group.add(task)
-        self._sending[task] = delivery.account_id
+        self._sending[task] = (delivery.account_id, delivery.user_id)
 
         def done(finished: asyncio.Task[None]) -> None:
             group.discard(finished)

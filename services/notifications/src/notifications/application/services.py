@@ -8,6 +8,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import NewDeviceLogin, NotificationKind
 from mowdeck_service_kit.erasure import AccountErasure
+from mowdeck_service_kit.user_erasure import UserErasure
 
 from notifications.application.context import NotificationsConfig
 from notifications.application.demo import DemoPurge
@@ -25,6 +26,7 @@ from notifications.application.ports import (
     ViewChecker,
 )
 from notifications.application.push_image import PushImages
+from notifications.application.user_erasure import user_erasure
 from notifications.application.users import UserNotifications
 from notifications.application.watcher import Watcher
 from notifications.domain.messages import MessageCatalog
@@ -47,9 +49,11 @@ class Accounts:
         self._catalog = catalog
         self._config = config or NotificationsConfig()
 
-    async def user_removed(self, user_id: UUID, account_id: UUID | None) -> None:
-        """Drop the user's preferences, targets, inbox and pending deliveries."""
-        await self._store.drop_user(user_id, account_id)
+    async def user_disabled(self, user_id: UUID, account_id: UUID | None) -> None:
+        """A disabled user gets nothing any more: drop their preferences, targets, inbox and
+        deliveries, the same rows a deleted user leaves (the user erasure deletes them too and
+        then checks that nothing is left)."""
+        await self._store.forget_user(user_id, account_id)
 
     async def new_login(self, alert: NewDeviceLogin) -> Notified | None:
         """``security_new_login`` for the one user who signed in from a new device (ADR 0065).
@@ -123,6 +127,8 @@ class Services:
     """The account purge (the demo sandboxes, ADR 0076; the erasure reuses it)."""
     erasure: AccountErasure | None = None
     """Answers ``account.erase.notifications`` (ADR 0082)."""
+    user_erasure: UserErasure | None = None
+    """Forgets a deleted user (``identity.user.deleted``, ADR 0082)."""
 
 
 def build_services(
@@ -158,4 +164,5 @@ def build_services(
         push_images=PushImages(store, image_links, clock) if image_links is not None else None,
         demo=purge,
         erasure=account_erasure(purge, store, outbox, fanout),
+        user_erasure=user_erasure(store, outbox),
     )

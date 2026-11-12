@@ -49,6 +49,7 @@ from vision.adapters.authz import AuthzDriveChecker
 from vision.adapters.bus.erasure import subscribe_erasure
 from vision.adapters.bus.gateways import BusFleetGateway, BusPhotoSource, BusPublisher
 from vision.adapters.bus.subscriptions import subscribe_all
+from vision.adapters.bus.user_erasure import subscribe_user_erasure
 from vision.adapters.bus.view import BusMowerView
 from vision.adapters.crypto import AesGcmSecretBox, parse_key
 from vision.adapters.db.store import SqlStore
@@ -68,6 +69,7 @@ from vision.application.ports import (
     StructuredFactory,
 )
 from vision.application.providers import HostedDefault, ProviderPolicy, ProviderService
+from vision.application.user_erasure import user_erasure
 from vision.domain.auto import AutoConfig, parse_codes
 from vision.domain.consent import classify_installation
 from vision.domain.context import Motion
@@ -252,6 +254,7 @@ def build_app(
         purge = DemoPurge(store_ref, mower_view, auto.forget_mowers, service.stop_account)
         app.state.vision_demo = purge
         app.state.vision_erasure = account_erasure(purge, store_ref)
+        app.state.vision_user_erasure = user_erasure(store_ref)
         app.state.auto_settings = AutoSettings(
             store=store_ref, entitlements=plans, clock=now, config=auto_limits, consent=consent
         )
@@ -281,6 +284,9 @@ def build_app(
                 )
             )
             subscriptions.append(await subscribe_erasure(active_bus, app.state.vision_erasure))
+            subscriptions.append(
+                await subscribe_user_erasure(active_bus, app.state.vision_user_erasure)
+            )
             cache = app.state.authorizer
             if hasattr(cache, "invalidate_subject"):
                 subscriptions.append(await subscribe_cache_invalidation(active_bus, cache))

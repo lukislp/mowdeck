@@ -9,9 +9,10 @@
   ``mower.registered``/``updated``/``removed`` maintain the directory (account and name),
   ``mower.connected``/``disconnected`` feed the offline rule.
 * ``event.identity.>`` (JetStream ``EVENTS``, durable ``notifications-identity``):
-  ``identity.user.disabled`` and ``identity.user.deleted`` delete the user's preferences,
-  targets, inbox and deliveries; ``identity.session.new_device`` becomes ``security_new_login``
-  for that user alone (ADR 0065); other identity events are acknowledged and ignored.
+  ``identity.user.disabled`` deletes the user's preferences, targets, inbox and deliveries;
+  ``identity.session.new_device`` becomes ``security_new_login`` for that user alone
+  (ADR 0065); other identity events are acknowledged and ignored. ``identity.user.deleted`` has
+  its own consumer (``notifications-users``, :mod:`notifications.adapters.bus.user_erasure`).
 * ``command.mower.*`` (JetStream ``COMMANDS``, durable and queue group
   ``notifications-commands``): the time of the newest command per mower (any kind, manual drive
   frames separately), which explains a departure from the dock and suspends the geofence while
@@ -44,7 +45,6 @@ from mowdeck_authz.events import subscribe_cache_invalidation
 from mowdeck_authz.writer import SupportsInvalidate
 from mowdeck_contracts.v1 import (
     IDENTITY_SESSION_NEW_DEVICE,
-    IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
     MOWER_CONNECTED,
     MOWER_DISCONNECTED,
@@ -117,7 +117,6 @@ VISION_CONSUMER = "notifications-vision"
 _DIRECTORY_EVENTS = frozenset({MOWER_REGISTERED, MOWER_UPDATED, MOWER_REMOVED})
 _CONNECTION_EVENTS = frozenset({MOWER_CONNECTED, MOWER_DISCONNECTED})
 _TRACKING_EVENTS = frozenset({TRACKING_STARTED, TRACKING_MOVED, TRACKING_STALE, TRACKING_ENDED})
-_USER_REMOVED = frozenset({IDENTITY_USER_DISABLED, IDENTITY_USER_DELETED})
 
 
 def _decode_state(message: BusMessage) -> MowerState | str:
@@ -320,7 +319,7 @@ def vision_event_handler(watcher: Watcher) -> MessageHandler:
 
 
 def identity_handler(accounts: Accounts) -> MessageHandler:
-    """Forget users that were disabled or deleted; tell a user about a login from a new device
+    """Forget users that were disabled; tell a user about a login from a new device
     (ADR 0065)."""
 
     async def handle(message: BusMessage) -> None:
@@ -337,18 +336,17 @@ def identity_handler(accounts: Accounts) -> MessageHandler:
                 raise DropMessage("envelope and payload name different accounts")
             await accounts.new_login(alert)
             return
-        if event.type not in _USER_REMOVED:
+        if event.type != IDENTITY_USER_DISABLED:
             return
         try:
             change = UserChanged.model_validate(event.payload)
         except ValidationError as exc:
             raise DropMessage(f"invalid {event.type} payload") from exc
-        await accounts.user_removed(change.user_id, change.account_id)
+        await accounts.user_disabled(change.user_id, change.account_id)
         _log.info(
-            "user removed from notifications",
+            "disabled user removed from notifications",
             user_id=str(change.user_id),
             account_id=str(change.account_id) if change.account_id else None,
-            event_type=event.type,
         )
 
     return handle

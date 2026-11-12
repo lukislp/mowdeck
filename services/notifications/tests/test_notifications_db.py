@@ -337,7 +337,7 @@ async def test_notifications_db_inbox_dedupe_trim_and_read(
 
 
 @pytest.mark.parametrize("kind", KINDS)
-async def test_notifications_db_outbox_claim_finish_prune_and_drop_user(
+async def test_notifications_db_outbox_claim_finish_prune_and_forget_user(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     user, other, account = uuid4(), uuid4(), uuid4()
@@ -385,17 +385,17 @@ async def test_notifications_db_outbox_claim_finish_prune_and_drop_user(
         retried = await store.claim_deliveries(T0 + seconds(30), timedelta(seconds=60), 10)
         assert [r.channel for r in retried] == ["ntfy"] and retried[0].attempts == 2
         assert await store.prune_deliveries(T0 + seconds(1)) == 1  # the sent one
-        await store.drop_user(user, uuid4())  # another account: nothing happens
+        await store.forget_user(user, uuid4())  # another account: nothing happens
         assert await store.preferences(user, account) is None
         assert len(await store.inbox(user, account, 10, unread_only=False)) == 1
-        await store.drop_user(user, account)
+        await store.forget_user(user, account)
         assert await store.inbox(user, account, 10, unread_only=False) == []
         assert await store.push_subscriptions(user, account) == []
         assert await store.ntfy_target(user, account) is None
         assert len(await store.inbox(other, account, 10, unread_only=False)) == 1
         later = await store.claim_deliveries(T0 + seconds(3600), timedelta(seconds=60), 10)
         assert [c.user_id for c in later] == [other]
-        await store.drop_user(other, None)
+        await store.forget_user(other, None)
         assert await store.inbox(other, account, 10, unread_only=False) == []
 
 
@@ -539,12 +539,12 @@ async def test_notifications_theft_db_acknowledge_and_silences(
         assert await store.silenced(account, "geofence_exit:x", [user], T0) == set()
         await store.silence(user, account, key, T0 + seconds(7200))  # extended
         assert await store.silenced(account, key, [user], T0 + seconds(5000)) == {user}
-        await store.drop_user(user, account)
+        await store.forget_user(user, account)
         assert await store.silenced(account, key, [user], T0) == set()
 
 
 @pytest.mark.parametrize("kind", KINDS)
-async def test_notifications_apns_db_devices_claims_and_drop_user(
+async def test_notifications_apns_db_devices_claims_and_forget_user(
     kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     user, other, account = uuid4(), uuid4(), uuid4()
@@ -583,9 +583,9 @@ async def test_notifications_apns_db_devices_claims_and_drop_user(
         assert targets[(user, device.id)] == {"token": token}
         assert targets[(other, device.id)] is None  # not the other user's device
         assert sorted(t is None for t in targets.values()) == [False, True, True]
-        await store.drop_user(user, uuid4())  # another account: nothing happens
+        await store.forget_user(user, uuid4())  # another account: nothing happens
         assert len(await store.apns_devices(user, account)) == 1
-        await store.drop_user(user, account)
+        await store.forget_user(user, account)
         assert await store.apns_devices(user, account) == []
 
 
@@ -882,6 +882,6 @@ async def test_notifications_live_activity_store_contract(
         await store.put_live_activity(
             LiveActivity(other, account, uuid4(), mower, ActivityRun.RUNNING, T0)
         )
-        await store.drop_user(other, account)
+        await store.forget_user(other, account)
         assert await store.activity_devices(account) == []
         assert await store.live_activities(mower) == []

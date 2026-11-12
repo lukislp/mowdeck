@@ -9,8 +9,9 @@ Every instance (ephemeral consumers, no queue group) feeds its :class:`BusMowerV
   (the states without acknowledgements, ADR 0078: the next state replaces a lost one);
 * ``command.mower.*`` and ``command.result.mower.*`` from now on.
 
-Shared (durable ``vision-identity``): ``identity.user.disabled`` and ``identity.user.deleted``
-delete the user's provider settings and opt-ins.
+Shared (durable ``vision-identity``): ``identity.user.disabled`` deletes the user's provider
+settings and opt-ins. ``identity.user.deleted`` has its own consumer (``vision-users``,
+:mod:`vision.adapters.bus.user_erasure`).
 
 Shared (durable ``vision-auto``, queue group: one replica per state): ``telemetry.mower.*`` for
 the automatic analysis on errors (ADR 0035); only new states, a restart resumes where the
@@ -23,7 +24,6 @@ from typing import Any
 from uuid import UUID
 
 from mowdeck_contracts.v1 import (
-    IDENTITY_USER_DELETED,
     IDENTITY_USER_DISABLED,
     CommandEnvelope,
     CommandResult,
@@ -55,7 +55,6 @@ _log = get_logger("vision.subscriptions")
 
 IDENTITY_CONSUMER = "vision-identity"
 AUTO_CONSUMER = "vision-auto"
-_USER_REMOVED = frozenset({IDENTITY_USER_DISABLED, IDENTITY_USER_DELETED})
 
 
 def _per_mower(message: BusMessage) -> UUID:
@@ -167,21 +166,23 @@ def auto_handler(auto: AutoAnalysis) -> MessageHandler:
 
 
 def identity_handler(store: Store) -> MessageHandler:
-    """Forget the providers of disabled and deleted users."""
+    """Forget the providers and opt-ins of disabled users."""
 
     async def handle(message: BusMessage) -> None:
         try:
             event = message.model(EventEnvelope[dict[str, Any]])
         except ValidationError as exc:
             raise DropMessage("invalid event envelope") from exc
-        if event.type not in _USER_REMOVED:
+        if event.type != IDENTITY_USER_DISABLED:
             return
         try:
             change = UserChanged.model_validate(event.payload)
         except ValidationError as exc:
             raise DropMessage(f"invalid {event.type} payload") from exc
         removed = await store.delete_user(change.user_id)
-        _log.info("user removed from vision", user_id=str(change.user_id), providers=removed)
+        _log.info(
+            "disabled user's providers removed", user_id=str(change.user_id), providers=removed
+        )
 
     return handle
 
