@@ -23,6 +23,7 @@ from prometheus_client import CollectorRegistry
 from test_billing_db import STORES, store_of
 from test_billing_erasure import erase, rows_of, subscribe
 
+from billing.adapters.db.store import SqlTx
 from billing.adapters.memory import MemoryTx
 from billing.adapters.metrics import BillingMetrics
 from billing.adapters.providers.fake import fake_customer_id
@@ -357,34 +358,42 @@ async def test_after_too_many_failed_refunds_the_erasure_goes_on_with_a_warning(
         assert (record.amount, record.reason) == (600, f"{MAX_FAILED_REFUNDS} refunds failed")
 
 
-async def test_the_record_is_written_with_the_deletion_of_the_rows_or_not_at_all(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("kind", STORES)
+async def test_the_record_is_written_before_the_customer_goes_and_once(
+    kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One transaction: when deleting the rows fails, there is no record either, and the retry
-    (which skips again) writes it once with the deletion."""
+    """The skip is recorded before the customer is deleted. Deleting the rows then fails: the
+    record stays, the rows stay, and the retry keeps the skip (no second refund attempt), finds
+    the record and inserts nothing twice; the amount stays the first decision's even though the
+    unused part is smaller by then."""
 
-    async def purge_fails(self: MemoryTx, account_id: UUID) -> int:
+    async def purge_fails(self: object, account_id: UUID) -> int:
         del self, account_id
         raise RuntimeError("database gone")
 
-    async with harness() as h:
+    async with store_of(kind, monkeypatch) as store, harness(store=store) as h:  # type: ignore[arg-type]
         account_id = await paying(h)
-        before = await rows_of(h.store, account_id)
+        before = await rows_of(store, account_id)
         h.provider.failures["refund"] = RefundImpossible("Stripe refuses (charge_disputed)")
         with monkeypatch.context() as patched:
             patched.setattr(MemoryTx, "purge_account", purge_fails)
+            patched.setattr(SqlTx, "purge_account", purge_fails)
             failed = await erase(h, account_id)
-        left = await rows_of(h.store, account_id)
-        none = await records(h.store)
+        left = await rows_of(store, account_id)
+        written = await records(store)
+        del h.provider.failures["refund"]
+        h.clock.advance(days=1)
 
         retried = await erase(h, account_id)
 
         assert not failed.ok
         assert left == before
-        assert none == []
+        assert [(r.key, r.amount) for r in written] == [("pi_sub_1:in_sub_1", 600)]
         assert retried.ok
-        assert [r.amount for r in await records(h.store)] == [600]
-        assert await rows_of(h.store, account_id) == {}
+        assert [(r.id, r.amount) for r in await records(store)] == [(written[0].id, 600)]
+        assert [c[0] for c in h.provider.calls].count("refund") == 1
+        assert h.provider.refunds == {}
+        assert await rows_of(store, account_id) == {}
 
 
 async def test_a_refund_that_waits_for_the_customer_counts_with_a_warning() -> None:

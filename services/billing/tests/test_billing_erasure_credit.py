@@ -28,6 +28,7 @@ from test_billing_db import STORES, store_of
 from test_billing_erasure import erase, rows_of
 from test_billing_erasure_refunds import paying, records
 
+from billing.adapters.db.store import SqlTx
 from billing.adapters.memory import MemoryTx
 from billing.adapters.providers.fake import fake_customer_id
 from billing.adapters.providers.fixtures import refund_event
@@ -293,55 +294,70 @@ async def test_a_balance_in_another_currency_is_recorded_in_full() -> None:
         assert record.reason == "credit balance: the credit is in usd, the payments in eur"
 
 
-async def test_the_records_are_written_with_the_deletion_of_the_rows_or_not_at_all(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("kind", STORES)
+async def test_records_survive_a_failed_row_deletion_after_the_customer_was_deleted(
+    kind: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A skip (``pi_oct``, 9.00) and a leftover (3.00). Deleting the rows fails: no record, the
-    rows stay. (The retry of that case is the next test's: here the customer is gone at the
-    provider by then.)"""
+    """A skip (``pi_oct``, 9.00) and a leftover (3.00). Stripe confirms the customer deletion,
+    then the transaction that deletes the rows fails. The records were written before the
+    customer went: they exist, the rows stay. The retry finds no customer (and so no balance),
+    deletes the rows, and each record exists exactly once."""
 
-    async def purge_fails(self: MemoryTx, account_id: UUID) -> int:
+    async def purge_fails(self: object, account_id: UUID) -> int:
         del self, account_id
         raise RuntimeError("database gone")
 
-    async with harness() as h:
-        account_id, _customer = await with_credit(h, credit=2400)
-        before = await rows_of(h.store, account_id)
+    async with store_of(kind, monkeypatch) as store, harness(store=store) as h:  # type: ignore[arg-type]
+        account_id, customer = await with_credit(h, credit=2400)
+        before = await rows_of(store, account_id)
         refusing(h, "pi_oct")
         with monkeypatch.context() as patched:
             patched.setattr(MemoryTx, "purge_account", purge_fails)
+            patched.setattr(SqlTx, "purge_account", purge_fails)
             failed = await erase(h, account_id)
+        written = await records(store)
+        left = await rows_of(store, account_id)
+        gone = customer in h.provider.deleted
+
+        retried = await erase(h, account_id)
 
         assert not failed.ok
-        assert await records(h.store) == []
-        assert await rows_of(h.store, account_id) == before
+        assert gone
+        assert left == before
+        expected = [(f"{customer}:credit-balance", "pi_sub_1", 300), ("pi_oct:", "pi_oct", 900)]
+        assert sorted((r.key, r.payment_ref, r.amount) for r in written) == expected
+        assert retried.ok
+        after = await records(store)
+        assert sorted((r.key, r.payment_ref, r.amount) for r in after) == expected
+        assert {r.id for r in after} == {r.id for r in written}
+        assert await rows_of(store, account_id) == {}
 
 
-async def test_a_retry_after_the_balance_was_zeroed_still_records_the_skip_and_the_leftover() -> (
-    None
-):
-    """Deleting the customer fails after the balance was zeroed: no record yet. The retry still
-    knows the credit (``cleared``), finds the refunds done, skips ``pi_oct`` again and records
-    both once, with the deletion of the rows."""
+async def test_a_retry_after_the_balance_was_zeroed_keeps_the_recorded_skip() -> None:
+    """Deleting the customer fails after the balance was zeroed; the records are written by
+    then. The retry still knows the credit (``cleared``), finds the refunds done, keeps the
+    recorded skip of ``pi_oct`` without asking Stripe again (Stripe would take it now) and
+    inserts nothing twice."""
     async with harness() as h:
         account_id, customer = await with_credit(h, credit=2400)
         refusing(h, "pi_oct")
         h.provider.failures["delete_customer"] = ProviderUnavailable("outage")
         failed = await erase(h, account_id)
-        none = await records(h.store)
+        written = await records(h.store)
         zeroed = h.provider.balances[customer]
         del h.provider.failures["delete_customer"]
+        h.provider.refund = type(h.provider).refund.__get__(h.provider)  # type: ignore[method-assign]
 
         retried = await erase(h, account_id)
 
         assert not failed.ok
-        assert none == []
         assert zeroed == CreditBalance(0, "eur", 2400)
+        expected = [(f"{customer}:credit-balance", "pi_sub_1", 300), ("pi_oct:", "pi_oct", 900)]
+        assert sorted((r.key, r.payment_ref, r.amount) for r in written) == expected
         assert retried.ok
-        assert sorted((r.key, r.payment_ref, r.amount) for r in await records(h.store)) == [
-            (f"{customer}:credit-balance", "pi_sub_1", 300),
-            ("pi_oct:", "pi_oct", 900),
-        ]
+        assert sorted((r.key, r.payment_ref, r.amount) for r in await records(h.store)) == expected
+        assert h.provider.calls.count(("refund", "pi_oct")) == 1
+        assert "pi_oct" not in h.provider.refunds
         assert [c[0] for c in h.provider.calls].count("clear_credit_balance") == 1
         assert [r.amount for r in h.provider.refunds["pi_sep"]] == [900]
 

@@ -48,7 +48,7 @@ A **credit balance** the customer holds at the provider is paid back after the s
 ended, under the same retry and skip rules: :mod:`billing.domain.credit`.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -256,8 +256,12 @@ def plan_refund(
     invoice: PaidInvoice | None,
     refunds: Sequence[ProviderRefund],
     now: datetime,
+    recorded: Mapping[str, int] | None = None,
 ) -> RefundPlan:
-    """Decide the refund of one invoice of an erased account (the rule of the module)."""
+    """Decide the refund of one invoice of an erased account (the rule of the module).
+    ``recorded`` maps the keys of the manual refund records that exist already to their
+    amounts: a refund an earlier attempt skipped and recorded stays skipped with the recorded
+    amount (:func:`recorded_skip`), so a record and a refund never both pay it back."""
     if invoice is None:
         return RefundPlan(RefundAction.NONE, reason="no paid invoice")
     sub, inv = invoice.subscription_id, invoice.invoice_id
@@ -273,6 +277,9 @@ def plan_refund(
             existing=made[0],
             reason="refunded by an earlier attempt",
         )
+    earlier = recorded_skip(recorded, invoice.payment_ref, inv, invoice.currency)
+    if earlier is not None:
+        return earlier
     amount = refund_amount(invoice, refunds, now)
     if amount == 0:
         return RefundPlan(
@@ -305,6 +312,35 @@ def skipped(plan: RefundPlan, reason: str) -> RefundPlan:
         invoice_id=plan.invoice_id,
         metadata=plan.metadata,
         reason=reason,
+    )
+
+
+RECORDED_REASON = "recorded for the operator by an earlier attempt"
+"""The reason of a skip that an earlier attempt of the erasure recorded already."""
+
+
+def recorded_skip(
+    recorded: Mapping[str, int] | None,
+    payment_ref: str | None,
+    invoice_id: str | None,
+    currency: str,
+) -> RefundPlan | None:
+    """The skip an earlier attempt of the erasure decided and recorded for this payment and
+    invoice (:func:`manual_refund_key`); None without such a record. A recorded skip is final:
+    the records are written before the customer is deleted, so one can exist while the erasure
+    is retried, and the retry must not refund what the operator pays back by hand."""
+    if not recorded or payment_ref is None:
+        return None
+    amount = recorded.get(manual_refund_key(payment_ref, invoice_id))
+    if amount is None:
+        return None
+    return RefundPlan(
+        RefundAction.SKIP,
+        amount=amount,
+        currency=currency,
+        payment_ref=payment_ref,
+        invoice_id=invoice_id,
+        reason=RECORDED_REASON,
     )
 
 

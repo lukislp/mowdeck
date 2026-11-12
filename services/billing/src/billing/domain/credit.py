@@ -34,7 +34,9 @@ amount counts as paid back); failed ones are counted and the next one is made un
 (suffix ``-1``, ``-2``), and after :data:`~billing.domain.refunds.MAX_FAILED_REFUNDS` the
 refund is skipped and recorded, as for a paid period. The balance transaction carries the
 erasure's metadata too, so a retry after the balance was zeroed reads it back as ``cleared``
-and plans the same refunds again (finding them done).
+and plans the same refunds again (finding them done). Once the balance is zeroed the decision is
+final: the erasure writes the records of its skips and of the leftover before it deletes the
+customer, and a retry keeps a recorded skip with its recorded amount instead of refunding it.
 
 Example: a credit of 25.00 EUR; the newest payment was 9.00 of which this erasure refunded 6.00
 for the unused period (3.00 left), the one before 9.00 with 1.00 refunded in the dashboard
@@ -42,7 +44,7 @@ for the unused period (3.00 left), the one before 9.00 with 1.00 refunded in the
 the operator; then the balance is zeroed with 25.00.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -57,6 +59,7 @@ from billing.domain.refunds import (
     RefundPlan,
     earliest_invoice,
     manual_refund,
+    recorded_skip,
     refunded_already,
     round_down,
     skipped,
@@ -143,10 +146,13 @@ def plan_credit_refunds(
     customer_id: str,
     balance: CreditBalance | None,
     payments: Sequence[tuple[RecentPayment, Sequence[ProviderRefund]]],
+    recorded: Mapping[str, int] | None = None,
 ) -> CreditPlan:
     """Decide how the credit balance of an erased account's customer is paid back (the rule of
     the module). ``payments`` are the customer's recent successful payments, each with the
-    refunds of it, in any order."""
+    refunds of it, in any order. ``recorded`` maps the keys of the manual refund records that
+    exist already to their amounts: a payment an earlier attempt skipped and recorded stays
+    skipped with that amount (:func:`~billing.domain.refunds.recorded_skip`)."""
     if balance is None:
         return CreditPlan(customer_id, reason="no customer at the provider")
     open_credit = max(balance.amount, 0)
@@ -162,7 +168,7 @@ def plan_credit_refunds(
     for payment, refunds in usable:
         if remaining <= 0:
             break
-        plan = _plan_payment(account_id, payment, refunds, remaining, currency)
+        plan = _plan_payment(account_id, payment, refunds, remaining, currency, recorded)
         if plan is not None:
             plans.append(plan)
             remaining -= plan.amount
@@ -196,6 +202,7 @@ def _plan_payment(
     refunds: Sequence[ProviderRefund],
     remaining: int,
     currency: str,
+    recorded: Mapping[str, int] | None,
 ) -> RefundPlan | None:
     """The part of the credit one payment takes; None when it can take nothing."""
     metadata = credit_metadata(account_id, payment.payment_ref)
@@ -210,6 +217,9 @@ def _plan_payment(
             existing=made[0],
             reason="refunded by an earlier attempt",
         )
+    earlier = recorded_skip(recorded, payment.payment_ref, None, currency)
+    if earlier is not None:
+        return earlier
     left = payment.amount - max(payment.refunded, refunded_already(refunds))
     amount = round_down(min(remaining, left), currency)
     if amount <= 0:

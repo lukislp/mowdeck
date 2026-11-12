@@ -28,6 +28,7 @@ from billing.domain.credit import (
 from billing.domain.models import CreditBalance, ProviderRefund, RecentPayment, RefundStatus
 from billing.domain.refunds import (
     MAX_FAILED_REFUNDS,
+    RECORDED_REASON,
     RefundAction,
     erasure_metadata,
     is_erasure_metadata,
@@ -311,3 +312,19 @@ def test_keys_and_metadata() -> None:
     assert is_clearing_metadata(clearing_metadata(ACCOUNT))
     assert not is_clearing_metadata(erasure_metadata(ACCOUNT, "sub_1", "in_1"))
     assert earliest_payment(NOW) == NOW - timedelta(days=366)
+
+
+def test_a_skip_recorded_by_an_earlier_attempt_stays_skipped_with_its_amount() -> None:
+    """The records are written before the customer is deleted; a retry keeps a recorded skip
+    instead of refunding it, so the operator's record and a refund never both pay."""
+    recorded = {manual_refund_key("pi_oct", None): 900}
+
+    plan = plan_credit_refunds(ACCOUNT, CUSTOMER, credit(2500), three(), recorded)
+
+    assert placed(plan.refunds) == [
+        ("create", "pi_nov", 900),
+        ("skip", "pi_oct", 900),
+        ("create", "pi_sep", 700),
+    ]
+    assert plan.refunds[1].reason == RECORDED_REASON
+    assert plan.leftover == 0
