@@ -180,6 +180,7 @@ nav:
       - guides/apple-login.md
       - guides/step-up.md
       - guides/security.md
+      - guides/delete-account.md
       - guides/ios-widgets.md
       - guides/apple-watch.md
       - guides/setup-tour.md

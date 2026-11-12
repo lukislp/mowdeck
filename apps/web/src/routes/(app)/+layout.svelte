@@ -8,6 +8,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
+  import DeletionBanner from '#lib/account-deletion/DeletionBanner.svelte';
   import { session } from '#lib/auth/session.svelte.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { demo } from '#lib/demo/state.svelte.js';
@@ -122,6 +123,8 @@
     {#snippet nav()}
       <NavRail {items} label={m.nav_label()} brand={m.brand_mark()} moreLabel={m.nav_more()} />
     {/snippet}
+    <!-- While the account is scheduled for deletion (ADR 0082): on every page, until cancelled. -->
+    <DeletionBanner />
     {@render children()}
   </AppShell>
   <WhatsNewSheet />

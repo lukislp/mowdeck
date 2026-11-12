@@ -44,6 +44,10 @@ MowDeck has three optional features that ask an AI model: AI assist for a stuck 
 
 **TODO:** how long each category is stored, for example account data until the account is deleted, invoices for the period required by tax law, logs for a few days.
 
+**Deleting your account inside the app** (Settings, Profile): a member of someone else's account deletes their user at once; the owner deletes the whole account after a waiting period of 7 days, during which the deletion can be cancelled. Afterwards a member's name can remain in internal records of sent commands for up to 24 hours and of camera sessions for up to 30 days, and technical notices without content for up to 30 days. Where subscriptions are sold, they end when the deletion starts, without a refund, and the customer record at the payment provider is deleted; invoices and payment records stay with the payment provider. **TODO:** confirm the waiting period of this installation (`IDENTITY_DELETION_GRACE_DAYS`).
+
+**Backups:** backups made by the operator may still contain deleted data until they are replaced. **TODO:** state how long this installation keeps its backups and where they are stored (MowDeck itself keeps only the newest three database dumps it writes before an update).
+
 ## 7. Your rights
 
 You have the right of access (Art. 15), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20) and objection (Art. 21 GDPR), and you can withdraw a consent at any time with effect for the future. **TODO:** how to exercise these rights (contact address).

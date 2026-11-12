@@ -141,6 +141,32 @@ MEMBER_OF_ANOTHER_ACCOUNT = (
 )
 
 
+class SelfDeletionBlock(StrEnum):
+    """Why ``DELETE /me`` is refused right now, as a code a client can translate (``GET /me``)."""
+
+    OTHER_MEMBERS = "other_members"
+    """The owner of an account that still has other members: they are removed first."""
+    OWNS_ANOTHER_ACCOUNT = "owns_another_account"
+    """:data:`OWNS_ANOTHER_ACCOUNT`."""
+    MEMBER_OF_ANOTHER_ACCOUNT = "member_of_another_account"
+    """:data:`MEMBER_OF_ANOTHER_ACCOUNT`."""
+
+
+_BLOCK_TEXTS = {
+    SelfDeletionBlock.OWNS_ANOTHER_ACCOUNT: OWNS_ANOTHER_ACCOUNT,
+    SelfDeletionBlock.MEMBER_OF_ANOTHER_ACCOUNT: MEMBER_OF_ANOTHER_ACCOUNT,
+}
+
+
+def _elsewhere(memberships: Iterable[Membership], account_id: UUID) -> SelfDeletionBlock | None:
+    elsewhere = [m for m in memberships if m.account_id != account_id]
+    if any(m.is_owner for m in elsewhere):
+        return SelfDeletionBlock.OWNS_ANOTHER_ACCOUNT
+    if elsewhere:
+        return SelfDeletionBlock.MEMBER_OF_ANOTHER_ACCOUNT
+    return None
+
+
 def self_deletion_blocker(memberships: Iterable[Membership], account_id: UUID) -> str | None:
     """Why this person cannot delete themselves from ``account_id``, or None.
 
@@ -150,12 +176,28 @@ def self_deletion_blocker(memberships: Iterable[Membership], account_id: UUID) -
     memberships, so that a later way into a second account (invitations) cannot silently reach
     the deletion: owning another account would leave that account without an owner, and a
     membership elsewhere would be removed without that account being told."""
-    elsewhere = [m for m in memberships if m.account_id != account_id]
-    if any(m.is_owner for m in elsewhere):
-        return OWNS_ANOTHER_ACCOUNT
-    if elsewhere:
-        return MEMBER_OF_ANOTHER_ACCOUNT
-    return None
+    block = _elsewhere(memberships, account_id)
+    return _BLOCK_TEXTS[block] if block is not None else None
+
+
+def self_deletion_block(
+    memberships: Iterable[Membership],
+    account_id: UUID,
+    account_members: Iterable[Membership],
+) -> SelfDeletionBlock | None:
+    """Why ``DELETE /me`` of the person signed in to ``account_id`` would be refused now, or None.
+
+    ``memberships`` are the person's own (all accounts), ``account_members`` every membership of
+    ``account_id``. The same checks, in the same order, as the account deletion: an owner whose
+    account has other members (:func:`deletion_blocked_by`) first, then a membership in another
+    account (:func:`self_deletion_blocker`). A client reads it from ``GET /me`` to explain the
+    refusal before anybody presses a button; the call itself decides again. An account that is
+    already scheduled is not a block here: its status says so."""
+    mine = list(memberships)
+    own = next((m for m in mine if m.account_id == account_id), None)
+    if own is not None and own.is_owner and deletion_blocked_by(account_members, own.user_id):
+        return SelfDeletionBlock.OTHER_MEMBERS
+    return _elsewhere(mine, account_id)
 
 
 def self_deletion(memberships: Iterable[Membership], account_id: UUID) -> SelfDeletion | None:

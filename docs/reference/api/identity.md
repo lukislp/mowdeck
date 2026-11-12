@@ -1370,9 +1370,13 @@ A membership in `GET /me`.
 | `account_id` | string (uuid) | yes |  |
 | `account_name` | string | yes |  |
 | `account_status` | string | yes |  |
+| `delete_after` | string (date-time) or null | no | While `account_status` is `deleting`: when the grace period ends and the purge starts; until then the owner can cancel with `POST /accounts/{id}/restore`. |
+| `deletion_grace_days` | integer or null | no | For the owner: the grace period a deletion request starts, in days (`IDENTITY_DELETION_GRACE_DAYS`), so the app can name the date before the call; null otherwise. |
 | `is_admin` | boolean | yes |  |
 | `is_owner` | boolean | yes |  |
+| `other_members` | integer or null | no | For the owner: how many other members the account has; null otherwise. |
 | `self_deletion` | `"account"` \| `"user"` or null | no | What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well). |
+| `self_deletion_blocked` | `"other_members"` \| `"owns_another_account"` \| `"member_of_another_account"` or null | no | Why `DELETE /me` would be refused now, so a client can explain it before the call: `other_members` (the owner removes the other members first, see `other_members`), `owns_another_account`, `member_of_another_account`. Null: nothing blocks it (an account already scheduled for deletion shows that in `account_status`). |
 | `status` | string | yes |  |
 
 ### MeOut

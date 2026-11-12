@@ -1779,15 +1779,35 @@ export type components = {
             account_name: string;
             /** Account Status */
             account_status: string;
+            /**
+             * Delete After
+             * @description While `account_status` is `deleting`: when the grace period ends and the purge starts; until then the owner can cancel with `POST /accounts/{id}/restore`.
+             */
+            delete_after?: string | null;
+            /**
+             * Deletion Grace Days
+             * @description For the owner: the grace period a deletion request starts, in days (`IDENTITY_DELETION_GRACE_DAYS`), so the app can name the date before the call; null otherwise.
+             */
+            deletion_grace_days?: number | null;
             /** Is Admin */
             is_admin: boolean;
             /** Is Owner */
             is_owner: boolean;
             /**
+             * Other Members
+             * @description For the owner: how many other members the account has; null otherwise.
+             */
+            other_members?: number | null;
+            /**
              * Self Deletion
              * @description What `DELETE /me` does for the caller while signed in to this account, so a client can say so before the call: `user` deletes the caller alone, at once; `account` schedules the deletion of the whole account (the caller owns it); null means the call is refused with 409 (the caller owns or belongs to another account as well).
              */
             self_deletion?: ("account" | "user") | null;
+            /**
+             * Self Deletion Blocked
+             * @description Why `DELETE /me` would be refused now, so a client can explain it before the call: `other_members` (the owner removes the other members first, see `other_members`), `owns_another_account`, `member_of_another_account`. Null: nothing blocks it (an account already scheduled for deletion shows that in `account_status`).
+             */
+            self_deletion_blocked?: ("other_members" | "owns_another_account" | "member_of_another_account") | null;
             /** Status */
             status: string;
         };
