@@ -300,11 +300,11 @@ flowchart LR
   s_EVENTS -->|"event.identity.account.created"| c_entitlements
   s_EVENTS -->|"event.identity.account.created<br/>event.identity.user.deleted<br/>event.mower.removed"| c_fleet
   s_EVENTS -->|"event.identity.user.deleted"| c_identity
-  s_EVENTS -->|"event.identity.><br/>event.mower.><br/>event.telemetry.><br/>+2 more"| c_notifications
+  s_EVENTS -->|"event.identity.><br/>event.identity.user.deleted<br/>event.mower.><br/>+3 more"| c_notifications
   s_EVENTS -->|"event.identity.grants.changed<br/>event.notifications.><br/>event.vision.proposal.>"| c_realtime
   s_EVENTS -->|"event.identity.user.deleted"| c_scheduler
   s_EVENTS -->|"event.identity.user.deleted<br/>event.mower.><br/>event.notifications.>"| c_telemetry
-  s_EVENTS -->|"event.identity.>"| c_vision
+  s_EVENTS -->|"event.identity.><br/>event.identity.user.deleted"| c_vision
 ```
 
 #### TELEMETRY
@@ -419,7 +419,7 @@ flowchart LR
 | `event.identity.>` | EVENTS | - | notifications, vision |
 | `event.identity.account.created` | EVENTS | - | billing, entitlements, fleet |
 | `event.identity.grants.changed` | EVENTS | identity | realtime |
-| `event.identity.user.deleted` | EVENTS | - | fleet, identity, scheduler, telemetry |
+| `event.identity.user.deleted` | EVENTS | - | fleet, identity, notifications, scheduler, telemetry, vision |
 | `event.mower.>` | EVENTS | - | device-gateway, notifications, telemetry |
 | `event.mower.removed` | EVENTS | - | fleet |
 | `event.notifications.>` | EVENTS | - | realtime, telemetry |

@@ -27,9 +27,11 @@ personal is left) and may consume the event. The test fails for:
   shrinks), or that stores nothing personal (a stale entry);
 * a service with the adapter that may not consume the event.
 
-:data:`USER_PENDING` is the follow-up of step 3 for the two services of step 2b. They already
-react to the event with handlers of their own that predate the kit's use case; the entries say
-what those handlers leave behind.
+:data:`USER_PENDING` was the follow-up of step 3 for Notifications and Vision, which reacted to
+the event with handlers of their own that predated the kit's use case. It is empty since that
+follow-up and stays empty: a new service that stores something personal of a user forgets it
+from its first day. The event is handled in one place per service, the kit's handler in that
+adapter: no other module of a service's source names ``IDENTITY_USER_DELETED``.
 """
 
 import importlib
@@ -47,20 +49,10 @@ ORCHESTRATOR = "identity"
 
 EVENT_SUBJECT = event_subject_for_type(IDENTITY_USER_DELETED)
 
-USER_PENDING: dict[str, str] = {
-    "notifications": (
-        "deletes the user's rows on the event (its own handler); after step 2b: move it onto "
-        "the kit's UserErasure so the tables with user_id are read from the schema and "
-        "leftovers fail the event"
-    ),
-    "vision": (
-        "deletes user_providers and user_preferences on the event (its own handler); after "
-        "step 2b: also provider_requests (user_id) and the names in proposals.requested_by, "
-        "approved_by and decided_by, through the kit's UserErasure"
-    ),
-}
+USER_PENDING: dict[str, str] = {}
 """Services that store something personal of a user and do not forget it through the kit's use
-case yet, with what is open. Shrinks to empty with the follow-up of step 2b."""
+case yet, with what is open. Empty since the follow-up of step 3 (Notifications and Vision), and
+it stays empty."""
 
 
 def _nats_auth(repo_root: Path) -> ModuleType:
@@ -112,6 +104,15 @@ def test_the_scan_finds_what_is_personal(personal: dict[str, list[str]]) -> None
     assert personal["fleet"] == ["commands.issued_by", "drive_sessions.started_by"]
     assert personal["scheduler"] == ["schedule_runs.issued_by", "schedules.owner"]
     assert "preferences" in personal["notifications"]
+    assert "notification_images" not in personal["notifications"]  # no user_id column
+    assert personal["vision"] == [
+        "proposals.approved_by",
+        "proposals.decided_by",
+        "proposals.requested_by",
+        "provider_requests",
+        "user_preferences",
+        "user_providers",
+    ]
     assert personal["planner"] == []  # created_by there is a plain id
 
 
@@ -145,11 +146,18 @@ def test_a_forgetting_service_may_consume_the_event(repo_root: Path) -> None:
         )
 
 
-def test_the_pending_services_react_to_the_event_already(repo_root: Path) -> None:
-    """Pending means "not through the kit yet", never "not at all": both consume the event."""
-    users = _nats_auth(repo_root).USERS
-    for service in sorted(USER_PENDING):
-        assert any(subject_matches(p, EVENT_SUBJECT) for p in users[service].consume), service
+def test_the_kits_handler_is_the_only_one_of_the_event(repo_root: Path) -> None:
+    """One place per service: the event reaches a service through its user erasure adapter,
+    never also through a handler of its own (as Notifications and Vision had before)."""
+    services = repo_root / "services"
+    others = sorted(
+        source.relative_to(services).as_posix()
+        for source in services.glob("*/src/**/*.py")
+        if source.relative_to(services).parts[0] != ORCHESTRATOR
+        and source.name != "user_erasure.py"
+        and "IDENTITY_USER_DELETED" in source.read_text("utf-8")
+    )
+    assert not others, f"{others} handle identity.user.deleted outside adapters/bus/user_erasure.py"
 
 
 def test_identity_publishes_the_event(repo_root: Path) -> None:
