@@ -1011,7 +1011,7 @@ nats:
     merge:
       metadata:
         annotations:
-          checksum/mowdeck-nats-auth: "9655a43f39fcbfcc76a07a004ec401d2d9e9164a5f9a4e69e804a1efddd87100"
+          checksum/mowdeck-nats-auth: "1ffd1f10f196723086508bcaaebf90269c1a759548c0d3fb493cf121a56fa73a"
     patch:
       - op: add
         path: /spec/volumes/-
