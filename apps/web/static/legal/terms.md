@@ -26,6 +26,8 @@
 
 **TODO:** how a subscription can be cancelled (for example in the subscription management of the account page) and when the cancellation takes effect. Mention the cancellation button where it is required by law.
 
+**Deleting the account.** If deleting your account ends a paid subscription, the unused part of the current paid period is refunded to the original payment method. Consumption that has already been billed, such as metered usage, is not refunded.
+
 ## 6. Right of withdrawal for consumers
 
 **TODO:** the statutory withdrawal information and the model withdrawal form for consumers, including when the right of withdrawal expires for digital services.
