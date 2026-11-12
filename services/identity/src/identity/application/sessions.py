@@ -60,7 +60,13 @@ from identity.domain.credentials import (
     validate_password,
     verifier_matches,
 )
-from identity.domain.erasure import SelfDeletion, self_deletion
+from identity.domain.erasure import (
+    SelfDeletion,
+    SelfDeletionBlock,
+    deletion_blocked_by,
+    self_deletion,
+    self_deletion_block,
+)
 from identity.domain.errors import AuthenticationFailed, ForbiddenError, NotFoundError, RateLimited
 from identity.domain.models import (
     Account,
@@ -107,6 +113,14 @@ class MembershipView:
     """What ``DELETE /me`` would do for the caller in this account (ADR 0082): ``user`` (the
     caller alone, at once), ``account`` (the caller owns it: the account is scheduled for
     deletion), or None (refused: the caller owns or belongs to another account as well)."""
+    delete_after: datetime | None = None
+    """While the account is ``deleting``: when its grace period ends (the banner of step 4)."""
+    self_deletion_blocked: SelfDeletionBlock | None = None
+    """Why ``DELETE /me`` would be refused now (other members, another account), or None."""
+    other_members: int | None = None
+    """The owner only: how many other members the account has (they block its deletion)."""
+    deletion_grace_days: int | None = None
+    """The owner only: the grace period a deletion request starts, in days (the dialog's date)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1085,6 +1099,9 @@ class SessionService:
                 if acct is None:
                     continue
                 operation = self_deletion(memberships, acct.id)
+                members = (
+                    await tx.memberships.find(account_id=acct.id) if membership.is_owner else []
+                )
                 views.append(
                     MembershipView(
                         acct.id,
@@ -1094,6 +1111,14 @@ class SessionService:
                         membership.is_admin,
                         membership.status.value,
                         operation,
+                        delete_after=acct.delete_after,
+                        self_deletion_blocked=self_deletion_block(memberships, acct.id, members),
+                        other_members=(
+                            deletion_blocked_by(members, found.id) if membership.is_owner else None
+                        ),
+                        deletion_grace_days=(
+                            self.deps.config.deletion_grace.days if membership.is_owner else None
+                        ),
                     )
                 )
         return MeView(principal, user=found, memberships=views)

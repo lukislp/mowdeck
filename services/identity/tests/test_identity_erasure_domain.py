@@ -19,6 +19,7 @@ from identity.domain.erasure import (
     AccountErasure,
     ErasureState,
     SelfDeletion,
+    SelfDeletionBlock,
     ask_order,
     audit_fields_after_user_scrub,
     concerns_user,
@@ -28,6 +29,7 @@ from identity.domain.erasure import (
     required_services,
     retry_delay,
     self_deletion,
+    self_deletion_block,
     self_deletion_blocker,
 )
 from identity.domain.models import Account, AccountStatus, Membership, Status
@@ -223,6 +225,33 @@ def test_a_person_in_more_than_one_account_is_never_deleted_from_one_of_them() -
     # The texts say what to do and name nobody and no account.
     for text in (OWNS_ANOTHER_ACCOUNT, MEMBER_OF_ANOTHER_ACCOUNT):
         assert "first" in text and str(user_id) not in text
+
+
+def test_the_refusal_is_named_in_advance_in_the_order_the_calls_check() -> None:
+    """``GET /me`` says why ``DELETE /me`` would be refused, so the app explains it first."""
+    owner_id, anna_id = uuid4(), uuid4()
+    owner = _member(owner_id, owner=True)
+    anna = Membership(uuid4(), owner.account_id, anna_id, Status.ACTIVE, NOW)
+    alone, with_anna = [owner], [owner, anna]
+    assert self_deletion_block([owner], owner.account_id, alone) is None
+    assert self_deletion_block([owner], owner.account_id, with_anna) is (
+        SelfDeletionBlock.OTHER_MEMBERS
+    )
+    # A member is never blocked by the others: they leave alone.
+    assert self_deletion_block([anna], owner.account_id, with_anna) is None
+    # Another account: the codes of the two texts.
+    elsewhere = _member(owner_id)
+    assert self_deletion_block([owner, elsewhere], owner.account_id, alone) is (
+        SelfDeletionBlock.MEMBER_OF_ANOTHER_ACCOUNT
+    )
+    owned = _member(anna_id, owner=True)
+    assert self_deletion_block([anna, owned], owner.account_id, with_anna) is (
+        SelfDeletionBlock.OWNS_ANOTHER_ACCOUNT
+    )
+    # Other members first, as ``DELETE /accounts/{id}`` checks them first.
+    assert self_deletion_block([owner, elsewhere], owner.account_id, with_anna) is (
+        SelfDeletionBlock.OTHER_MEMBERS
+    )
 
 
 def test_an_audit_row_concerns_a_user_as_actor_or_as_target() -> None:

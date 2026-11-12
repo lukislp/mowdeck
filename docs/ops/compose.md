@@ -91,6 +91,8 @@ gzip -dc ~/mowdeck-backups/mowdeck-before-<x>-<stamp>.sql.gz | docker compose ex
 
 **Long-term backups are yours for now.** MowDeck does not create nightly or off-host backups, does not set a retention for them and does not delete anything you copy elsewhere. If you need them, schedule your own dump, decide how long you keep it and where it is stored, and remember that deleted data survives in every backup until that backup is deleted. A retention recommendation for the project is still being decided.
 
+**TODO (operator): state your backup retention.** The app's deletion dialog ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), Settings -> Profile) tells users that backups made by the operator may still contain their data until they are replaced, and that how long is up to you. Put your retention (how long, where, who can read them) into the privacy policy (`apps/web/static/legal/privacy.md`, section 6, or your own page) so that sentence has an answer. The dumps of `deploy.sh` count: up to `MOWDECK_BACKUP_KEEP` of them, each until the rotation removes it.
+
 **After updating an existing installation.** The first `deploy.sh` run after the update still runs the script of the release you are on; the new behaviour starts with the deploy after that. From then on `deploy.sh` moves earlier `env-before-*.env` files out of the dump directory into the `.env` directory and deletes dumps and copies beyond the newest `MOWDECK_BACKUP_KEEP`. To do the same at once, or to keep a dump first, copy the ones you want out of the directory and run:
 
 ```bash

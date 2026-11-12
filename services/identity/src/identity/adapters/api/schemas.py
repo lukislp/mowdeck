@@ -169,6 +169,36 @@ class MembershipOut(BaseModel):
             "call is refused with 409 (the caller owns or belongs to another account as well)."
         ),
     )
+    delete_after: datetime | None = Field(
+        default=None,
+        description=(
+            "While `account_status` is `deleting`: when the grace period ends and the purge "
+            "starts; until then the owner can cancel with `POST /accounts/{id}/restore`."
+        ),
+    )
+    self_deletion_blocked: (
+        Literal["other_members", "owns_another_account", "member_of_another_account"] | None
+    ) = Field(
+        default=None,
+        description=(
+            "Why `DELETE /me` would be refused now, so a client can explain it before the call: "
+            "`other_members` (the owner removes the other members first, see `other_members`), "
+            "`owns_another_account`, `member_of_another_account`. Null: nothing blocks it (an "
+            "account already scheduled for deletion shows that in `account_status`)."
+        ),
+    )
+    other_members: int | None = Field(
+        default=None,
+        description="For the owner: how many other members the account has; null otherwise.",
+    )
+    deletion_grace_days: int | None = Field(
+        default=None,
+        description=(
+            "For the owner: the grace period a deletion request starts, in days "
+            "(`IDENTITY_DELETION_GRACE_DAYS`), so the app can name the date before the call; "
+            "null otherwise."
+        ),
+    )
 
 
 class MeOut(BaseModel):
@@ -212,6 +242,12 @@ class MeOut(BaseModel):
                     is_admin=m.is_admin,
                     status=m.status,
                     self_deletion=m.self_deletion.value if m.self_deletion else None,
+                    delete_after=m.delete_after,
+                    self_deletion_blocked=(
+                        m.self_deletion_blocked.value if m.self_deletion_blocked else None
+                    ),
+                    other_members=m.other_members,
+                    deletion_grace_days=m.deletion_grace_days,
                 )
                 for m in view.memberships
             ],

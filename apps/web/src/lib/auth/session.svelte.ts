@@ -28,6 +28,7 @@
  *   session ended here, "1" with a token). A refresh that finds no session drops the companion.
  */
 import { ApiProblem, problemFromResponse } from '#lib/api/problem.js';
+import type { components } from '#lib/generated/identity.js';
 
 export const IDENTITY = '/api/v1/identity';
 const REFRESH_LEAD_MS = 60_000;
@@ -40,12 +41,31 @@ const CSRF_HEADERS = { 'X-Requested-With': 'mowdeck-web', 'X-Mowdeck-Refresh': '
 /** `localStorage` key of the session hint (see the module documentation). */
 export const SESSION_HINT_KEY = 'mowdeck.session';
 
-export interface Membership {
-  account_id: string;
-  account_name: string;
-  is_owner: boolean;
-  is_admin: boolean;
-}
+type MembershipOut = components['schemas']['MembershipOut'];
+
+/**
+ * A membership as `GET /me` lists it. The deletion fields (ADR 0082) say in advance what
+ * "delete me" does and why it is refused, and when a scheduled account goes; the rules are
+ * Identity's, the app only shows them (`#lib/account-deletion`).
+ */
+export type Membership = Pick<
+  MembershipOut,
+  'account_id' | 'account_name' | 'is_owner' | 'is_admin'
+> &
+  Partial<
+    Pick<
+      MembershipOut,
+      | 'account_status'
+      | 'self_deletion'
+      | 'self_deletion_blocked'
+      | 'other_members'
+      | 'delete_after'
+      | 'deletion_grace_days'
+    >
+  >;
+
+/** Why the last session ended without a plain sign-out (the notice on the login page). */
+export type SessionEnd = 'expired' | 'deleted';
 
 export interface Me {
   subject: string;
@@ -138,8 +158,11 @@ function browserDeps(): SessionDeps {
 export class SessionManager {
   status = $state<SessionStatus>('unknown');
   me = $state<Me | null>(null);
-  /** Why the last session ended without a logout (shown on the login page). */
-  ended = $state<'expired' | null>(null);
+  /**
+   * Why the last session ended (shown on the login page): `expired` without a sign-out,
+   * `deleted` after "delete me" (ADR 0082).
+   */
+  ended = $state<SessionEnd | null>(null);
 
   #deps: SessionDeps;
   #token: string | null = null;
@@ -303,7 +326,8 @@ export class SessionManager {
     this.#clear('anonymous');
   }
 
-  async logout(): Promise<void> {
+  /** End the session here and at Identity; `reason` is what the login page says next. */
+  async logout(reason: SessionEnd | null = null): Promise<void> {
     try {
       await this.#deps.fetch(`${IDENTITY}/session/logout`, {
         method: 'POST',
@@ -314,7 +338,7 @@ export class SessionManager {
       // offline: the cookie is cleared server side on the next refresh attempt anyway
     }
     this.#deps.channel?.postMessage({ type: 'logout' });
-    this.ended = null;
+    this.ended = reason;
     this.#writeHint(false);
     this.#clear('anonymous');
   }
