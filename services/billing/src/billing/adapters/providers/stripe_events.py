@@ -22,6 +22,7 @@ from uuid import UUID
 from mowdeck_contracts.v1 import SubscriptionStatus
 
 from billing.domain.models import (
+    CreditBalance,
     InvoiceLine,
     LineKind,
     PaidInvoice,
@@ -32,6 +33,7 @@ from billing.domain.models import (
     ProviderInvoice,
     ProviderRefund,
     ProviderSubscription,
+    RecentPayment,
     RefundStatus,
 )
 
@@ -245,6 +247,35 @@ def dispute_from(obj: dict[str, Any]) -> ProviderDispute:
         reason=obj.get("reason") or None,
         created=_ts(obj.get("created")) or datetime.now(UTC),
         due_by=due_by,
+    )
+
+
+def credit_balance_from(obj: dict[str, Any], cleared: int = 0) -> CreditBalance:
+    """The balance of a Stripe ``customer``: Stripe's ``balance`` is negative for a credit, the
+    model's ``amount`` positive."""
+    return CreditBalance(
+        amount=-_int(obj.get("balance")),
+        currency=str(obj.get("currency") or ""),
+        cleared=cleared,
+    )
+
+
+def recent_payment_from(obj: dict[str, Any]) -> RecentPayment | None:
+    """A successful Stripe ``charge`` as a payment to refund against (its PaymentIntent when it
+    has one, as the refunds of an invoice name it); None for a charge that did not succeed."""
+    if obj.get("status") != "succeeded" or obj.get("paid") is False:
+        return None
+    created = _ts(obj.get("created"))
+    if created is None:
+        return None
+    captured = obj.get("amount_captured")
+    amount = captured if isinstance(captured, int) and captured > 0 else _int(obj.get("amount"))
+    return RecentPayment(
+        payment_ref=_id(obj.get("payment_intent")) or str(obj["id"]),
+        amount=amount,
+        currency=str(obj.get("currency") or ""),
+        created=created,
+        refunded=_int(obj.get("amount_refunded")),
     )
 
 

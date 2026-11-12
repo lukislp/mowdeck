@@ -4,8 +4,10 @@
 """Refunds the operator pays back by hand (ADR 0082, section 5).
 
 A refund of an account erasure that cannot be made at the provider is recorded in
-``manual_refunds``: by the erasure itself, in the transaction that deletes the account's rows,
-when it skips a refund (:class:`billing.application.erasure.AccountPurge`), and by the webhook
+``manual_refunds``: by the erasure itself when it skips a refund or cannot place all of a
+credit balance, before it deletes the customer at the provider and again (a no-op by key) in
+the transaction that deletes the account's rows
+(:class:`billing.application.erasure.AccountPurge`), and by the webhook
 path when a refund the provider had accepted fails after the erasure was over
 (:meth:`ManualRefunds.record_lost`). One record per payment and invoice, whichever path came
 first. A record names the payment, the invoice, the amount and why; never the account.

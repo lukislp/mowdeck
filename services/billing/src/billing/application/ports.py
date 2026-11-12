@@ -17,6 +17,7 @@ from mowdeck_contracts.v1 import PlanSetReply, PlanSetRequest, SubscriptionChang
 from billing.domain.ledger import PaymentFact
 from billing.domain.models import (
     BillingAccount,
+    CreditBalance,
     Customer,
     EventOutcome,
     Invoice,
@@ -27,6 +28,7 @@ from billing.domain.models import (
     ProviderEvent,
     ProviderRefund,
     ProviderSubscription,
+    RecentPayment,
     Subscription,
     WebhookEvent,
 )
@@ -119,6 +121,35 @@ class PaymentProvider(Protocol):
         subscription that has ended already, or that the provider does not know, is a success.
         Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later) while
         the provider has not confirmed that the subscription is over."""
+        ...
+
+    async def customer_credit_balance(self, customer_id: str) -> CreditBalance | None:
+        """The customer's balance (positive: a credit the provider holds for the customer), with
+        what earlier balance transactions carrying the erasure's metadata
+        (:func:`billing.domain.credit.is_clearing_metadata`) took off it (``cleared``). None when
+        the provider does not know the customer (any more). For the erasure (ADR 0082). Raises
+        ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later)."""
+        ...
+
+    async def recent_payments(self, customer_id: str, since: datetime) -> list[RecentPayment]:
+        """The customer's successful payments created at or after ``since``, newest first, with
+        what is refunded of each. Raises ``ProviderError`` like
+        :meth:`customer_credit_balance`."""
+        ...
+
+    async def clear_credit_balance(
+        self,
+        customer_id: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> None:
+        """Take a credit of ``amount`` (smallest unit of ``currency``, > 0) off the customer's
+        balance with a balance transaction carrying ``metadata``, after it was paid back. The
+        same ``idempotency_key`` never takes it twice; a customer the provider does not know is a
+        success. Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed
+        later)."""
         ...
 
     async def delete_customer(self, customer_id: str) -> None:

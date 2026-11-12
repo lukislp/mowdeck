@@ -166,6 +166,7 @@ describe('the danger area', () => {
       'der ungenutzte Teil des laufenden, bezahlten Zeitraums auf das ursprüngliche Zahlungsmittel erstattet',
     );
     expect(billing).toHaveTextContent('Der Betrag wird an diesem Tag berechnet');
+    expect(billing).toHaveTextContent('Ein verbleibendes Guthaben wird ebenfalls erstattet');
     expect(billing).not.toHaveTextContent('ohne Erstattung');
     expect(billing).not.toHaveTextContent(/\d+[,.]\d{2}/);
     expect(billing).toHaveTextContent(
