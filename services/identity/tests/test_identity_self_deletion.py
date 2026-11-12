@@ -360,6 +360,32 @@ async def test_me_says_in_advance_which_deletion_applies() -> None:
     assert deleting[0]["account_status"] == AccountStatus.DELETING.value
 
 
+async def test_me_names_the_refusal_the_member_count_and_the_date() -> None:
+    """What the app's danger area and its banner read from ``GET /me`` alone (step 4): why the
+    deletion is refused, how many members block the owner, and when a scheduled account goes."""
+    async with harness() as h:
+        lukas = await h.register("lukas")
+        _, anna = await h.subuser(lukas, "anna")
+        with_anna = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"][0]
+        member = (await h.client.get(ME, headers=bearer(anna))).json()["memberships"][0]
+        await _delete_me(h, anna)
+        alone = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"][0]
+        scheduled = (await _delete_me(h, lukas.token)).json()
+        deleting = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"][0]
+        await h.client.post(lukas.url("/restore"), headers=lukas.headers)
+        restored = (await h.client.get(ME, headers=lukas.headers)).json()["memberships"][0]
+    assert (with_anna["self_deletion_blocked"], with_anna["other_members"]) == ("other_members", 1)
+    assert (member["self_deletion_blocked"], member["other_members"]) == (None, None)
+    assert (with_anna["deletion_grace_days"], member["deletion_grace_days"]) == (7, None)
+    assert member["delete_after"] is None
+    assert (alone["self_deletion_blocked"], alone["other_members"]) == (None, 0)
+    assert deleting["account_status"] == AccountStatus.DELETING.value
+    assert deleting["delete_after"].replace("Z", "+00:00") == scheduled["delete_after"].replace(
+        "Z", "+00:00"
+    )
+    assert (restored["account_status"], restored["delete_after"]) == ("active", None)
+
+
 async def test_every_user_has_exactly_one_membership() -> None:
     """The invariant the deletion relies on: a membership is only ever created together with its
     user (a registration, a new sub-user), so nobody is in two accounts. Every way a user or a
@@ -426,6 +452,10 @@ async def test_an_owner_of_another_account_is_not_deleted_as_a_member_here() -> 
     assert as_owner.status_code == 409 and as_owner.json()["detail"] == MEMBER_OF_ANOTHER_ACCOUNT
     assert directly.status_code == 409 and directly.json()["detail"] == MEMBER_OF_ANOTHER_ACCOUNT
     assert [m["self_deletion"] for m in me] == [None, None]  # the client knows in advance
+    assert [m["self_deletion_blocked"] for m in me] == [
+        "member_of_another_account",
+        "owns_another_account",
+    ]
     assert _rows_of_user(h, lukas.user_id) == before and before["memberships"] == 2
     assert account["status"] == AccountStatus.ACTIVE.value and events == []
 

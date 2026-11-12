@@ -9,14 +9,15 @@
 
   import { fleetApi, identityApi, schedulerApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import AccountDeletionPanel from '#lib/account-deletion/AccountDeletionPanel.svelte';
   import { session } from '#lib/auth/session.svelte.js';
+  import { signOut } from '#lib/auth/sign-out.js';
   import { canPurchaseHere, probeBilling, type BillingStatus } from '#lib/billing/billing.js';
   import BillingPanel from '#lib/components/BillingPanel.svelte';
   import LanguageSwitch from '#lib/components/LanguageSwitch.svelte';
   import PlanPanel from '#lib/components/PlanPanel.svelte';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import DemoLock from '#lib/demo/DemoLock.svelte';
-  import { forgetVisitor } from '#lib/demo/sandbox.js';
   import { problemMessage, roleLabel } from '#lib/i18n.js';
   import { nativeShell } from '#lib/native/runtime.js';
   import { m } from '#lib/paraglide/messages.js';
@@ -125,14 +126,8 @@
     }
   }
 
-  async function logout(): Promise<void> {
-    // App shell: remove this device's APNs token while the session can still do so.
-    await nativeShell.signingOut();
-    // A demo visitor who logs out left on purpose: no fresh sandbox by itself (ADR 0076).
-    forgetVisitor();
-    await session.logout();
-    await goto('/login', { replace: true });
-  }
+  // The app shell's hand-over first, then the session (one sequence with "Delete me").
+  const logout = () => signOut();
 </script>
 
 {#if mustChange}
@@ -251,6 +246,9 @@
 <Panel label={m.account_logout()}>
   <Button icon="logout" onclick={logout} testid="logout">{m.account_logout()}</Button>
 </Panel>
+
+<!-- Separate from the rest, below sign-out (ADR 0082): delete yourself or the account. -->
+<AccountDeletionPanel />
 
 <style>
   .pad {

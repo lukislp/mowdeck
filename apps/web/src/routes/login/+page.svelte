@@ -547,6 +547,10 @@
     {/if}
     {#if session.ended === 'expired' && !problem && !appRequest}
       <ProblemNotice tone="info" title={m.login_session_ended()} />
+    {:else if session.ended === 'deleted' && !problem && !appRequest}
+      <div data-testid="login-user-deleted">
+        <ProblemNotice tone="info" title={m.login_user_deleted()} />
+      </div>
     {/if}
     {#if !returnLink && !confirming}
       {#if passkeyButton || githubButton || appleButton}
