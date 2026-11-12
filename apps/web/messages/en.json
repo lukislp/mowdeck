@@ -3053,7 +3053,7 @@
   "deletion_account_intro": "Deletes this account and everything in it, in every part of MowDeck: mowers, sites, maps, schedules, history, notifications, linked manufacturer accounts and your user.",
   "deletion_account_grace": "The deletion starts on {date}. Until then you keep full access, your mowers keep running on their schedules and you can stop them at any time. You can cancel the deletion until that date.",
   "deletion_account_locked": "API tokens stop working at once. Until the date no members or tokens can be added.",
-  "deletion_account_billing": "Billing: when the deletion starts, your subscriptions end at once, without a refund for the rest of a paid period. Your customer record at the payment provider is deleted. Invoices and payment records stay with the payment provider.",
+  "deletion_account_billing": "Billing: when the deletion starts, the unused part of the current paid period is refunded to the original payment method, and your subscriptions end. The amount is worked out on that day. Your customer record at the payment provider is deleted. Invoices and payment records stay with the payment provider.",
   "deletion_account_remains": "Technical notices without content, for up to 30 days after the deletion.",
   "deletion_backups": "Backups made by the operator of this server may still contain the data until they are replaced. How long they are kept is up to the operator.",
   "deletion_third_push": "Push messages stop. What the push service of a browser or an ntfy server already holds stays there, like messages already delivered.",

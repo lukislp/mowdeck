@@ -20,8 +20,10 @@ from billing.domain.models import (
     EventOutcome,
     Invoice,
     OfferedPlan,
+    PaidInvoice,
     PlanPrice,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
     Subscription,
     WebhookEvent,
@@ -73,9 +75,39 @@ class PaymentProvider(Protocol):
         """The current state of a subscription at the provider."""
         ...
 
+    async def latest_paid_invoice(self, subscription_id: str) -> PaidInvoice | None:
+        """The newest paid invoice of a subscription that bills a period of it (an invoice of
+        prorations or one-off items alone is passed over), with its lines and the payment that
+        paid it; None when there is none. For the refund of an erased account (ADR 0082).
+        Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later)."""
+        ...
+
+    async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
+        """Every refund of a payment, with its status and metadata (how a retry of an erasure
+        finds the refund it made). Raises ``ProviderError`` like :meth:`latest_paid_invoice`."""
+        ...
+
+    async def refund(
+        self,
+        payment_ref: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> ProviderRefund:
+        """Refund ``amount`` (smallest unit of ``currency``, the payment's currency) of a payment
+        to its original payment method, with ``metadata`` on the refund. The same
+        ``idempotency_key`` never refunds twice. Raises ``RefundImpossible`` when the provider
+        refuses for a reason that does not pass (the payment is too old, disputed, or its
+        method cannot be refunded), else ``ProviderError`` (``ProviderUnavailable`` when the
+        call can succeed later). A refund the provider accepts and then reports as failed comes
+        back with that status."""
+        ...
+
     async def cancel_subscription(self, subscription_id: str) -> None:
         """End a subscription now, for an account that is erased (ADR 0082): at once and not at
-        the period end, without a final invoice, a proration or a refund. Idempotent: a
+        the period end, without a final invoice and without a proration (the unused part of a
+        paid period is refunded before, with :meth:`refund`). Idempotent: a
         subscription that has ended already, or that the provider does not know, is a success.
         Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later) while
         the provider has not confirmed that the subscription is over."""

@@ -12,8 +12,8 @@ Billing needs data only the operator has. Nothing here is legal or tax advice; h
 | 2 | One product per plan (`home`, `fleet`) with a **recurring** price (e.g. monthly, in EUR); note the price ids `price_...` | Stripe: Product catalogue |
 | 3 | Price ids into MowDeck: `BILLING_PRICE_IDS=home=price_...,fleet=price_...` (or `infra/billing/prices.yaml`) | `.env` / Helm `config.BILLING_PRICE_IDS` |
 | 4 | Customer portal: enable it and choose what customers may do (update payment method, view invoices, switch between your plan prices, cancel at period end) | Stripe: Settings, Billing, Customer portal |
-| 5 | Webhook endpoint `https://<your host>/api/v1/billing/webhooks/stripe` with the events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.paid`, `invoice.payment_failed`; copy its signing secret `whsec_...` | Stripe: Developers, Webhooks |
-| 6 | Secrets: `BILLING_STRIPE_SECRET_KEY` (a restricted key with write access to Customers, Checkout Sessions, Customer portal, Subscriptions and read access to Prices is enough) and `BILLING_STRIPE_WEBHOOK_SECRET`; in production as files (`MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE`) or Helm `secrets.BILLING_STRIPE_*` | `.env` / Helm |
+| 5 | Webhook endpoint `https://<your host>/api/v1/billing/webhooks/stripe` with the events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `refund.updated`, `refund.failed`; copy its signing secret `whsec_...` | Stripe: Developers, Webhooks |
+| 6 | Secrets: `BILLING_STRIPE_SECRET_KEY` (a restricted key with write access to Customers, Checkout Sessions, Customer portal, Subscriptions and Refunds, and read access to Prices, Invoices and Invoice payments, is enough) and `BILLING_STRIPE_WEBHOOK_SECRET`; in production as files (`MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE`) or Helm `secrets.BILLING_STRIPE_*` | `.env` / Helm |
 | 7 | Stripe Tax for EU VAT: confirm the head office address, choose the product tax code and the tax behaviour (inclusive or exclusive), add your registrations (your country, and the **EU OSS** registration once cross-border B2C sales exceed EUR 10,000 a year); then `BILLING_AUTOMATIC_TAX=true`. Without a registration Stripe calculates 0 tax. B2B customers with a valid EU VAT id get the reverse charge | Stripe: Tax; your tax office (OSS registration at the BZSt in Germany) |
 | 8 | Invoices: company name, address and VAT id on invoices (Stripe: Settings, Business details and Invoice template); business customers enter their tax id in Checkout (MowDeck asks business accounts for it) | Stripe |
 | 9 | Impressum (company, address, contact, register entry, VAT id, responsible person) | `apps/web/static/legal/imprint.md` |
@@ -50,7 +50,7 @@ curl https://mowdeck.example.org/api/v1/billing/status
 
    ```bash
    stripe listen --forward-to localhost/api/v1/billing/webhooks/stripe \
-     --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.paid,invoice.payment_failed
+     --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.paid,invoice.payment_failed,charge.refunded,refund.updated,refund.failed
    ```
 
 3. Start the stack with the profile, log in as an account owner, open the account page: the plans appear with their prices. "Upgrade" opens Stripe Checkout; pay with the test card `4242 4242 4242 4242` (any future date, any CVC). Back on the account page the plan shows `trial` (or `active` without a trial) with source `billing`; the operator console's account history shows `service:billing:sub_...`.
@@ -62,13 +62,36 @@ curl https://mowdeck.example.org/api/v1/billing/status
 
 When an account is deleted for good ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), after the grace period of 7 days), Identity asks Billing to erase it, before it asks Entitlements:
 
-1. Every open subscription of the account ends at Stripe **at once**, not at the period end, without a final invoice and without a proration. **Nothing is refunded**; refund in the Stripe Dashboard if your terms promise it, before the grace period ends.
+1. For every open subscription of the account, Billing first **refunds the unused part of the current paid period** to the original payment method ([Refunds on erasure](#refunds-on-erasure)), then the subscription ends at Stripe **at once**, not at the period end, without a final invoice and without a proration.
 2. The Stripe customer is deleted, with its name, e-mail address, addresses, tax ids and payment methods.
 3. Billing deletes its rows of the account: the customer, the subscriptions, the invoice references and the ledger rows of its events. It keeps no invoice copies.
 
-**What stays at Stripe:** the invoices and payments of the deleted customer, which Stripe keeps as long as it must. Say so in your privacy policy (Stripe as processor, retention of invoices).
+**What stays at Stripe:** the invoices, payments and refunds of the deleted customer, which Stripe keeps as long as it must. Say so in your privacy policy (Stripe as processor, retention of invoices).
 
-A Stripe error (a rate limit, an outage, a key without the permission to delete customers) fails the erasure: Billing deletes nothing, Identity keeps the account locked and asks again with a growing wait, and `python -m identity.cli erasures` shows `billing` as the service it waits for. A restricted key needs write access to Customers and Subscriptions. Stripe sends `customer.subscription.deleted` and `customer.deleted` afterwards; Billing answers 200 and stores nothing of them (outcome `unknown_account` or `ignored`).
+A Stripe error (a rate limit, an outage, a key without the permission to delete customers) fails the erasure: Billing deletes nothing, Identity keeps the account locked and asks again with a growing wait, and `python -m identity.cli erasures` shows `billing` as the service it waits for. A restricted key needs write access to Customers, Subscriptions and Refunds, and read access to Invoices and Invoice payments. Stripe sends `charge.refunded`, `refund.updated`, `customer.subscription.deleted` and `customer.deleted` afterwards; Billing answers 200 and stores nothing of them (outcome `unknown_account` or `ignored`).
+
+### Refunds on erasure
+
+**The rule** ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), section 5): refund = (what the customer paid for the current period - what was refunded of that payment already) x the unused part of the period, `(period end - now) / (period end - period start)`, at the moment the purge runs (after the grace period), rounded down to the cent (whole units for zero-decimal currencies such as JPY). "Paid" is the latest paid invoice of the subscription after discounts, coupons and credit balance, with tax; only the fixed recurring price counts, not metered usage, prorations of a plan change or one-off items. Nothing is refunded for a trial, a 100 % coupon, an unpaid invoice or a period that is over. Example: 9.00 EUR for 1 to 30 November, purged on 21 November: 2.99 EUR back.
+
+**What you see in Stripe:** a refund on the invoice's payment with the reason "requested by customer" and the metadata `reason=account_erasure`, `account_id`, `subscription_id`, `invoice_id`. Stripe sends the customer its usual refund receipt if receipts are on (Settings, Customer emails). Refunds to bank accounts and some wallets stay *pending* for days; Billing counts a pending refund as made and the erasure goes on.
+
+**When a refund fails,** the erasure fails (`python -m identity.cli erasures` shows `billing`), the subscription keeps running, and Identity asks again; a retry never refunds twice (it finds the earlier refund by its metadata). **When a refund cannot be made** (Stripe refuses for good: the payment is too old for a refund, disputed, or refunded in full already; or 3 refunds of the erasure failed), the erasure goes on without it and Billing logs a **warning**:
+
+```bash
+docker compose -f infra/compose/docker-compose.yml logs billing | grep -E "pay it out by hand|waits for the customer"
+# Kubernetes: kubectl logs deploy/mowdeck-billing | grep -E "pay it out by hand|waits for the customer"
+```
+
+| Warning | Meaning | What you do |
+| --- | --- | --- |
+| `refund of an erased account skipped: pay it out by hand` | the refund was not made; `amount` and `currency` (smallest unit: `600 eur` is 6.00 EUR), `account_id`, `payment`, `reason` | pay the amount back yourself (e.g. a bank transfer; the customer record at Stripe is gone, the payment `payment` still shows who paid) and keep the record in your bookkeeping |
+| `a refund of an account erasure failed: pay it out by hand` | a refund Stripe accepted failed later (e.g. a closed card), reported by `refund.failed` / `refund.updated` | the same |
+| `refund of an erased account waits for the customer` | Stripe asked the customer for the details it needs (`requires_action`) | nothing at first; if Stripe cancels it later, the second warning follows |
+
+Make sure `refund.updated` and `refund.failed` are among the webhook events (step 5 of the checklist), or a refund that fails later goes unnoticed.
+
+**Tax and bookkeeping:** a refund changes the revenue of the period it belongs to, and with Stripe Tax the refunded tax is reversed in Stripe's tax reports. Check with your tax adviser how it appears in your bookkeeping (a credit note, the VAT return of which period). Say in your terms that an account deletion refunds the unused part of a paid period (step 10 of the checklist).
 
 **Identity must know that Billing runs,** or it would erase an account everywhere else and leave the customer and a running subscription at Stripe. The deployment tells it: Compose passes `COMPOSE_PROFILES` to Identity and to Billing, the chart sets both from `services.billing.enabled`. `docker compose --profile billing up` without `COMPOSE_PROFILES=billing` in `.env` does not tell Identity, so Billing refuses to start then and says why in its log. After adding the profile, recreate the stack (`docker compose up -d --wait`): Identity has to restart to read it.
 

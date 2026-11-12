@@ -14,7 +14,7 @@ You can delete your data inside MowDeck, in the browser and in the iOS and Andro
 - The whole account and everything in it is deleted, in every part of MowDeck, **after a waiting period of 7 days** (your administrator can change it). The dialog shows the exact date.
 - Until that date you keep full access: your mowers keep running on their schedules and you can stop them at any time. A banner on every page shows the date and has **Cancel deletion**.
 - API tokens stop working at once, and until the date no members or tokens can be added.
-- If this server sells subscriptions: when the deletion starts, your subscriptions end at once, **without a refund** for the rest of a paid period. Your customer record at the payment provider is deleted; invoices and payment records stay with the payment provider.
+- If this server sells subscriptions: when the deletion starts, the **unused part of the current paid period is refunded** to the original payment method, and your subscriptions end. The amount is worked out on that day, from what you paid for the period and the days left of it. Some payment methods (a bank transfer, for example) take a few days to show the refund. Your customer record at the payment provider is deleted; invoices and payment records stay with the payment provider.
 
 ## The account has other members
 

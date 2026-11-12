@@ -22,6 +22,13 @@ late ``customer.subscription.deleted``, invoice or checkout event of that custom
 write a row nor set a plan again. An event is applied under a lock on its customer row
 (:meth:`~billing.application.ports.Tx.lock_customer`) which the erasure also takes, so an event
 that is being applied finishes, plan and all, before the rows go.
+
+**Refund events** (``refund.updated``, ``refund.failed``, ``charge.refunded``) change nothing:
+Billing stores no refunds. They come mostly after an account erasure refunded the rest of a
+paid period, for a customer Billing no longer knows, and are acknowledged and dropped like any
+event of such a customer. A refund of an erasure that the provider reports as failed or
+canceled is logged as a warning: the money did not go back and the operator pays it out by hand
+(:func:`billing.domain.refunds.erasure_refund_lost`).
 """
 
 import asyncio
@@ -55,12 +62,15 @@ from billing.domain.models import (
     Invoice,
     OfferedPlan,
     PlanPrice,
+    ProviderCharge,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
     Subscription,
     WebhookEvent,
 )
 from billing.domain.prices import PriceTable
+from billing.domain.refunds import erasure_refund_lost, is_erasure_metadata
 from billing.domain.rules import plan_decision
 
 _log = get_logger("billing.service")
@@ -75,7 +85,14 @@ SUBSCRIPTION_EVENTS = frozenset(
 TRIAL_WILL_END = "customer.subscription.trial_will_end"
 CHECKOUT_COMPLETED = "checkout.session.completed"
 INVOICE_EVENTS = frozenset({"invoice.paid", "invoice.payment_failed"})
-HANDLED_EVENTS = SUBSCRIPTION_EVENTS | INVOICE_EVENTS | {TRIAL_WILL_END, CHECKOUT_COMPLETED}
+REFUND_EVENTS = frozenset({"refund.updated", "refund.failed"})
+CHARGE_REFUNDED = "charge.refunded"
+HANDLED_EVENTS = (
+    SUBSCRIPTION_EVENTS
+    | INVOICE_EVENTS
+    | REFUND_EVENTS
+    | {TRIAL_WILL_END, CHECKOUT_COMPLETED, CHARGE_REFUNDED}
+)
 """The provider event types Billing handles (the webhook endpoint should send only these)."""
 
 
@@ -400,7 +417,43 @@ class BillingService:
             return await self._trial_will_end(event.subscription, event)
         if event.type in INVOICE_EVENTS and event.invoice is not None:
             return await self._apply_invoice(event)
+        if event.type in REFUND_EVENTS and event.refund is not None:
+            return self._refund_reported(event, event.refund), None
+        if event.type == CHARGE_REFUNDED and event.charge is not None:
+            return await self._charge_refunded(event, event.charge)
         return EventOutcome.IGNORED, None
+
+    @staticmethod
+    def _refund_reported(event: ProviderEvent, refund: ProviderRefund) -> EventOutcome:
+        """A refund changed. Nothing is stored; a refund of an account erasure belongs to an
+        account that is erased (or being erased): ``unknown_account``, and a warning when the
+        money did not go back."""
+        if not is_erasure_metadata(refund.metadata):
+            return EventOutcome.IGNORED
+        if erasure_refund_lost(refund):
+            _log.warning(
+                "a refund of an account erasure failed: pay it out by hand",
+                event_id=event.id,
+                refund=refund.id,
+                status=refund.status.value,
+                failure_reason=refund.failure_reason,
+                amount=refund.amount,
+                currency=refund.currency,
+                account_id=refund.metadata.get("account_id"),
+                invoice_id=refund.metadata.get("invoice_id"),
+            )
+        return EventOutcome.UNKNOWN_ACCOUNT
+
+    async def _charge_refunded(
+        self, event: ProviderEvent, charge: ProviderCharge
+    ) -> tuple[EventOutcome, UUID | None]:
+        """A payment was refunded (by an erasure or in the provider's dashboard). Nothing is
+        stored; the customer decides whose event it is, as for every event."""
+        async with self.store.transaction() as tx:
+            account_id = await self._customer_of(tx, event, charge.customer_id)
+        if account_id is None:
+            return EventOutcome.UNKNOWN_ACCOUNT, None
+        return EventOutcome.IGNORED, account_id
 
     async def _apply_subscription(
         self, data: ProviderSubscription, event: ProviderEvent, customer_id: str | None

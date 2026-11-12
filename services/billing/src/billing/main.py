@@ -151,7 +151,7 @@ def build_app(
             clock=clock or utc_now,
         )
         app.state.billing_service = service
-        erasure = account_erasure(store_ref, active_provider)
+        erasure = account_erasure(store_ref, active_provider, service.clock)
         app.state.erasure = erasure
         subscriptions: list[Subscription] = []
         if active_bus is not None:

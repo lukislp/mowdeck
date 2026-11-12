@@ -158,6 +158,83 @@ class ProviderInvoice:
     pdf_url: str | None = None
 
 
+class LineKind(StrEnum):
+    """What an invoice line bills (the refund of an erasure counts only ``recurring``)."""
+
+    RECURRING = "recurring"
+    """A subscription price for a billing period: paid in advance for a licensed price, in
+    arrears (for the period before) for a metered one."""
+    PRORATION = "proration"
+    """A credit or a charge for a change within a period (an upgrade, a downgrade)."""
+    OTHER = "other"
+    """A one-off item."""
+
+
+@dataclass(frozen=True, slots=True)
+class InvoiceLine:
+    """One line of an invoice: its amount in the currency's smallest unit (before the
+    discounts and taxes of the invoice) and the period it bills."""
+
+    amount: int
+    kind: LineKind
+    period_start: datetime
+    period_end: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PaidInvoice:
+    """The latest paid invoice of a subscription with the payment that paid it: what the
+    refund of an erased account is computed from (ADR 0082).
+
+    ``amount_paid`` is what the customer actually paid: after discounts, coupons and the credit
+    balance, with taxes. ``payment_ref`` is the provider's payment (a Stripe PaymentIntent or
+    charge), None when the invoice was paid without one (by the credit balance alone, or
+    marked paid outside the provider). ``payment_amount`` is what that payment took."""
+
+    invoice_id: str
+    subscription_id: str
+    status: str
+    currency: str
+    amount_paid: int
+    lines: tuple[InvoiceLine, ...]
+    payment_ref: str | None = None
+    payment_amount: int = 0
+
+
+class RefundStatus(StrEnum):
+    """The state of a refund at the provider (Stripe's names)."""
+
+    PENDING = "pending"
+    REQUIRES_ACTION = "requires_action"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderRefund:
+    """A refund as the provider describes it."""
+
+    id: str
+    payment_ref: str | None
+    amount: int
+    currency: str
+    status: RefundStatus
+    metadata: dict[str, str] = field(default_factory=dict)
+    failure_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCharge:
+    """A charge (one payment) as the provider describes it, e.g. in ``charge.refunded``."""
+
+    id: str
+    customer_id: str | None
+    currency: str
+    amount: int
+    amount_refunded: int
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderCheckout:
     """A completed Checkout session."""
@@ -179,6 +256,8 @@ class ProviderEvent:
     subscription: ProviderSubscription | None = None
     invoice: ProviderInvoice | None = None
     checkout: ProviderCheckout | None = None
+    refund: ProviderRefund | None = None
+    charge: ProviderCharge | None = None
     livemode: bool = False
 
 

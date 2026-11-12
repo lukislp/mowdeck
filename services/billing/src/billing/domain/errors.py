@@ -35,3 +35,14 @@ class ProviderError(BillingError):
 class ProviderUnavailable(ProviderError):  # noqa: N818 - reads like the state it reports
     """The payment provider could not be reached or asked to slow down (a rate limit, a timeout,
     an error on its side): the same call can succeed later."""
+
+
+class RefundImpossible(ProviderError):  # noqa: N818 - reads like the state it reports
+    """The provider refuses a refund for a reason that does not go away by asking again: the
+    payment is older than the provider allows, it is disputed, or its payment method cannot be
+    refunded. The account erasure skips such a refund and warns the operator (ADR 0082)."""
+
+
+class RefundFailed(ProviderError):  # noqa: N818 - reads like the state it reports
+    """A refund the provider reports as failed or canceled: the money did not go back. The
+    account erasure fails and tries again (ADR 0082)."""
