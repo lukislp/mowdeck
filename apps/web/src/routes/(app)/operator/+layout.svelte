@@ -2,38 +2,33 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 
 <!--
-  The operator console (operator admins of the installation only): accounts, plans and system as
-  tabs. The pages render once the operator probe answered 200; for everybody else a notice says
+  The operator console (operator admins of the installation only): accounts, plans, payments
+  (only where Billing runs) and system as tabs. The pages render once the operator probe answered 200; for everybody else a notice says
   the area is for operators (the services refuse the requests anyway). No page of the console
   reads or shows mower data.
 -->
 <script lang="ts">
-  import { Icon, ProblemNotice, TopBar, type IconName } from '@mowdeck/ui';
+  import { Icon, ProblemNotice, TopBar } from '@mowdeck/ui';
   import type { Snippet } from 'svelte';
 
   import { page } from '$app/state';
 
+  import { probeBilling } from '#lib/billing/billing.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { operatorAccess } from '#lib/operator/access.svelte.js';
+  import { consoleTabs, currentTab } from '#lib/operator/tabs.js';
   import { m } from '#lib/paraglide/messages.js';
 
   let { children }: { children: Snippet } = $props();
 
-  const tabs: { id: string; href: string; label: () => string; icon: IconName }[] = [
-    { id: 'accounts', href: '/operator', label: () => m.op_tab_accounts(), icon: 'users' },
-    { id: 'plans', href: '/operator/plans', label: () => m.op_tab_plans(), icon: 'list' },
-    { id: 'system', href: '/operator/system', label: () => m.op_tab_system(), icon: 'pulse' },
-  ];
-
-  function current(id: string): boolean {
-    const path = page.url.pathname;
-    if (id === 'plans') return path.startsWith('/operator/plans');
-    if (id === 'system') return path.startsWith('/operator/system');
-    return path === '/operator' || path.startsWith('/operator/accounts');
-  }
+  // Payments only where Billing runs (ADR 0083).
+  let billing = $state(false);
+  const tabs = $derived(consoleTabs(billing));
+  const active = $derived(currentTab(page.url.pathname));
 
   $effect(() => {
     void operatorAccess.load();
+    void probeBilling().then((status) => (billing = status !== null));
   });
 </script>
 
@@ -44,7 +39,7 @@
       {#each tabs as tab (tab.id)}
         <a
           href={tab.href}
-          aria-current={current(tab.id) ? 'page' : undefined}
+          aria-current={active === tab.id ? 'page' : undefined}
           data-testid="operator-tab-{tab.id}"
         >
           <Icon name={tab.icon} size={18} />

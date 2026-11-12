@@ -9,26 +9,58 @@
 <script lang="ts">
   import { Button, Icon, ProblemNotice, TopBar } from '@mowdeck/ui';
 
-  import { entitlementsApi, unwrap } from '#lib/api/client.js';
+  import { billingApi, entitlementsApi, unwrap } from '#lib/api/client.js';
   import { asProblem, type ApiProblem } from '#lib/api/problem.js';
+  import { intervalLabel, probeBilling } from '#lib/billing/billing.js';
   import SlowLoading from '#lib/components/SlowLoading.svelte';
   import { formatNumber, problemMessage } from '#lib/i18n.js';
+  import {
+    checkPlanPrices,
+    exponentOf,
+    formatMoney,
+    type OperatorPrice,
+  } from '#lib/operator/payments.js';
   import { m } from '#lib/paraglide/messages.js';
+  import { getLocale } from '#lib/paraglide/runtime.js';
   import { featureLabel, limitLabel } from '#lib/plan/labels.js';
   import { accountPlan } from '#lib/plan/plan.svelte.js';
   import { LIMIT_KEYS, type Plan } from '#lib/plan/types.js';
 
   let plans = $state<Plan[] | null>(null);
   let problem = $state<ApiProblem | null>(null);
+  /** The Stripe prices of the price file, where Billing runs (read only). */
+  let prices = $state<OperatorPrice[] | null>(null);
 
   $effect(() => {
     void unwrap(entitlementsApi.GET('/api/v1/entitlements/plans'))
       .then((list) => (plans = list))
       .catch((error: unknown) => (problem = asProblem(error)));
     void accountPlan.load();
+    void probeBilling().then((status) => {
+      if (!status) return;
+      void unwrap(billingApi.GET('/api/v1/billing/operator/prices'))
+        .then((answer) => (prices = answer.prices))
+        .catch(() => (prices = null));
+    });
   });
 
   const billingOff = $derived(accountPlan.current?.billing_enabled === false);
+  const priceCheck = $derived(plans && prices ? checkPlanPrices(plans, prices) : null);
+
+  function priceText(price: OperatorPrice): { amount: string; monthly: string | null } {
+    const currency = price.currency ?? '';
+    const exponent = price.exponent ?? exponentOf(currency);
+    const locale = getLocale();
+    const amount = formatMoney(price.unit_amount ?? 0, currency, exponent, locale);
+    const labelled = intervalLabel(amount, price.interval, price.interval_count) ?? amount;
+    const monthly =
+      price.monthly_amount !== null && !(price.interval === 'month' && price.interval_count === 1)
+        ? m.op_plan_price_monthly({
+            amount: formatMoney(price.monthly_amount, currency, exponent, locale),
+          })
+        : null;
+    return { amount: labelled, monthly };
+  }
 </script>
 
 <svelte:head><title>{m.op_plans_title()} · {m.app_name()}</title></svelte:head>
@@ -56,6 +88,17 @@
 {:else if !plans}
   <p class="pad quiet" role="status"><SlowLoading /></p>
 {:else}
+  {#if priceCheck?.orphans.length}
+    <div class="pad tight" data-testid="plan-price-orphans">
+      <ProblemNotice
+        tone="info"
+        title={m.op_plan_price_orphans()}
+        detail={priceCheck.orphans
+          .map((p) => m.op_plan_price_orphan({ price: p.price_id, plan: p.plan }))
+          .join(' ')}
+      />
+    </div>
+  {/if}
   <ul class="plans" data-testid="operator-plans">
     {#each plans as plan (plan.key)}
       <li class="plan" data-testid="operator-plan-{plan.key}">
@@ -74,6 +117,32 @@
           </div>
         </div>
         {#if plan.description}<p class="desc">{plan.description}</p>{/if}
+        {#if priceCheck}
+          {@const entry = priceCheck.byPlan[plan.key]}
+          {#if entry}
+            <div class="price" data-testid="plan-price-{plan.key}" data-state={entry.state}>
+              <span class="price-label">{m.op_plan_price()}</span>
+              {#if entry.state === 'priced'}
+                {@const text = priceText(entry.price)}
+                <span class="price-amount">{text.amount}</span>
+                {#if text.monthly}<span class="price-monthly">{text.monthly}</span>{/if}
+                <code class="price-id">{entry.price.price_id}</code>
+              {:else if entry.state === 'unreadable'}
+                <span class="price-warn">
+                  <Icon name="alert" size={14} />
+                  {m.op_plan_price_unreadable({ price: entry.price.price_id })}
+                </span>
+              {:else if entry.state === 'missing'}
+                <span class="price-warn">
+                  <Icon name="alert" size={14} />
+                  {m.op_plan_price_missing()}
+                </span>
+              {:else}
+                <span class="price-free">{m.op_plan_price_free()}</span>
+              {/if}
+            </div>
+          {/if}
+        {/if}
         <dl class="limits">
           {#each LIMIT_KEYS as key (key)}
             <div>
@@ -103,6 +172,9 @@
     {/each}
   </ul>
   <p class="pad quiet fine"><Icon name="list" size={14} />{m.op_plans_inactive_hint()}</p>
+  {#if priceCheck}
+    <p class="pad quiet fine"><Icon name="key" size={14} />{m.op_plan_price_readonly()}</p>
+  {/if}
 {/if}
 
 <style>
@@ -198,6 +270,55 @@
     margin: 0;
     color: var(--md-color-ink-muted);
     font-size: var(--md-font-size-14);
+  }
+
+  .price {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--md-space-1) var(--md-space-3);
+    padding: var(--md-space-2) var(--md-space-3);
+    border-inline-start: 3px solid var(--md-color-ink);
+    background: var(--md-color-surface-sunken);
+    font-size: var(--md-font-size-13);
+  }
+
+  .price[data-state='missing'],
+  .price[data-state='unreadable'] {
+    border-inline-start-style: dashed;
+  }
+
+  .price-label {
+    color: var(--md-color-ink-muted);
+    font-size: var(--md-font-size-11);
+    font-weight: var(--md-weight-semibold);
+    letter-spacing: var(--md-label-tracking);
+    text-transform: uppercase;
+  }
+
+  .price-amount {
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-16);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .price-monthly,
+  .price-free,
+  .price-id {
+    color: var(--md-color-ink-muted);
+  }
+
+  .price-id {
+    font-family: var(--md-font-mono);
+    font-size: var(--md-font-size-12);
+    overflow-wrap: anywhere;
+  }
+
+  .price-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--md-space-1);
+    font-weight: var(--md-weight-semibold);
   }
 
   .limits {

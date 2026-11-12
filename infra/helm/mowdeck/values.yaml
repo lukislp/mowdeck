@@ -343,6 +343,7 @@ secrets:
   #   database-url-entitlements, database-url-billing, database-url-planner,
   #   database-url-vision          postgresql://user:pass@host:5432/db
   #   billing-stripe-secret-key, billing-stripe-webhook-secret   only with services.billing
+  #   billing-ledger-key           only with services.billing (may be empty)
   #   vision-secrets-key, vision-default-api-key   (may be empty)
   #   relay-frames-token            only with services.cameraRelay (may be empty)
   #   matter-api-tokens             only with services.matterServer (one API token per line)
@@ -370,6 +371,9 @@ secrets:
   BILLING_STRIPE_SECRET_KEY: ""
   # -- Signing secret of the Stripe webhook endpoint (whsec_...); empty: every webhook is refused.
   BILLING_STRIPE_WEBHOOK_SECRET: ""
+  # -- Key of the keyed hashes in Billing's payments ledger (ADR 0083). Empty: derived from the
+  # webhook secret; set it so that rotating that secret does not count an open dispute twice.
+  BILLING_LEDGER_KEY: ""
   # -- 256-bit key (base64) that encrypts the passwords of linked Mammotion accounts in Fleet
   # (ADR 0034). Empty: no linked accounts, so no new cloud mowers. Keep a backup.
   FLEET_CREDENTIAL_ENCRYPTION_KEY: ""

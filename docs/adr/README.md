@@ -86,3 +86,4 @@ Every architecture decision is recorded as an ADR in a MADR-like format with the
 | [0080](0080-codespaces-dev-container.md) | GitHub Codespaces dev container with the full Compose stack | Accepted |
 | [0081](0081-explicit-consent-before-cloud-ai.md) | Explicit consent before camera pictures or text go to a cloud AI provider | Accepted |
 | [0082](0082-account-deletion-inside-the-app.md) | Deleting your own account inside the app | Accepted |
+| [0083](0083-payments-ledger-and-operator-dashboard.md) | Payments ledger and operator dashboard | Accepted |
