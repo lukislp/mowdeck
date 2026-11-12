@@ -73,6 +73,13 @@ class Settings(ServiceSettings):
     billing_price_cache_seconds: float = Field(default=600, ge=0)
     """How long fetched prices are reused by ``GET /status``."""
 
+    billing_ledger_key: SecretStr | None = None
+    """Key of the keyed hashes in the payments ledger (ADR 0083): they find a refund or a
+    dispute again without storing its Stripe id. Any long random string, kept like a password.
+    Empty: derived from ``MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET``; set it on its own so that
+    rotating the webhook secret does not count a refund or a dispute still open a second
+    time."""
+
     billing_optional_services: str = ""
     """The optional services this installation runs, comma separated, exactly as Identity gets
     them in ``MOWDECK_IDENTITY_OPTIONAL_SERVICES`` (Compose passes ``COMPOSE_PROFILES`` to both,

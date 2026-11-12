@@ -37,6 +37,7 @@ from billing.adapters.db.store import SqlStore
 from billing.adapters.db.tables import metadata
 from billing.adapters.memory import MemoryStore
 from billing.application.ports import Store
+from billing.domain.ledger import FactKind, PaymentFact
 from billing.domain.models import (
     BillingAccount,
     Customer,
@@ -332,6 +333,128 @@ async def manual_refund_contract(store: Store) -> None:
         assert [r.id for r in await tx.manual_refunds(settled=True)] == [second.id]
 
 
+async def ledger_contract(store: Store) -> None:
+    """The payments ledger (ADR 0083): one fact per kind and keyed hash, updated only by a newer
+    event, read by occurrence (open disputes always), hashes cleared after the horizon; and the
+    live tallies of subscriptions and open invoices."""
+    at = datetime(2026, 11, 12, tzinfo=UTC)
+
+    def fact(kind: FactKind, ref: str | None, occurred: datetime, **values: Any) -> PaymentFact:
+        return PaymentFact(
+            id=uuid4(),
+            kind=kind,
+            ref=ref,
+            provider="stripe",
+            occurred_at=occurred,
+            event_at=values.pop("event_at", occurred),
+            recorded_at=values.pop("recorded_at", at),
+            updated_at=values.pop("updated_at", at),
+            **values,
+        )
+
+    refund = fact(FactKind.REFUND, "r1", at, currency="eur", amount=450, status="pending")
+    async with store.transaction() as tx:
+        assert await tx.first_fact_at() is None
+        assert await tx.record_fact(refund)
+        # The same event again, and an older one: nothing changes.
+        again = fact(FactKind.REFUND, "r1", at, status="pending", currency="eur", amount=450)
+        assert not await tx.record_fact(again)
+        stale = fact(FactKind.REFUND, "r1", at, status="failed", event_at=at - timedelta(1))
+        assert not await tx.record_fact(stale)
+        newer = fact(
+            FactKind.REFUND,
+            "r1",
+            at + timedelta(days=2),  # written once: stays
+            currency="usd",  # written once: stays
+            amount=450,
+            status="succeeded",
+            event_at=at + timedelta(hours=1),
+            updated_at=at + timedelta(hours=1),
+        )
+        assert await tx.record_fact(newer)
+        # The same hash under another kind is another fact.
+        old = at - timedelta(days=90)
+        assert await tx.record_fact(fact(FactKind.DISPUTE, "r1", old, status="needs_response"))
+        closed = at - timedelta(days=60)
+        assert await tx.record_fact(
+            fact(FactKind.DISPUTE, "d2", old, status="won", closed_at=closed)
+        )
+        assert await tx.record_fact(
+            fact(
+                FactKind.INVOICE_PAID, "i1", at - timedelta(days=40), recorded_at=at - timedelta(1)
+            )
+        )
+        # Facts whose hash was cleared never collide.
+        assert await tx.record_fact(fact(FactKind.INVOICE_PAID, None, at))
+        assert await tx.record_fact(fact(FactKind.INVOICE_PAID, None, at))
+    async with store.transaction() as tx:
+        listed = await tx.payment_facts(at - timedelta(days=30))
+        kinds = sorted((f.kind.value, f.status or "") for f in listed)
+        # The old open dispute is listed, the old closed one and the old invoice are not.
+        assert kinds == [
+            ("dispute", "needs_response"),
+            ("invoice_paid", ""),
+            ("invoice_paid", ""),
+            ("refund", "succeeded"),
+        ]
+        stored = next(f for f in listed if f.kind is FactKind.REFUND)
+        assert (stored.id, stored.occurred_at, stored.currency, stored.amount) == (
+            refund.id,
+            at,
+            "eur",
+            450,
+        )
+        assert stored.event_at == at + timedelta(hours=1)
+        assert len(await tx.payment_facts(at - timedelta(days=100))) == 6
+        assert await tx.first_fact_at() == at - timedelta(1)
+        assert await tx.forget_fact_refs(at + timedelta(minutes=1)) == 3
+        assert await tx.forget_fact_refs(at + timedelta(minutes=1)) == 0
+    async with store.transaction() as tx:
+        listed = await tx.payment_facts(at - timedelta(days=100))
+        assert sorted(f.ref or "-" for f in listed) == ["-", "-", "-", "-", "-", "r1"]
+
+    account_id = uuid4()
+    async with store.transaction() as tx:
+        for number, (plan, status) in enumerate(
+            [("home", "active"), ("home", "active"), ("home", "trialing"), (None, "past_due")]
+        ):
+            await tx.save_subscription(
+                Subscription(
+                    id=uuid4(),
+                    account_id=account_id,
+                    provider="stripe",
+                    provider_subscription_id=f"sub_{number}",
+                    plan_key=plan,
+                    status=SubscriptionStatus(status),
+                    created_at=T0,
+                    updated_at=T0,
+                )
+            )
+        for number, (status, due, paid) in enumerate([("open", 990, 0), ("open", 990, 490),
+                                                      ("paid", 990, 990)]):  # fmt: skip
+            await tx.save_invoice(
+                Invoice(
+                    id=uuid4(),
+                    account_id=account_id,
+                    provider="stripe",
+                    provider_invoice_id=f"in_{number}",
+                    status=status,
+                    currency="eur",
+                    amount_due=due,
+                    amount_paid=paid,
+                    issued_at=T0 + timedelta(days=number),
+                    updated_at=T0,
+                )
+            )
+    async with store.transaction() as tx:
+        tally = {(t.plan_key, t.status.value, t.count) for t in await tx.subscription_tally()}
+        assert tally == {("home", "active", 2), ("home", "trialing", 1), (None, "past_due", 1)}
+        assert [(i.currency, i.amount_due, i.due_at) for i in await tx.open_invoices()] == [
+            ("eur", 990, T0),
+            ("eur", 500, T0 + timedelta(days=1)),
+        ]
+
+
 @asynccontextmanager
 async def store_of(kind: str, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Store]:
     """The memory store, or the SQL store on a fresh migrated database."""
@@ -353,6 +476,7 @@ STORES = [pytest.param("memory"), pytest.param("postgres", marks=needs_db)]
 async def test_billing_memory_store_contract() -> None:
     await store_contract(MemoryStore())
     await manual_refund_contract(MemoryStore())
+    await ledger_contract(MemoryStore())
 
 
 async def test_billing_memory_store_rolls_back_on_error() -> None:
@@ -372,6 +496,7 @@ async def test_billing_db_store_contract(monkeypatch: pytest.MonkeyPatch) -> Non
         try:
             await store_contract(SqlStore(engine))
             await manual_refund_contract(SqlStore(engine))
+            await ledger_contract(SqlStore(engine))
         finally:
             await engine.dispose()
 

@@ -55,6 +55,183 @@
         "title": "CheckoutIn",
         "type": "object"
       },
+      "CurrencyOut": {
+        "description": "A currency the dashboard shows amounts in.",
+        "properties": {
+          "code": {
+            "description": "ISO 4217, lower case.",
+            "title": "Code",
+            "type": "string"
+          },
+          "exponent": {
+            "description": "Decimals of the provider amount: 2 for EUR (990 is 9.90), 0 for JPY, 3 for KWD (Stripe's rules).",
+            "title": "Exponent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "exponent"
+        ],
+        "title": "CurrencyOut",
+        "type": "object"
+      },
+      "CurrencyRevenueOut": {
+        "description": "The revenue months of one currency (oldest first) and the window's totals.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "gross": {
+            "title": "Gross",
+            "type": "integer"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/RevenueMonthOut"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "net": {
+            "title": "Net",
+            "type": "integer"
+          },
+          "refunded": {
+            "title": "Refunded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "gross",
+          "refunded",
+          "net",
+          "months"
+        ],
+        "title": "CurrencyRevenueOut",
+        "type": "object"
+      },
+      "DisputeMonthOut": {
+        "description": "Disputes opened in a month, per currency, and how many of them were lost.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "opened": {
+            "title": "Opened",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "currency",
+          "opened",
+          "amount",
+          "lost"
+        ],
+        "title": "DisputeMonthOut",
+        "type": "object"
+      },
+      "DisputeOut": {
+        "description": "One dispute (no charge, no customer).",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "due_by": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "End of the time to submit evidence.",
+            "title": "Due By"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The card network's reason code.",
+            "title": "Reason"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stripe's dispute status.",
+            "title": "Status"
+          }
+        },
+        "required": [
+          "opened_at",
+          "currency",
+          "amount",
+          "status",
+          "reason",
+          "due_by",
+          "closed_at"
+        ],
+        "title": "DisputeOut",
+        "type": "object"
+      },
       "EventDef": {
         "description": "An event type a module publishes.",
         "properties": {
@@ -84,6 +261,91 @@
         "title": "EventDef",
         "type": "object"
       },
+      "FailedPaymentOut": {
+        "description": "One failed attempt (no invoice, no customer).",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "attempt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          }
+        },
+        "required": [
+          "at",
+          "currency",
+          "amount",
+          "plan",
+          "attempt"
+        ],
+        "title": "FailedPaymentOut",
+        "type": "object"
+      },
+      "FailureMonthOut": {
+        "description": "Failed payment attempts per month and currency.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "currency",
+          "count",
+          "amount"
+        ],
+        "title": "FailureMonthOut",
+        "type": "object"
+      },
       "FeatureDef": {
         "description": "A plan feature a module offers, e.g. ``reports``.",
         "properties": {
@@ -107,6 +369,30 @@
         "title": "FeatureDef",
         "type": "object"
       },
+      "FlowMonthOut": {
+        "description": "Subscriptions started and ended in a month.",
+        "properties": {
+          "ended": {
+            "title": "Ended",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "started": {
+            "title": "Started",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "started",
+          "ended"
+        ],
+        "title": "FlowMonthOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -118,6 +404,40 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "InvoiceBacklogOut": {
+        "description": "Open invoices of one currency; overdue ones are open after their due time.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "open_amount": {
+            "title": "Open Amount",
+            "type": "integer"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "overdue_amount": {
+            "title": "Overdue Amount",
+            "type": "integer"
+          },
+          "overdue_count": {
+            "title": "Overdue Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "open_count",
+          "open_amount",
+          "overdue_count",
+          "overdue_amount"
+        ],
+        "title": "InvoiceBacklogOut",
         "type": "object"
       },
       "InvoiceOut": {
@@ -315,6 +635,287 @@
         "title": "ModuleDescriptor",
         "type": "object"
       },
+      "MrrOut": {
+        "description": "Monthly recurring revenue of one currency (ADR 0083: list prices of active and past-due\nsubscriptions normalised to a month, yearly divided by 12).",
+        "properties": {
+          "amount": {
+            "description": "Smallest unit, rounded half up.",
+            "title": "Amount",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "subscriptions": {
+            "title": "Subscriptions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "amount",
+          "subscriptions"
+        ],
+        "title": "MrrOut",
+        "type": "object"
+      },
+      "OperatorPriceOut": {
+        "description": "A configured price as Stripe has it (read only: prices are maintained in Stripe).",
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the price could not be read.",
+            "title": "Currency"
+          },
+          "exponent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Decimals of the amount (see CurrencyOut).",
+            "title": "Exponent"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
+          "interval_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Count"
+          },
+          "monthly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Normalised to a month as in the MRR.",
+            "title": "Monthly Amount"
+          },
+          "plan": {
+            "description": "The plan key in the price file.",
+            "title": "Plan",
+            "type": "string"
+          },
+          "price_id": {
+            "title": "Price Id",
+            "type": "string"
+          },
+          "unit_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Amount"
+          }
+        },
+        "required": [
+          "plan",
+          "price_id",
+          "currency",
+          "unit_amount",
+          "interval",
+          "interval_count",
+          "exponent",
+          "monthly_amount"
+        ],
+        "title": "OperatorPriceOut",
+        "type": "object"
+      },
+      "OperatorPricesOut": {
+        "description": "``GET /operator/prices``: every price of the price file, also of plans Entitlements does\nnot offer (the plans page warns about those).",
+        "properties": {
+          "currency": {
+            "description": "The display currency of the price file.",
+            "title": "Currency",
+            "type": "string"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/OperatorPriceOut"
+            },
+            "title": "Prices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "currency",
+          "prices"
+        ],
+        "title": "OperatorPricesOut",
+        "type": "object"
+      },
+      "PaymentProblemsOut": {
+        "description": "Failed payments, open and overdue invoices, past-due subscriptions and disputes.",
+        "properties": {
+          "closed_disputes": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeOut"
+            },
+            "title": "Closed Disputes",
+            "type": "array"
+          },
+          "disputes": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeMonthOut"
+            },
+            "title": "Disputes",
+            "type": "array"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/FailureMonthOut"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "invoices": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceBacklogOut"
+            },
+            "title": "Invoices",
+            "type": "array"
+          },
+          "open_disputes": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeOut"
+            },
+            "title": "Open Disputes",
+            "type": "array"
+          },
+          "past_due_subscriptions": {
+            "title": "Past Due Subscriptions",
+            "type": "integer"
+          },
+          "recent_failures": {
+            "items": {
+              "$ref": "#/components/schemas/FailedPaymentOut"
+            },
+            "title": "Recent Failures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "failures",
+          "recent_failures",
+          "invoices",
+          "past_due_subscriptions",
+          "disputes",
+          "open_disputes",
+          "closed_disputes"
+        ],
+        "title": "PaymentProblemsOut",
+        "type": "object"
+      },
+      "PaymentsSummaryOut": {
+        "description": "``GET /operator/payments``: the operator's payments dashboard (ADR 0083). Aggregates of\nBilling's own data; no account, customer or provider object id.",
+        "properties": {
+          "currencies": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyOut"
+            },
+            "title": "Currencies",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "months": {
+            "description": "The window, oldest first (YYYY-MM).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "problems": {
+            "$ref": "#/components/schemas/PaymentProblemsOut"
+          },
+          "refunds": {
+            "items": {
+              "$ref": "#/components/schemas/RefundMonthOut"
+            },
+            "title": "Refunds",
+            "type": "array"
+          },
+          "revenue": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencyRevenueOut"
+            },
+            "title": "Revenue",
+            "type": "array"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The oldest fact of the ledger: the statistics start with the deploy that added it; null while there is none.",
+            "title": "Since"
+          },
+          "subscriptions": {
+            "$ref": "#/components/schemas/SubscriptionStatsOut"
+          },
+          "time_zone": {
+            "description": "The time zone of the month buckets (UTC).",
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generated_at",
+          "time_zone",
+          "months",
+          "since",
+          "currencies",
+          "revenue",
+          "subscriptions",
+          "refunds",
+          "problems"
+        ],
+        "title": "PaymentsSummaryOut",
+        "type": "object"
+      },
       "PermissionDef": {
         "description": "A permission a module defines, e.g. ``mower.control``.\n\nKeys that have a relation in the authorization model are checked per object in OpenFGA.\nOther keys are coarse, account-wide permissions carried in the access token (``perms``) and\nchecked with ``require_permission``. ``implied_by`` lets such a key follow an existing one:\nwhoever holds every listed key on the whole account also holds this key.",
         "properties": {
@@ -346,6 +947,42 @@
           "description"
         ],
         "title": "PermissionDef",
+        "type": "object"
+      },
+      "PlanCountOut": {
+        "description": "Subscriptions of one plan now (null plan: not known).",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "past_due": {
+            "title": "Past Due",
+            "type": "integer"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "trialing": {
+            "title": "Trialing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan",
+          "trialing",
+          "active",
+          "past_due"
+        ],
+        "title": "PlanCountOut",
         "type": "object"
       },
       "PlanStatus": {
@@ -436,6 +1073,90 @@
           "url"
         ],
         "title": "RedirectOut",
+        "type": "object"
+      },
+      "RefundMonthOut": {
+        "description": "Refunds that take money back, per month, currency and reason.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "reason": {
+            "description": "erasure (an account erasure, ADR 0082) or other.",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "currency",
+          "reason",
+          "count",
+          "amount"
+        ],
+        "title": "RefundMonthOut",
+        "type": "object"
+      },
+      "RevenueMonthOut": {
+        "description": "One month of one currency, amounts in the smallest unit.",
+        "properties": {
+          "gross": {
+            "description": "Paid invoices, tax included.",
+            "title": "Gross",
+            "type": "integer"
+          },
+          "invoices": {
+            "title": "Invoices",
+            "type": "integer"
+          },
+          "month": {
+            "description": "YYYY-MM in UTC.",
+            "title": "Month",
+            "type": "string"
+          },
+          "net": {
+            "description": "Gross minus refunded.",
+            "title": "Net",
+            "type": "integer"
+          },
+          "refunded": {
+            "description": "Refunds created this month that take money back.",
+            "title": "Refunded",
+            "type": "integer"
+          },
+          "refunds": {
+            "title": "Refunds",
+            "type": "integer"
+          },
+          "tax": {
+            "description": "Tax in the paid invoices (0 without Stripe Tax).",
+            "title": "Tax",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "gross",
+          "tax",
+          "refunded",
+          "net",
+          "invoices",
+          "refunds"
+        ],
+        "title": "RevenueMonthOut",
         "type": "object"
       },
       "StatusPlanOut": {
@@ -572,6 +1293,45 @@
           "updated_at"
         ],
         "title": "SubscriptionOut",
+        "type": "object"
+      },
+      "SubscriptionStatsOut": {
+        "description": "Subscriptions: live counts per plan, MRR and the monthly flow.",
+        "properties": {
+          "flow": {
+            "items": {
+              "$ref": "#/components/schemas/FlowMonthOut"
+            },
+            "title": "Flow",
+            "type": "array"
+          },
+          "mrr": {
+            "items": {
+              "$ref": "#/components/schemas/MrrOut"
+            },
+            "title": "Mrr",
+            "type": "array"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanCountOut"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "unpriced": {
+            "description": "Billed subscriptions whose plan has no known price.",
+            "title": "Unpriced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans",
+          "mrr",
+          "unpriced",
+          "flow"
+        ],
+        "title": "SubscriptionStatsOut",
         "type": "object"
       },
       "SubscriptionStatus": {
@@ -922,6 +1682,74 @@
           }
         },
         "summary": "Settle Manual Refund",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/operator/payments": {
+      "get": {
+        "description": "The payments dashboard: revenue per month and currency (gross, refunds, net), the\nsubscriptions per plan and status with the MRR, new and ended subscriptions, refunds by\nreason, failed payments, open and overdue invoices and disputes. Months are calendar months\nin UTC, amounts in the smallest currency unit and never added across currencies. Built from\nBilling's own data (the payments ledger written from webhooks since the deploy that added\nit, the subscription and invoice rows); Stripe is not asked. No answer names an account.",
+        "operationId": "payments_api_v1_billing_operator_payments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentsSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Payments",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/operator/prices": {
+      "get": {
+        "description": "Every price of the price file as Stripe has it (the same cache as ``GET /status``), also\nfor plans Entitlements does not offer. Read only: prices are maintained in Stripe.",
+        "operationId": "prices_api_v1_billing_operator_prices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorPricesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Prices",
         "tags": [
           "billing"
         ]

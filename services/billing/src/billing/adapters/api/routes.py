@@ -17,15 +17,24 @@ GET  /operator/         ``can_manage_accounts`` refunds of erased accounts to pa
 POST /operator/         ``can_manage_accounts`` mark one as paid back (404 unknown id)
   manual-refunds/{id}/  on ``platform:main``
   settle
+GET  /operator/         ``can_manage_accounts`` the payments dashboard of the last
+  payments              on ``platform:main``    ``months`` (1 to 36, default 12; ADR 0083)
+GET  /operator/prices   ``can_manage_accounts`` every price of the price file as Stripe has
+                        on ``platform:main``    it (read only)
 ======================  ======================  ============================================
+
+The dashboard is one summary endpoint rather than one per section: one request and one
+transaction give every section the same moment, one authorization check guards it, and the
+sections are small aggregates (a few dozen rows), so nothing is gained by loading them apart.
 
 ``can_manage_billing`` on the token's account: the owner (or a member granted
 ``billing.manage``); admins get 403, principals outside the account 404.
 """
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, Query, Request
 from mowdeck_service_kit import get_logger
 
 from billing.adapters.api.deps import BillingManager, Operator, RequestBase, ServiceDep
@@ -34,10 +43,14 @@ from billing.adapters.api.schemas import (
     CheckoutIn,
     InvoiceOut,
     ManualRefundOut,
+    OperatorPriceOut,
+    OperatorPricesOut,
+    PaymentsSummaryOut,
     RedirectOut,
     SubscriptionSummaryOut,
     WebhookOut,
 )
+from billing.application.payments import DEFAULT_MONTHS, MAX_MONTHS
 from billing.domain.errors import NotFoundError
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -137,3 +150,31 @@ async def settle_manual_refund(
         operator=str(principal.subject),
     )
     return ManualRefundOut.of(settled)
+
+
+@router.get("/operator/payments")
+async def payments(
+    principal: Operator,
+    service: ServiceDep,
+    months: Annotated[int, Query(ge=1, le=MAX_MONTHS)] = DEFAULT_MONTHS,
+) -> PaymentsSummaryOut:
+    """The payments dashboard: revenue per month and currency (gross, refunds, net), the
+    subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by
+    reason, failed payments, open and overdue invoices and disputes. Months are calendar months
+    in UTC, amounts in the smallest currency unit and never added across currencies. Built from
+    Billing's own data (the payments ledger written from webhooks since the deploy that added
+    it, the subscription and invoice rows); Stripe is not asked. No answer names an account."""
+    del principal
+    return PaymentsSummaryOut.of(await service.payments.summary(months))
+
+
+@router.get("/operator/prices")
+async def prices(principal: Operator, service: ServiceDep) -> OperatorPricesOut:
+    """Every price of the price file as Stripe has it (the same cache as ``GET /status``), also
+    for plans Entitlements does not offer. Read only: prices are maintained in Stripe."""
+    del principal
+    listed = await service.prices()
+    return OperatorPricesOut(
+        currency=service.config.prices.currency,
+        prices=[OperatorPriceOut.of(price) for price in listed.values()],
+    )

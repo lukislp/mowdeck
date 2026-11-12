@@ -11,7 +11,11 @@ from mowdeck_contracts.v1 import PlanStatus, SubscriptionStatus
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from billing.application.billing import BillingStatus, StatusPlan, SubscriptionSummary
-from billing.domain.models import Invoice, ManualRefund, Subscription
+from billing.application.payments import PaymentsSummary
+from billing.domain.currency import minor_unit_exponent
+from billing.domain.ledger import PaymentFact
+from billing.domain.models import Invoice, ManualRefund, PlanPrice, Subscription
+from billing.domain.statistics import CurrencyRevenue, monthly_amount, round_half_up
 
 PlanKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
 
@@ -174,6 +178,318 @@ class ManualRefundOut(BaseModel):
             created_at=refund.created_at,
             settled_at=refund.settled_at,
         )
+
+
+class CurrencyOut(BaseModel):
+    """A currency the dashboard shows amounts in."""
+
+    code: str = Field(description="ISO 4217, lower case.")
+    exponent: int = Field(
+        description="Decimals of the provider amount: 2 for EUR (990 is 9.90), 0 for JPY, "
+        "3 for KWD (Stripe's rules)."
+    )
+
+
+class RevenueMonthOut(BaseModel):
+    """One month of one currency, amounts in the smallest unit."""
+
+    month: str = Field(description="YYYY-MM in UTC.")
+    gross: int = Field(description="Paid invoices, tax included.")
+    tax: int = Field(description="Tax in the paid invoices (0 without Stripe Tax).")
+    refunded: int = Field(description="Refunds created this month that take money back.")
+    net: int = Field(description="Gross minus refunded.")
+    invoices: int
+    refunds: int
+
+
+class CurrencyRevenueOut(BaseModel):
+    """The revenue months of one currency (oldest first) and the window's totals."""
+
+    currency: str
+    gross: int
+    refunded: int
+    net: int
+    months: list[RevenueMonthOut]
+
+    @classmethod
+    def of(cls, row: CurrencyRevenue) -> "CurrencyRevenueOut":
+        """From the domain result."""
+        return cls(
+            currency=row.currency,
+            gross=row.gross,
+            refunded=row.refunded,
+            net=row.net,
+            months=[
+                RevenueMonthOut(
+                    month=m.month,
+                    gross=m.gross,
+                    tax=m.tax,
+                    refunded=m.refunded,
+                    net=m.net,
+                    invoices=m.invoices,
+                    refunds=m.refunds,
+                )
+                for m in row.months
+            ],
+        )
+
+
+class PlanCountOut(BaseModel):
+    """Subscriptions of one plan now (null plan: not known)."""
+
+    plan: str | None
+    trialing: int
+    active: int
+    past_due: int
+
+
+class MrrOut(BaseModel):
+    """Monthly recurring revenue of one currency (ADR 0083: list prices of active and past-due
+    subscriptions normalised to a month, yearly divided by 12)."""
+
+    currency: str
+    amount: int = Field(description="Smallest unit, rounded half up.")
+    subscriptions: int
+
+
+class FlowMonthOut(BaseModel):
+    """Subscriptions started and ended in a month."""
+
+    month: str
+    started: int
+    ended: int
+
+
+class SubscriptionStatsOut(BaseModel):
+    """Subscriptions: live counts per plan, MRR and the monthly flow."""
+
+    plans: list[PlanCountOut]
+    mrr: list[MrrOut]
+    unpriced: int = Field(description="Billed subscriptions whose plan has no known price.")
+    flow: list[FlowMonthOut]
+
+
+class RefundMonthOut(BaseModel):
+    """Refunds that take money back, per month, currency and reason."""
+
+    month: str
+    currency: str
+    reason: str = Field(description="erasure (an account erasure, ADR 0082) or other.")
+    count: int
+    amount: int
+
+
+class FailureMonthOut(BaseModel):
+    """Failed payment attempts per month and currency."""
+
+    month: str
+    currency: str
+    count: int
+    amount: int
+
+
+class FailedPaymentOut(BaseModel):
+    """One failed attempt (no invoice, no customer)."""
+
+    at: datetime
+    currency: str | None
+    amount: int
+    plan: str | None
+    attempt: int | None
+
+    @classmethod
+    def of(cls, fact: PaymentFact) -> "FailedPaymentOut":
+        """From a ledger fact."""
+        return cls(
+            at=fact.occurred_at,
+            currency=fact.currency,
+            amount=fact.amount,
+            plan=fact.plan_key,
+            attempt=fact.attempt,
+        )
+
+
+class InvoiceBacklogOut(BaseModel):
+    """Open invoices of one currency; overdue ones are open after their due time."""
+
+    currency: str
+    open_count: int
+    open_amount: int
+    overdue_count: int
+    overdue_amount: int
+
+
+class DisputeMonthOut(BaseModel):
+    """Disputes opened in a month, per currency, and how many of them were lost."""
+
+    month: str
+    currency: str
+    opened: int
+    amount: int
+    lost: int
+
+
+class DisputeOut(BaseModel):
+    """One dispute (no charge, no customer)."""
+
+    opened_at: datetime
+    currency: str | None
+    amount: int
+    status: str | None = Field(description="Stripe's dispute status.")
+    reason: str | None = Field(description="The card network's reason code.")
+    due_by: datetime | None = Field(description="End of the time to submit evidence.")
+    closed_at: datetime | None
+
+    @classmethod
+    def of(cls, fact: PaymentFact) -> "DisputeOut":
+        """From a ledger fact."""
+        return cls(
+            opened_at=fact.occurred_at,
+            currency=fact.currency,
+            amount=fact.amount,
+            status=fact.status,
+            reason=fact.reason,
+            due_by=fact.due_by,
+            closed_at=fact.closed_at,
+        )
+
+
+class PaymentProblemsOut(BaseModel):
+    """Failed payments, open and overdue invoices, past-due subscriptions and disputes."""
+
+    failures: list[FailureMonthOut]
+    recent_failures: list[FailedPaymentOut]
+    invoices: list[InvoiceBacklogOut]
+    past_due_subscriptions: int
+    disputes: list[DisputeMonthOut]
+    open_disputes: list[DisputeOut]
+    closed_disputes: list[DisputeOut]
+
+
+class PaymentsSummaryOut(BaseModel):
+    """``GET /operator/payments``: the operator's payments dashboard (ADR 0083). Aggregates of
+    Billing's own data; no account, customer or provider object id."""
+
+    generated_at: datetime
+    time_zone: str = Field(description="The time zone of the month buckets (UTC).")
+    months: list[str] = Field(description="The window, oldest first (YYYY-MM).")
+    since: datetime | None = Field(
+        description="The oldest fact of the ledger: the statistics start with the deploy that "
+        "added it; null while there is none."
+    )
+    currencies: list[CurrencyOut]
+    revenue: list[CurrencyRevenueOut]
+    subscriptions: SubscriptionStatsOut
+    refunds: list[RefundMonthOut]
+    problems: PaymentProblemsOut
+
+    @classmethod
+    def of(cls, s: PaymentsSummary) -> "PaymentsSummaryOut":
+        """From the use case result."""
+        return cls(
+            generated_at=s.generated_at,
+            time_zone=s.time_zone,
+            months=s.months,
+            since=s.since,
+            currencies=[
+                CurrencyOut(code=c, exponent=minor_unit_exponent(c)) for c in sorted(s.currencies)
+            ],
+            revenue=[CurrencyRevenueOut.of(r) for r in s.revenue],
+            subscriptions=SubscriptionStatsOut(
+                plans=[
+                    PlanCountOut(
+                        plan=p.plan_key, trialing=p.trialing, active=p.active, past_due=p.past_due
+                    )
+                    for p in s.plans
+                ],
+                mrr=[
+                    MrrOut(currency=m.currency, amount=m.amount, subscriptions=m.subscriptions)
+                    for m in s.mrr.currencies
+                ],
+                unpriced=s.mrr.unpriced,
+                flow=[
+                    FlowMonthOut(month=f.month, started=f.started, ended=f.ended) for f in s.flow
+                ],
+            ),
+            refunds=[
+                RefundMonthOut(
+                    month=r.month,
+                    currency=r.currency,
+                    reason=r.reason,
+                    count=r.count,
+                    amount=r.amount,
+                )
+                for r in s.refunds
+            ],
+            problems=PaymentProblemsOut(
+                failures=[
+                    FailureMonthOut(
+                        month=f.month, currency=f.currency, count=f.count, amount=f.amount
+                    )
+                    for f in s.failures
+                ],
+                recent_failures=[FailedPaymentOut.of(f) for f in s.recent_failures],
+                invoices=[
+                    InvoiceBacklogOut(
+                        currency=b.currency,
+                        open_count=b.open_count,
+                        open_amount=b.open_amount,
+                        overdue_count=b.overdue_count,
+                        overdue_amount=b.overdue_amount,
+                    )
+                    for b in s.backlog
+                ],
+                past_due_subscriptions=s.past_due,
+                disputes=[
+                    DisputeMonthOut(
+                        month=d.month,
+                        currency=d.currency,
+                        opened=d.opened,
+                        amount=d.amount,
+                        lost=d.lost,
+                    )
+                    for d in s.disputes
+                ],
+                open_disputes=[DisputeOut.of(f) for f in s.open_disputes],
+                closed_disputes=[DisputeOut.of(f) for f in s.closed_disputes],
+            ),
+        )
+
+
+class OperatorPriceOut(BaseModel):
+    """A configured price as Stripe has it (read only: prices are maintained in Stripe)."""
+
+    plan: str = Field(description="The plan key in the price file.")
+    price_id: str
+    currency: str | None = Field(description="Null when the price could not be read.")
+    unit_amount: int | None
+    interval: str | None
+    interval_count: int | None
+    exponent: int | None = Field(description="Decimals of the amount (see CurrencyOut).")
+    monthly_amount: int | None = Field(description="Normalised to a month as in the MRR.")
+
+    @classmethod
+    def of(cls, price: PlanPrice) -> "OperatorPriceOut":
+        """From a fetched price."""
+        monthly = monthly_amount(price)
+        return cls(
+            plan=price.plan_key,
+            price_id=price.price_id,
+            currency=price.currency,
+            unit_amount=price.unit_amount,
+            interval=price.interval,
+            interval_count=price.interval_count,
+            exponent=minor_unit_exponent(price.currency) if price.currency else None,
+            monthly_amount=round_half_up(monthly) if monthly is not None else None,
+        )
+
+
+class OperatorPricesOut(BaseModel):
+    """``GET /operator/prices``: every price of the price file, also of plans Entitlements does
+    not offer (the plans page warns about those)."""
+
+    currency: str = Field(description="The display currency of the price file.")
+    prices: list[OperatorPriceOut]
 
 
 class CheckoutIn(BaseModel):

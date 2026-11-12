@@ -138,8 +138,15 @@ def test_every_table_of_billing_belongs_to_an_account() -> None:
     The one decision so far: ``manual_refunds`` (refunds the operator pays back by hand) has no
     account on purpose. It must outlive the erasure until the money went back (Art. 17(3)(b)
     GDPR) and names only the payment and the invoice at the provider, never the account, a
-    name or an e-mail address (its columns are pinned below)."""
-    assert {table.name for table in metadata.sorted_tables} - ACCOUNT_TABLES == {"manual_refunds"}
+    name or an e-mail address (its columns are pinned below).
+
+    The second: ``payment_facts`` (the payments ledger, ADR 0083) holds anonymous statistics
+    that outlive the erasure on purpose; its columns are pinned in
+    ``test_billing_ledger.py``."""
+    assert {table.name for table in metadata.sorted_tables} - ACCOUNT_TABLES == {
+        "manual_refunds",
+        "payment_facts",
+    }
     assert {column.name for column in manual_refunds.columns} == {
         "id",
         "key",

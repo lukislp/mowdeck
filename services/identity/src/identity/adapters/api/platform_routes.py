@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from mowdeck_authz import PLATFORM_OBJECT, ObjectRef, Relation
 from mowdeck_authz.fastapi import require
 from mowdeck_contracts.v1 import Principal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from identity.adapters.api.deps import ServicesDep
 from identity.application.platform import PlatformAccount
@@ -66,6 +66,46 @@ class PlatformAccountPageOut(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class DeletionMonthOut(BaseModel):
+    """Account deletions of one month (UTC)."""
+
+    month: str = Field(description="YYYY-MM in UTC.")
+    scheduled: int = Field(description="Deletions an owner requested.")
+    restored: int = Field(description="Requests the owner took back within the grace period.")
+    completed: int = Field(description="Erasures every service confirmed (ADR 0082).")
+
+
+class DeletionStatsOut(BaseModel):
+    """Account deletions per month for the payments dashboard (ADR 0083): counts only."""
+
+    time_zone: str = "UTC"
+    months: list[DeletionMonthOut]
+    in_grace: int = Field(description="Requested now, still restorable by the owner.")
+    purging: int = Field(description="Erasures waiting for a service to confirm.")
+
+
+@router.get("/deletions")
+async def platform_deletions(
+    _: OperatorAdmin,
+    services: ServicesDep,
+    months: Annotated[int, Query(ge=1, le=36)] = 12,
+) -> DeletionStatsOut:
+    """Account deletions of the last ``months`` months (operator admins): scheduled, restored
+    and completed per calendar month in UTC, and how many are in the grace period or being
+    erased now. No account id, no name."""
+    stats = await services.platform.deletion_stats(months)
+    return DeletionStatsOut(
+        months=[
+            DeletionMonthOut(
+                month=m.month, scheduled=m.scheduled, restored=m.restored, completed=m.completed
+            )
+            for m in stats.months
+        ],
+        in_grace=stats.in_grace,
+        purging=stats.purging,
+    )
 
 
 @router.get("/accounts")

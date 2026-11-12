@@ -16,6 +16,9 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from mowdeck_contracts.v1 import SubscriptionStatus
+
+from billing.domain.ledger import FactKind, PaymentFact, apply_update
 from billing.domain.models import (
     BillingAccount,
     Customer,
@@ -25,6 +28,7 @@ from billing.domain.models import (
     Subscription,
     WebhookEvent,
 )
+from billing.domain.statistics import OpenInvoice, SubscriptionTally
 
 
 @dataclass
@@ -35,6 +39,7 @@ class _Data:
     invoices: dict[tuple[str, str], Invoice] = field(default_factory=dict)
     events: dict[tuple[str, str], WebhookEvent] = field(default_factory=dict)
     manual_refunds: dict[UUID, ManualRefund] = field(default_factory=dict)
+    facts: dict[UUID, PaymentFact] = field(default_factory=dict)
 
 
 class MemoryTx:
@@ -196,6 +201,66 @@ class MemoryTx:
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         return {table: found for table, found in self._account_rows(account_id).items() if found}
+
+    async def record_fact(self, fact: PaymentFact) -> bool:
+        facts = self.data.facts
+        stored = next(
+            (
+                f
+                for f in facts.values()
+                if fact.ref is not None and (f.kind, f.ref) == (fact.kind, fact.ref)
+            ),
+            None,
+        )
+        if stored is None:
+            facts[fact.id] = replace(fact)
+            return True
+        updated = apply_update(stored, fact)
+        if updated is None:
+            return False
+        facts[stored.id] = updated
+        return True
+
+    async def payment_facts(self, since: datetime) -> list[PaymentFact]:
+        def wanted(f: PaymentFact) -> bool:
+            if f.occurred_at >= since:
+                return True
+            return f.kind is FactKind.DISPUTE and (f.closed_at is None or f.closed_at >= since)
+
+        found = [replace(f) for f in self.data.facts.values() if wanted(f)]
+        return sorted(found, key=lambda f: (f.occurred_at, str(f.id)))
+
+    async def first_fact_at(self) -> datetime | None:
+        return min((f.recorded_at for f in self.data.facts.values()), default=None)
+
+    async def forget_fact_refs(self, before: datetime) -> int:
+        cleared = 0
+        for fact in self.data.facts.values():
+            if fact.ref is not None and fact.updated_at < before:
+                fact.ref = None
+                cleared += 1
+        return cleared
+
+    async def subscription_tally(self) -> list[SubscriptionTally]:
+        counts: dict[tuple[str | None, SubscriptionStatus], int] = {}
+        for s in self.data.subscriptions.values():
+            counts[(s.plan_key, s.status)] = counts.get((s.plan_key, s.status), 0) + 1
+        return [
+            SubscriptionTally(plan, status, count)
+            for (plan, status), count in sorted(
+                counts.items(), key=lambda item: (item[0][0] or "", item[0][1].value)
+            )
+        ]
+
+    async def open_invoices(self) -> list[OpenInvoice]:
+        found = sorted(
+            (i for i in self.data.invoices.values() if i.status == "open"),
+            key=lambda i: (i.issued_at, str(i.id)),
+        )
+        return [
+            OpenInvoice(i.currency, max(i.amount_due - i.amount_paid, 0), i.issued_at)
+            for i in found
+        ]
 
     def _account_rows(self, account_id: UUID) -> dict[str, int]:
         data = self.data

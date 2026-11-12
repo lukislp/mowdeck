@@ -23,12 +23,18 @@ write a row nor set a plan again. An event is applied under a lock on its custom
 (:meth:`~billing.application.ports.Tx.lock_customer`) which the erasure also takes, so an event
 that is being applied finishes, plan and all, before the rows go.
 
-**Refund events** (``refund.updated``, ``refund.failed``, ``charge.refunded``) write no row
+**Refund events** (``refund.created``, ``refund.updated``, ``refund.failed``,
+``charge.refunded``) write no row
 of an account: Billing stores no refunds. They come mostly after an account erasure refunded
 the rest of a paid period, for a customer Billing no longer knows, and are acknowledged and
 dropped like any event of such a customer. A refund of an erasure that the provider reports as
 failed or canceled after the erasure was over is recorded for the operator, who pays it out by
 hand (:mod:`billing.application.manual_refunds`), and logged as a warning.
+
+**The payments ledger** (ADR 0083, :mod:`billing.application.ledger`) gets an anonymous fact of
+every paid invoice, failed payment, refund, dispute and started or ended subscription, written
+in the transaction that applies the event. Disputes (``charge.dispute.*``) write nothing else
+(``recorded``).
 """
 
 import asyncio
@@ -45,7 +51,9 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_service_kit import get_logger
 
+from billing.application.ledger import PaymentLedger
 from billing.application.manual_refunds import ManualRefunds
+from billing.application.payments import PaymentsDashboard
 from billing.application.ports import (
     Clock,
     EntitlementsGateway,
@@ -86,12 +94,16 @@ SUBSCRIPTION_EVENTS = frozenset(
 TRIAL_WILL_END = "customer.subscription.trial_will_end"
 CHECKOUT_COMPLETED = "checkout.session.completed"
 INVOICE_EVENTS = frozenset({"invoice.paid", "invoice.payment_failed"})
-REFUND_EVENTS = frozenset({"refund.updated", "refund.failed"})
+REFUND_EVENTS = frozenset({"refund.created", "refund.updated", "refund.failed"})
 CHARGE_REFUNDED = "charge.refunded"
+DISPUTE_EVENTS = frozenset(
+    {"charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed"}
+)
 HANDLED_EVENTS = (
     SUBSCRIPTION_EVENTS
     | INVOICE_EVENTS
     | REFUND_EVENTS
+    | DISPUTE_EVENTS
     | {TRIAL_WILL_END, CHECKOUT_COMPLETED, CHARGE_REFUNDED}
 )
 """The provider event types Billing handles (the webhook endpoint should send only these)."""
@@ -108,6 +120,8 @@ class BillingConfig:
     price_cache_seconds: float = 600.0
     invoice_limit: int = 50
     claim_lease_seconds: float = 120.0
+    ledger_key: bytes = b""
+    """The key of the keyed hashes in the payments ledger (ADR 0083)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +198,9 @@ class BillingService:
         self.events = events
         self.config = config
         self.clock = clock
-        self.manual_refunds = ManualRefunds(store, clock)
+        self.ledger = PaymentLedger(store, provider.name, config.ledger_key, config.prices, clock)
+        self.manual_refunds = ManualRefunds(store, clock, self.ledger)
+        self.payments = PaymentsDashboard(store, clock, self.prices)
         self._cache = _PriceCache()
         self._cache_lock = asyncio.Lock()
 
@@ -420,16 +436,21 @@ class BillingService:
         if event.type in INVOICE_EVENTS and event.invoice is not None:
             return await self._apply_invoice(event)
         if event.type in REFUND_EVENTS and event.refund is not None:
-            return await self._refund_reported(event.refund), None
+            return await self._refund_reported(event, event.refund), None
         if event.type == CHARGE_REFUNDED and event.charge is not None:
             return await self._charge_refunded(event, event.charge)
+        if event.type in DISPUTE_EVENTS and event.dispute is not None:
+            await self.ledger.dispute(event, event.dispute)
+            return EventOutcome.RECORDED, None
         return EventOutcome.IGNORED, None
 
-    async def _refund_reported(self, refund: ProviderRefund) -> EventOutcome:
-        """A refund changed. Nothing of it is stored; a refund of an account erasure belongs to
-        an account that is erased (or being erased): ``unknown_account``. When it failed after
-        the erasure was over, the amount is recorded for the operator to pay out by hand
+    async def _refund_reported(self, event: ProviderEvent, refund: ProviderRefund) -> EventOutcome:
+        """A refund changed. Of an account nothing is stored, only the anonymous fact of the
+        payments ledger (ADR 0083); a refund of an account erasure belongs to an account that
+        is erased (or being erased): ``unknown_account``. When it failed after the erasure was
+        over, the amount is recorded for the operator to pay out by hand
         (:meth:`ManualRefunds.record_lost`)."""
+        await self.ledger.refund(event, refund)
         if not is_erasure_metadata(refund.metadata):
             return EventOutcome.IGNORED
         if is_initiated(refund):
@@ -464,17 +485,23 @@ class BillingService:
         async with self.store.transaction() as tx:
             account_id = await self._customer_of(tx, event, customer_id)
             if account_id is None:
+                # Only the anonymous end of a MowDeck subscription (an erased account's).
+                plan = self.config.prices.plan_for(data.price_id) or data.plan_key
+                await self.ledger.subscription(tx, event, data, plan, known=False)
                 return EventOutcome.UNKNOWN_ACCOUNT, None
             existing = await tx.get_subscription(provider, data.id)
             others = [s for s in await tx.subscriptions_of(account_id) if s.id != data.id]
             account = await tx.get_account(account_id)
-            if existing and existing.last_event_at and event.created < existing.last_event_at:
-                return EventOutcome.STALE, account_id
             plan_key = (
                 self.config.prices.plan_for(data.price_id)
                 or data.plan_key
                 or (existing.plan_key if existing else None)
             )
+            # Also from a stale event: a start or an end it reports did happen, and the ledger
+            # writes each once (ADR 0083).
+            await self.ledger.subscription(tx, event, data, plan_key, known=True)
+            if existing and existing.last_event_at and event.created < existing.last_event_at:
+                return EventOutcome.STALE, account_id
             decision = plan_decision(
                 data.status,
                 now=now,
@@ -604,6 +631,7 @@ class BillingService:
                     pdf_url=data.pdf_url,
                 )
             )
+            await self.ledger.invoice(tx, event, data)
         return EventOutcome.APPLIED, account_id
 
 

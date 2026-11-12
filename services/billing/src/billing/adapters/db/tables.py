@@ -12,6 +12,11 @@
   one table without an ``account_id``: it names the payment and the invoice at the provider,
   the amount and why, and nobody (kept under Art. 17(3)(b) GDPR until the repayment is done,
   deleted 30 days after it is settled).
+* ``payment_facts``: the payments ledger of the operator dashboard (ADR 0083): anonymous facts
+  (paid invoices, failed payments, refunds, disputes, started and ended subscriptions) with
+  amount, currency, plan and time. No ``account_id``, no customer, no provider object id: the
+  ``ref`` is a keyed hash of the object id for deduplication and status updates, cleared 180
+  days after the fact last changed. Never deleted, so the account erasure does not touch it.
 """
 
 from sqlalchemy import (
@@ -136,3 +141,31 @@ manual_refunds = Table(
     UniqueConstraint("key"),
 )
 Index("ix_manual_refunds_settled", manual_refunds.c.settled_at)
+
+payment_facts = Table(
+    "payment_facts",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("kind", String(32), nullable=False),
+    Column("ref", String(64)),
+    Column("provider", String(32), nullable=False),
+    Column("occurred_at", TS, nullable=False),
+    Column("currency", String(3)),
+    Column("amount", BigInteger, nullable=False, server_default=text("0")),
+    Column("tax", BigInteger),
+    Column("plan_key", String(64)),
+    Column("status", String(32)),
+    Column("reason", String(64)),
+    Column("period_start", TS),
+    Column("period_end", TS),
+    Column("attempt", Integer),
+    Column("closed_at", TS),
+    Column("due_by", TS),
+    Column("event_at", TS, nullable=False),
+    Column("recorded_at", TS, nullable=False),
+    Column("updated_at", TS, nullable=False),
+    # NULLs are distinct: facts whose hash was cleared never collide.
+    UniqueConstraint("kind", "ref", name="uq_payment_facts_kind_ref"),
+)
+Index("ix_payment_facts_kind_occurred", payment_facts.c.kind, payment_facts.c.occurred_at)
+Index("ix_payment_facts_updated", payment_facts.c.updated_at)

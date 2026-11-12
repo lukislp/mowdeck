@@ -724,6 +724,21 @@ Every account of the installation (operator admins; no mower data).
 | 200 | Successful Response | `application/json` [PlatformAccountPageOut](#platformaccountpageout) |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+#### GET /api/v1/identity/platform/deletions
+
+**Platform Deletions**
+
+Account deletions of the last `months` months (operator admins): scheduled, restored and completed per calendar month in UTC, and how many are in the grace period or being erased now. No account id, no name.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `months` | query | integer | no | min 1; max 36; default `12` |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [DeletionStatsOut](#deletionstatsout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 ### identity: security
 
 #### GET /api/v1/identity/me/security
@@ -1269,6 +1284,28 @@ An audit entry.
 | `outcome` | string | yes |  |
 | `target_id` | string or null | yes |  |
 | `target_type` | string or null | yes |  |
+
+### DeletionMonthOut
+
+Account deletions of one month (UTC).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `completed` | integer | yes | Erasures every service confirmed (ADR 0082). |
+| `month` | string | yes | YYYY-MM in UTC. |
+| `restored` | integer | yes | Requests the owner took back within the grace period. |
+| `scheduled` | integer | yes | Deletions an owner requested. |
+
+### DeletionStatsOut
+
+Account deletions per month for the payments dashboard (ADR 0083): counts only.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `in_grace` | integer | yes | Requested now, still restorable by the owner. |
+| `months` | array of [DeletionMonthOut](#deletionmonthout) | yes |  |
+| `purging` | integer | yes | Erasures waiting for a service to confirm. |
+| `time_zone` | string | no | default `"UTC"` |
 
 ### ExternalIdentityOut
 

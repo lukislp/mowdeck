@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Lukas Körber
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""The operator level (``platform:main``): the account list and the operator admins.
+"""The operator level (``platform:main``): the account list, the operator admins and the
+account deletions per month of the payments dashboard (ADR 0083).
 
 Operator admins manage accounts and plans but see no mower data (project plan, "Konten").
 They are the ``operator_admin`` relation on ``platform:main`` in OpenFGA, written by the CLI
@@ -18,8 +19,15 @@ from mowdeck_contracts.v1 import IDENTITY_GRANTS_CHANGED, GrantsChanged
 from identity.application.context import RequestContext
 from identity.application.deps import Deps
 from identity.domain.credentials import normalize_username
+from identity.domain.deletion_stats import (
+    ACCOUNT_RESTORED,
+    DELETION_REQUESTED,
+    DeletionMonth,
+    deletions_by_month,
+)
+from identity.domain.erasure import ErasureState
 from identity.domain.errors import AuthzUnavailable, NotFoundError
-from identity.domain.models import Account, User
+from identity.domain.models import Account, AccountStatus, User
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +46,17 @@ class PlatformAccountPage:
     total: int
     offset: int
     limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class DeletionStats:
+    """Account deletions per month and where the open ones stand now (counts only)."""
+
+    months: list[DeletionMonth]
+    in_grace: int
+    """Deletions requested whose grace period runs: the owner can still restore them."""
+    purging: int
+    """Erasures that started and wait for a service to confirm."""
 
 
 def operator_admin_tuple(user_id: UUID) -> RelationshipTuple:
@@ -64,6 +83,27 @@ class PlatformService:
                 owner: User | None = await tx.users.get(id=owners[0].user_id) if owners else None
                 items.append(PlatformAccount(acct, owner.username if owner else None))
         return PlatformAccountPage(items, len(accounts), offset, limit)
+
+    async def deletion_stats(self, months: int) -> DeletionStats:
+        """Account deletions of the last ``months`` months for the payments dashboard (ADR
+        0083): scheduled, restored and completed per month, from the audit rows (which stay,
+        scrubbed, after an erasure) and the erasure records (ADR 0082). No account is named."""
+        async with self.deps.store.transaction() as tx:
+            requested = await tx.audit.find(action=DELETION_REQUESTED, outcome="success")
+            restored = await tx.audit.find(action=ACCOUNT_RESTORED, outcome="success")
+            erasures = await tx.erasures.find()
+            in_grace = await tx.accounts.count(status=AccountStatus.DELETING.value)
+        return DeletionStats(
+            months=deletions_by_month(
+                scheduled=[entry.at for entry in requested],
+                restored=[entry.at for entry in restored],
+                completed=[e.completed_at for e in erasures if e.completed_at is not None],
+                now=self.deps.clock(),
+                months=months,
+            ),
+            in_grace=in_grace,
+            purging=sum(1 for e in erasures if e.state is ErasureState.PURGING),
+        )
 
     async def set_admin(self, username: str, ctx: RequestContext, *, grant: bool = True) -> UUID:
         """Grant (or revoke) ``platform:main#operator_admin`` for a user; audited."""

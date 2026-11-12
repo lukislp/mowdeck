@@ -7,11 +7,11 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | Service | Base path | Operations | What it does |
 | --- | --- | --- | --- |
 | [assistant](assistant.md) | `/api/v1/assistant` | 2 | Chat control: proposals from typed requests (optional add-on, ADR 0075). |
-| [billing](billing.md) | `/api/v1/billing` | 8 | Plans, checkout and the Stripe webhook (only with billing enabled). |
+| [billing](billing.md) | `/api/v1/billing` | 10 | Plans, checkout and the Stripe webhook (only with billing enabled). |
 | [device-gateway](device-gateway.md) | `/api/v1/device-gateway` | 1 | Mower links of the installation (operator view). |
 | [entitlements](entitlements.md) | `/api/v1/entitlements` | 8 | What the account's plan allows; usage and limits. |
 | [fleet](fleet.md) | `/api/v1/fleet` | 55 | Mowers, sites, groups, linked cloud accounts, base stations and commands. |
-| [identity](identity.md) | `/api/v1/identity` | 76 | Accounts, users, roles, sessions, API tokens and personal access tokens. |
+| [identity](identity.md) | `/api/v1/identity` | 77 | Accounts, users, roles, sessions, API tokens and personal access tokens. |
 | [notifications](notifications.md) | `/api/v1/notifications` | 22 | Inbox, rules, channels and push devices. |
 | [planner](planner.md) | `/api/v1/planner` | 8 | Mowing patterns, spot paths and plans. |
 | [realtime](realtime.md) | `/api/v1/realtime` | 0 | The WebSocket for live state and command results (protocol in the guide). |

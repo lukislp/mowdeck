@@ -518,6 +518,73 @@
         "title": "AuditOut",
         "type": "object"
       },
+      "DeletionMonthOut": {
+        "description": "Account deletions of one month (UTC).",
+        "properties": {
+          "completed": {
+            "description": "Erasures every service confirmed (ADR 0082).",
+            "title": "Completed",
+            "type": "integer"
+          },
+          "month": {
+            "description": "YYYY-MM in UTC.",
+            "title": "Month",
+            "type": "string"
+          },
+          "restored": {
+            "description": "Requests the owner took back within the grace period.",
+            "title": "Restored",
+            "type": "integer"
+          },
+          "scheduled": {
+            "description": "Deletions an owner requested.",
+            "title": "Scheduled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "month",
+          "scheduled",
+          "restored",
+          "completed"
+        ],
+        "title": "DeletionMonthOut",
+        "type": "object"
+      },
+      "DeletionStatsOut": {
+        "description": "Account deletions per month for the payments dashboard (ADR 0083): counts only.",
+        "properties": {
+          "in_grace": {
+            "description": "Requested now, still restorable by the owner.",
+            "title": "In Grace",
+            "type": "integer"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/DeletionMonthOut"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "purging": {
+            "description": "Erasures waiting for a service to confirm.",
+            "title": "Purging",
+            "type": "integer"
+          },
+          "time_zone": {
+            "default": "UTC",
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "months",
+          "in_grace",
+          "purging"
+        ],
+        "title": "DeletionStatsOut",
+        "type": "object"
+      },
       "EventDef": {
         "description": "An event type a module publishes.",
         "properties": {
@@ -6312,6 +6379,52 @@
           }
         },
         "summary": "Platform Accounts",
+        "tags": [
+          "identity: platform"
+        ]
+      }
+    },
+    "/api/v1/identity/platform/deletions": {
+      "get": {
+        "description": "Account deletions of the last ``months`` months (operator admins): scheduled, restored\nand completed per calendar month in UTC, and how many are in the grace period or being\nerased now. No account id, no name.",
+        "operationId": "platform_deletions_api_v1_identity_platform_deletions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionStatsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Platform Deletions",
         "tags": [
           "identity: platform"
         ]

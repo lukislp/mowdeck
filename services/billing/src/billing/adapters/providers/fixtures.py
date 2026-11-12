@@ -57,6 +57,7 @@ def subscription_event(
     cancel_at_period_end: bool = False,
     created: int | None = None,
     event_id: str | None = None,
+    start_date: int | None = None,
 ) -> dict[str, Any]:
     """A ``customer.subscription.*`` event."""
     metadata: dict[str, str] = {}
@@ -72,6 +73,8 @@ def subscription_event(
         "cancel_at_period_end": cancel_at_period_end,
         "trial_end": trial_end,
         "ended_at": ended_at,
+        "canceled_at": ended_at,
+        "start_date": period_start if start_date is None else start_date,
         "metadata": metadata,
         "items": {
             "object": "list",
@@ -101,10 +104,16 @@ def invoice_event(
     currency: str = "eur",
     created: int | None = None,
     event_id: str | None = None,
+    tax: int | None = None,
+    price_id: str | None = None,
+    period: tuple[int, int] | None = None,
+    attempt_count: int = 1,
 ) -> dict[str, Any]:
-    """An ``invoice.paid`` or ``invoice.payment_failed`` event."""
+    """An ``invoice.paid`` or ``invoice.payment_failed`` event. ``tax`` adds ``total_taxes``
+    (Stripe Tax), ``price_id`` and ``period`` one subscription line with its price and period."""
     paid = status == "paid"
-    obj = {
+    at = int(time.time()) if created is None else created
+    obj: dict[str, Any] = {
         "id": invoice_id,
         "object": "invoice",
         "customer": customer_id,
@@ -120,6 +129,78 @@ def invoice_event(
             "type": "subscription_details",
             "subscription_details": {"subscription": subscription_id, "metadata": {}},
         },
+        "attempt_count": attempt_count,
+        "status_transitions": {"finalized_at": at, "paid_at": at if paid else None},
+    }
+    if tax is not None:
+        obj["total_taxes"] = [
+            {"amount": tax, "tax_behavior": "exclusive", "taxability_reason": "standard_rated"}
+        ]
+    if price_id is not None and period is not None:
+        obj["lines"] = {
+            "object": "list",
+            "data": [
+                {
+                    "id": f"il_{invoice_id[-8:]}",
+                    "object": "line_item",
+                    "amount": amount - (tax or 0),
+                    "currency": currency,
+                    "period": {"start": period[0], "end": period[1]},
+                    "parent": {
+                        "type": "subscription_item_details",
+                        "subscription_item_details": {
+                            "subscription": subscription_id,
+                            "subscription_item": f"si_{subscription_id[-8:]}",
+                            "proration": False,
+                        },
+                    },
+                    "pricing": {
+                        "type": "price_details",
+                        "price_details": {"price": price_id, "product": "prod_mowdeck"},
+                    },
+                    "quantity": 1,
+                }
+            ],
+        }
+    return _event(event_type, obj, created, event_id)
+
+
+def dispute_event(
+    event_type: str,
+    *,
+    dispute_id: str,
+    charge_id: str,
+    amount: int,
+    status: str,
+    reason: str = "fraudulent",
+    currency: str = "eur",
+    opened: int,
+    due_by: int | None = None,
+    created: int | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """A ``charge.dispute.created``, ``.updated`` or ``.closed`` event: the object is the
+    dispute, which names the charge and its PaymentIntent but no customer."""
+    obj = {
+        "id": dispute_id,
+        "object": "dispute",
+        "amount": amount,
+        "balance_transactions": [],
+        "charge": charge_id,
+        "created": opened,
+        "currency": currency,
+        "evidence_details": {
+            "due_by": due_by,
+            "has_evidence": False,
+            "past_due": False,
+            "submission_count": 0,
+        },
+        "is_charge_refundable": False,
+        "livemode": False,
+        "metadata": {},
+        "payment_intent": f"pi_{charge_id[-10:]}",
+        "reason": reason,
+        "status": status,
     }
     return _event(event_type, obj, created, event_id)
 
