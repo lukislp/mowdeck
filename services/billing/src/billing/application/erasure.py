@@ -17,13 +17,22 @@ kit's :class:`~mowdeck_service_kit.erasure.AccountErasure` over Billing's own pa
      time containing now (the period's invoice, and an upgrade billed on its own) is refunded
      to the original payment method (the rule is :mod:`billing.domain.refunds`), then the
      subscription ends now (not at the period end, no final invoice, no proration). After all
-     subscriptions the customer object is deleted. What the provider must keep by law, the
-     invoices and the payments with their refunds, stays with the provider.
-  2. **Billing's rows,** afterwards and in one transaction: the customer, the subscriptions,
+     subscriptions, per customer: a **credit balance** the customer holds is paid back as
+     refunds over its most recent payments, newest first, the balance is zeroed with a balance
+     transaction (the rule is :mod:`billing.domain.credit`), and then the customer object is
+     deleted. What the provider must keep by law, the invoices and the payments with their
+     refunds, stays with the provider.
+  2. **The records,** before the customer is deleted and in their own transaction: a refund
+     that was skipped, and the part of a credit balance no payment could take, is recorded in
+     ``manual_refunds`` (payment, invoice, amount, reason; no account) for the operator to pay
+     back by hand (:mod:`billing.application.manual_refunds`). Once the balance is zeroed the
+     decisions are final; a retry after a later failure finds the records, keeps those skips
+     (it does not refund them) and inserts nothing twice (one record per key). An erasure that
+     fails after this point is asked again by Identity until it finishes, so the account is
+     erased in the end.
+  3. **Billing's rows,** afterwards and in one transaction: the customer, the subscriptions,
      the invoice references, the ledger rows of the account's provider events and the
-     account's name and kind. In the same transaction, a refund that was skipped is recorded
-     in ``manual_refunds`` (payment, invoice, amount, reason; no account) for the operator to
-     pay back by hand (:mod:`billing.application.manual_refunds`).
+     account's name and kind (the records are inserted again there, a no-op by key).
 
   The provider comes first because the rows are what names the customer and the
   subscriptions: a provider call that fails leaves them, the erasure is reported as failed and
@@ -42,6 +51,7 @@ there is nothing to forget. Provider events that arrive after the erasure name a
 Billing no longer knows and are dropped (:mod:`billing.application.billing`).
 """
 
+from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
@@ -49,9 +59,22 @@ from mowdeck_service_kit import get_logger
 from mowdeck_service_kit.erasure import AccountErasure
 
 from billing.application.ports import Clock, PaymentProvider, Store
+from billing.domain.credit import (
+    credit_owed,
+    credit_records,
+    credit_skipped,
+    earliest_payment,
+    plan_credit_refunds,
+)
 from billing.domain.erasure import unreachable_providers
 from billing.domain.errors import ProviderError, RefundFailed, RefundImpossible
-from billing.domain.models import PaidInvoice, ProviderRefund, RefundStatus
+from billing.domain.models import (
+    ManualRefund,
+    PaidInvoice,
+    ProviderRefund,
+    RecentPayment,
+    RefundStatus,
+)
 from billing.domain.refunds import (
     RefundAction,
     RefundPlan,
@@ -73,13 +96,16 @@ class AccountPurge:
         self._clock = clock
 
     async def purge(self, account_id: UUID) -> int:
-        """Refund the unused part of each paid period and end the open subscriptions, delete the
-        customer at the provider, then delete the rows; the number of rows removed (0 when
-        Billing never knew the account). Raises ``ProviderError`` when the provider did not
-        confirm (``RefundFailed`` for a refund that failed), and deletes no row then."""
+        """Refund the unused part of each paid period and end the open subscriptions, pay back
+        the credit balance, zero it and delete the customer at the provider, then delete the
+        rows; the number of rows removed (0 when Billing never knew the account). Raises
+        ``ProviderError`` when the provider did not confirm (``RefundFailed`` for a refund that
+        failed), and deletes no row then."""
         async with self._store.transaction() as tx:
             customers = await tx.customers_of(account_id)
             open_subscriptions = [s for s in await tx.subscriptions_of(account_id) if s.is_open]
+            # The skips an earlier attempt recorded: final, never refunded on top.
+            recorded = {r.key: r.amount for r in await tx.manual_refunds(settled=True)}
         configured = self._provider.name
         elsewhere = unreachable_providers(
             [c.provider for c in customers] + [s.provider for s in open_subscriptions], configured
@@ -94,16 +120,31 @@ class AccountPurge:
             subscription_id = subscription.provider_subscription_id
             invoices = await self._provider.paid_invoices_covering(subscription_id, now)
             for invoice in invoices:
-                refunds.append(await self._refund(account_id, invoice, now))
+                refunds.append(await self._refund(account_id, invoice, now, recorded))
             await self._provider.cancel_subscription(subscription_id)
         deleted = [c for c in customers if c.provider == configured]
+        manual = [manual_refund(p, now) for p in refunds if p.action is RefundAction.SKIP]
+        for customer in deleted:
+            # After every subscription ended (which adds no credit: no proration), before the
+            # customer and its balance are gone.
+            manual.extend(
+                await self._pay_back_credit(
+                    account_id, customer.provider_customer_id, now, recorded
+                )
+            )
+        if manual:
+            # The decisions are final now (the balance is zeroed): recorded before the customer
+            # goes, because a retry after its deletion could no longer read the balance. One
+            # record per key, so the retry and the transaction below insert nothing twice.
+            async with self._store.transaction() as tx:
+                for record in manual:
+                    await tx.add_manual_refund(record)
         for customer in deleted:
             await self._provider.delete_customer(customer.provider_customer_id)
-        manual = [manual_refund(p, now) for p in refunds if p.action is RefundAction.SKIP]
         async with self._store.transaction() as tx:
             rows = await tx.purge_account(account_id)
-            # In the same transaction: the record of what the operator must pay back exists
-            # exactly when the rows that named the payment are gone.
+            # Written above already; inserted again in this transaction (a no-op by key), so
+            # the records exist whenever the rows that named the payments are gone.
             for record in manual:
                 await tx.add_manual_refund(record)
         _log.info(
@@ -118,7 +159,9 @@ class AccountPurge:
         )
         return rows
 
-    async def _refund(self, account_id: UUID, invoice: PaidInvoice, now: datetime) -> RefundPlan:
+    async def _refund(
+        self, account_id: UUID, invoice: PaidInvoice, now: datetime, recorded: dict[str, int]
+    ) -> RefundPlan:
         """Refund the unused time paid on one invoice, or find the refund an earlier attempt
         made. Raises ``RefundFailed`` when the provider reports the new refund as failed or
         canceled: the subscription is not ended then, and the next attempt decides again, per
@@ -126,42 +169,93 @@ class AccountPurge:
         earlier: list[ProviderRefund] = []
         if invoice.payment_ref is not None:
             earlier = await self._provider.refunds_of(invoice.payment_ref)
-        plan = plan_refund(account_id, invoice, earlier, now)
-        if plan.action is RefundAction.CREATE and plan.payment_ref is not None:
-            try:
-                made = await self._provider.refund(
-                    plan.payment_ref,
-                    plan.amount,
-                    plan.currency,
-                    plan.idempotency_key,
-                    plan.metadata,
-                )
-            except RefundImpossible as exc:
-                plan = skipped(plan, exc.message)
-            else:
-                if not is_initiated(made):
-                    msg = (
-                        f"the refund of {plan.amount} {plan.currency} for invoice "
-                        f"{invoice.invoice_id} is {made.status.value}"
-                    )
-                    raise RefundFailed(msg)
-                plan = RefundPlan(
-                    RefundAction.CREATE,
-                    amount=made.amount,
-                    currency=made.currency,
-                    payment_ref=plan.payment_ref,
-                    invoice_id=plan.invoice_id,
-                    existing=made,
-                )
-        _report(account_id, invoice.subscription_id, plan)
+        plan = plan_refund(account_id, invoice, earlier, now, recorded)
+        plan = await self._carry_out(plan, f"invoice {invoice.invoice_id}", skipped)
+        _report(account_id, plan, subscription_id=invoice.subscription_id)
         return plan
 
+    async def _pay_back_credit(
+        self, account_id: UUID, customer_id: str, now: datetime, recorded: dict[str, int]
+    ) -> list[ManualRefund]:
+        """Pay back the customer's credit balance against its recent payments, then zero the
+        balance; the records of what the operator pays out by hand.
+        Raises like :meth:`_refund`; the balance stays then, and the next attempt plans again
+        (:func:`~billing.domain.credit.plan_credit_refunds`), finding the refunds it made."""
+        balance = await self._provider.customer_credit_balance(customer_id)
+        payments: list[tuple[RecentPayment, list[ProviderRefund]]] = []
+        if credit_owed(balance) > 0:
+            for payment in await self._provider.recent_payments(customer_id, earliest_payment(now)):
+                payments.append((payment, await self._provider.refunds_of(payment.payment_ref)))
+        plan = plan_credit_refunds(account_id, customer_id, balance, payments, recorded)
+        if plan.credit <= 0:
+            return []
+        done: list[RefundPlan] = []
+        for refund in plan.refunds:
+            refund = await self._carry_out(refund, "the credit balance", credit_skipped)
+            _report(account_id, refund, customer_id=customer_id)
+            done.append(refund)
+        if plan.clear > 0:
+            await self._provider.clear_credit_balance(
+                customer_id, plan.clear, plan.currency, plan.clear_key, plan.clear_metadata
+            )
+        records = credit_records(plan, done, now)
+        _log.info(
+            "credit balance of an erased account paid back",
+            account_id=str(account_id),
+            customer_id=customer_id,
+            credit=plan.credit,
+            currency=plan.currency,
+            refunded=sum(p.amount for p in done if p.action is not RefundAction.SKIP),
+            cleared=plan.clear,
+        )
+        if plan.leftover:
+            _log.warning(
+                "credit balance of an erased account left over: recorded to pay it out by hand",
+                account_id=str(account_id),
+                customer_id=customer_id,
+                amount=plan.leftover,
+                currency=plan.currency,
+                reason=plan.leftover_reason,
+            )
+        return records
 
-def _report(account_id: UUID, subscription_id: str, plan: RefundPlan) -> None:
-    """Log the refund of one subscription; the operator acts on the two warnings."""
+    async def _carry_out(
+        self, plan: RefundPlan, what: str, skip: Callable[[RefundPlan, str], RefundPlan]
+    ) -> RefundPlan:
+        """Make the refund of a ``CREATE`` plan; other plans come back as they are. A permanent
+        refusal (``RefundImpossible``) is a skip (``skip`` words its reason); a refund the
+        provider answers as failed or canceled raises ``RefundFailed``."""
+        if plan.action is not RefundAction.CREATE or plan.payment_ref is None:
+            return plan
+        try:
+            made = await self._provider.refund(
+                plan.payment_ref,
+                plan.amount,
+                plan.currency,
+                plan.idempotency_key,
+                plan.metadata,
+            )
+        except RefundImpossible as exc:
+            return skip(plan, exc.message)
+        if not is_initiated(made):
+            msg = f"the refund of {plan.amount} {plan.currency} for {what} is {made.status.value}"
+            raise RefundFailed(msg)
+        return RefundPlan(
+            RefundAction.CREATE,
+            amount=made.amount,
+            currency=made.currency,
+            payment_ref=plan.payment_ref,
+            invoice_id=plan.invoice_id,
+            existing=made,
+        )
+
+
+def _report(account_id: UUID, plan: RefundPlan, **context: str) -> None:
+    """Log one refund (of a subscription's invoice, or of the credit balance of a customer:
+    ``context``); the operator acts on the two warnings."""
     fields: dict[str, object] = {
         "account_id": str(account_id),
-        "subscription_id": subscription_id,
+        **context,
         "amount": plan.amount,
         "currency": plan.currency,
         "payment": plan.payment_ref,

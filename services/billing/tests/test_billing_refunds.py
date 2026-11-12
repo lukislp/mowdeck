@@ -331,6 +331,20 @@ def test_a_refusal_for_good_skips_the_refund_with_its_amount() -> None:
     assert plan.metadata["account_id"] == str(ACCOUNT)
 
 
+def test_a_skip_recorded_by_an_earlier_attempt_stays_skipped_with_its_amount() -> None:
+    """The record was written before the customer was deleted, with the amount of that day: a
+    retry later in the period keeps it (450, not the smaller unused part of now) and refunds
+    nothing; another invoice of the same payment is not affected."""
+    recorded = {manual_refund_key("pi_1", "in_1"): 450}
+
+    plan = plan_refund(ACCOUNT, invoice(), [], MIDDLE + timedelta(days=5), recorded)
+    other = plan_refund(ACCOUNT, invoice(), [], MIDDLE, {manual_refund_key("pi_1", None): 1})
+
+    assert (plan.action, plan.amount, plan.invoice_id) == (RefundAction.SKIP, 450, "in_1")
+    assert plan.reason == "recorded for the operator by an earlier attempt"
+    assert other.action is RefundAction.CREATE
+
+
 def test_nothing_to_refund() -> None:
     assert plan_refund(ACCOUNT, None, [], MIDDLE).action is RefundAction.NONE
     assert plan_refund(ACCOUNT, invoice(0, line(900)), [], MIDDLE).action is RefundAction.NONE

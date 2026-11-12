@@ -30,7 +30,15 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
   shrank between two attempts) is ``ProviderUnavailable``, and the next attempt finds the
   refund by its metadata. Then ``DELETE /v1/subscriptions/{id}`` with ``invoice_now=false`` and
   ``prorate=false`` ends a subscription at once, without a final invoice and without a credit
-  for the unused time. ``DELETE /v1/customers/{id}`` deletes the customer
+  for the unused time, so ending it adds nothing to the customer's balance. Then the credit
+  balance: ``GET /v1/customers/{id}`` (Stripe's ``balance`` is negative for a credit) and
+  ``GET /v1/customers/{id}/balance_transactions`` (what an earlier attempt took off, by its
+  metadata); with a credit, the customer's charges of the last 366 days
+  (``GET /v1/charges?customer=&created[gte]=``, every page), refunded like above with the
+  metadata ``reason=account_erasure_credit_balance``, and ``POST
+  /v1/customers/{id}/balance_transactions`` with a positive ``amount`` (a debit that cancels
+  the credit), the erasure's metadata and an ``Idempotency-Key``.
+  ``DELETE /v1/customers/{id}`` deletes the customer
   object (and ends any subscription Billing never heard of). Stripe keeps the invoices and
   payments of a deleted customer for as long as it must; they are no longer reachable from
   MowDeck. Both calls are idempotent here: Stripe's ``resource_missing`` and a subscription
@@ -45,11 +53,14 @@ from typing import Any
 import stripe
 
 from billing.adapters.providers.stripe_events import (
+    credit_balance_from,
     event_from,
     paid_invoice_from,
+    recent_payment_from,
     refund_from,
     subscription_from,
 )
+from billing.domain.credit import is_clearing_metadata
 from billing.domain.errors import (
     InvalidSignature,
     ProviderError,
@@ -59,11 +70,13 @@ from billing.domain.errors import (
 from billing.domain.models import (
     ENDED_STATUSES,
     BillingAccount,
+    CreditBalance,
     PaidInvoice,
     PlanPrice,
     ProviderEvent,
     ProviderRefund,
     ProviderSubscription,
+    RecentPayment,
 )
 from billing.domain.refunds import covers, earliest_invoice
 
@@ -377,6 +390,91 @@ class StripeProvider:
             raise _failure("refunding the payment at Stripe failed", exc) from exc
         del currency  # the payment's own: Stripe takes no currency for a payment's refund
         return refund_from(made.to_dict())
+
+    async def customer_credit_balance(self, customer_id: str) -> CreditBalance | None:
+        try:
+            found = (await self.client.v1.customers.retrieve_async(customer_id)).to_dict()
+            if found.get("deleted"):
+                return None
+            cleared = await self._cleared(customer_id)
+        except stripe.StripeError as exc:
+            if _missing(exc):
+                return None
+            raise _failure("reading the customer's balance at Stripe failed", exc) from exc
+        return credit_balance_from(found, cleared)
+
+    async def _cleared(self, customer_id: str) -> int:
+        """What balance transactions of an erasure took off the balance (their metadata)."""
+        cleared = 0
+        params: dict[str, Any] = {"limit": 100}
+        while True:
+            page = await self.client.v1.customers.balance_transactions.list_async(
+                customer_id,
+                params,  # type: ignore[arg-type]
+            )
+            for transaction in page.data:
+                obj = transaction.to_dict()
+                metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
+                amount = obj.get("amount")
+                if is_clearing_metadata(metadata or {}) and isinstance(amount, int) and amount > 0:
+                    cleared += amount
+            if not page.has_more or not page.data:
+                return cleared
+            params = {"limit": 100, "starting_after": page.data[-1].id}
+
+    async def recent_payments(self, customer_id: str, since: datetime) -> list[RecentPayment]:
+        found: list[RecentPayment] = []
+        params: dict[str, Any] = {
+            "customer": customer_id,
+            "created": {"gte": int(since.timestamp())},
+            "limit": 100,
+        }
+        try:
+            while True:
+                page = await self.client.v1.charges.list_async(params)  # type: ignore[arg-type]
+                for charge in page.data:
+                    payment = recent_payment_from(charge.to_dict())
+                    if payment is not None:
+                        found.append(payment)
+                if not page.has_more or not page.data:
+                    break
+                params = {**params, "starting_after": page.data[-1].id}
+        except stripe.StripeError as exc:
+            raise _failure("reading the customer's payments at Stripe failed", exc) from exc
+        return sorted(found, key=lambda p: p.created, reverse=True)
+
+    @staticmethod
+    def clearing_params(amount: int, currency: str, metadata: dict[str, str]) -> dict[str, Any]:
+        """The parameters of ``POST /v1/customers/{id}/balance_transactions`` that zero a
+        credit (separate for the tests): a positive amount is a debit at Stripe."""
+        return {
+            "amount": amount,
+            "currency": currency.lower(),
+            "description": "Credit balance paid back on account erasure",
+            "metadata": dict(metadata),
+        }
+
+    async def clear_credit_balance(
+        self,
+        customer_id: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> None:
+        try:
+            await self.client.v1.customers.balance_transactions.create_async(
+                customer_id,
+                self.clearing_params(amount, currency, metadata),  # type: ignore[arg-type]
+                {"idempotency_key": idempotency_key},
+            )
+        except stripe.IdempotencyError as exc:
+            msg = "the balance transaction's idempotency key was used with other parameters"
+            raise ProviderUnavailable(msg) from exc
+        except stripe.StripeError as exc:
+            if _missing(exc):
+                return
+            raise _failure("zeroing the customer's balance at Stripe failed", exc) from exc
 
     async def fetch_price(self, plan_key: str, price_id: str) -> PlanPrice:
         try:
