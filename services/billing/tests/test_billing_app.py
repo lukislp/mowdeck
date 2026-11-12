@@ -32,7 +32,7 @@ from billing.adapters.bus.entitlements import BusEntitlementsGateway
 from billing.adapters.bus.publisher import BusEventPublisher
 from billing.adapters.memory import MemoryStore
 from billing.adapters.plans import HttpPlanCatalog, StaticPlanCatalog
-from billing.adapters.providers.fake import FakeProvider
+from billing.adapters.providers.fake import FakeProvider, fake_customer_id
 from billing.adapters.providers.stripe import StripeProvider, verify_stripe_payload
 from billing.domain.errors import InvalidInput, NotFoundError, ProviderError
 from billing.main import build_app, build_provider, default_principal_resolver, load_prices
@@ -156,7 +156,8 @@ async def test_billing_remembers_created_accounts_from_the_bus() -> None:
             account = await tx.get_account(account_id)
         assert account is not None
         assert (account.name, account.kind) == ("Firma", AccountKind.BUSINESS)
-        assert len(app.state.subscriptions) == 2  # account.created, grants.changed
+        # account.created, account.erase.billing, grants.changed
+        assert len(app.state.subscriptions) == 3
 
 
 async def test_billing_gateway_and_publisher_without_bus() -> None:
@@ -236,6 +237,8 @@ def test_billing_cli_send_fixture_signs_the_event() -> None:
     event = verify_stripe_payload(seen["body"], seen["signature"], "whsec_cli")
     assert event["data"]["object"]["status"] == "past_due"
     assert event["data"]["object"]["metadata"]["account_id"] == str(account_id)
+    # The customer the fake provider gives the account at its first checkout.
+    assert event["data"]["object"]["customer"] == fake_customer_id(account_id)
     refused = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(400)))
     assert cli.send_fixture(args, refused) == 1
     args.secret = None

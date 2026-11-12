@@ -36,7 +36,7 @@ from billing.adapters.plans import StaticPlanCatalog
 from billing.adapters.providers.fake import FakeProvider
 from billing.adapters.providers.fixtures import encode, sign
 from billing.application.billing import BillingService
-from billing.domain.models import OfferedPlan
+from billing.domain.models import Customer, OfferedPlan
 from billing.domain.prices import PriceTable
 from billing.main import build_app
 from billing.settings import Settings
@@ -171,6 +171,14 @@ class Harness:
     async def owner(self) -> Person:
         """A new account and its owner."""
         return await self.member("owner")
+
+    async def customer(self, account_id: UUID, customer_id: str = "cus_1") -> None:
+        """The account's customer at the provider, as a started checkout leaves it: Billing
+        applies provider events only to a customer it knows."""
+        async with self.store.transaction() as tx:
+            await tx.save_customer(
+                Customer(account_id, self.provider.name, customer_id, self.clock())
+            )
 
     async def webhook(self, event: dict[str, Any], secret: str = SECRET) -> httpx.Response:
         """Post a signed event like Stripe."""

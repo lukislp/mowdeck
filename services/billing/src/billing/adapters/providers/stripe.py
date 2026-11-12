@@ -16,6 +16,14 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
   existing customer ``customer_update`` saves name and address entered in Checkout.
 * Webhooks: the ``Stripe-Signature`` header is verified with the endpoint secret
   (``stripe.WebhookSignature``, 300 s tolerance) against the raw body before anything is parsed.
+* Account erasure (ADR 0082): ``DELETE /v1/subscriptions/{id}`` with ``invoice_now=false`` and
+  ``prorate=false`` ends a subscription at once, without a final invoice and without a credit
+  for the unused time; nothing is refunded. ``DELETE /v1/customers/{id}`` deletes the customer
+  object (and ends any subscription Billing never heard of). Stripe keeps the invoices and
+  payments of a deleted customer for as long as it must; they are no longer reachable from
+  MowDeck. Both calls are idempotent here: Stripe's ``resource_missing`` and a subscription
+  that has ended already count as done. A rate limit, a timeout, a connection error and a 5xx
+  (after the SDK's own retries) are ``ProviderUnavailable``, everything else ``ProviderError``.
 """
 
 import json
@@ -24,11 +32,38 @@ from typing import Any
 import stripe
 
 from billing.adapters.providers.stripe_events import event_from, subscription_from
-from billing.domain.errors import InvalidSignature, ProviderError
-from billing.domain.models import BillingAccount, PlanPrice, ProviderEvent, ProviderSubscription
+from billing.domain.errors import InvalidSignature, ProviderError, ProviderUnavailable
+from billing.domain.models import (
+    ENDED_STATUSES,
+    BillingAccount,
+    PlanPrice,
+    ProviderEvent,
+    ProviderSubscription,
+)
 
 WEBHOOK_TOLERANCE_SECONDS = 300
 """Accepted age of a webhook signature (Stripe's default)."""
+
+RESOURCE_MISSING = "resource_missing"
+"""Stripe's error code for an object it does not know (any more): a deleted customer, a
+subscription of a deleted customer."""
+
+CANCEL_NOW = {"invoice_now": False, "prorate": False}
+"""How a subscription of an erased account ends: no final invoice for what is pending, no
+credit for the unused time (both are Stripe's defaults, stated so that a changed default
+cannot bill or credit somebody who is deleting their account)."""
+
+
+def _missing(exc: stripe.StripeError) -> bool:
+    return isinstance(exc, stripe.InvalidRequestError) and exc.code == RESOURCE_MISSING
+
+
+def _failure(message: str, exc: stripe.StripeError) -> ProviderError:
+    """``ProviderUnavailable`` for what can succeed later, ``ProviderError`` for the rest."""
+    later = isinstance(exc, stripe.RateLimitError | stripe.APIConnectionError) or (
+        (exc.http_status or 0) >= 500
+    )
+    return ProviderUnavailable(message) if later else ProviderError(message)
 
 
 def verify_stripe_payload(
@@ -166,12 +201,34 @@ class StripeProvider:
             raise ProviderError("fetching the subscription from Stripe failed") from exc
         return subscription_from(found.to_dict())
 
-    async def cancel_subscription(self, subscription_id: str) -> ProviderSubscription:
+    async def cancel_subscription(self, subscription_id: str) -> None:
         try:
-            cancelled = await self.client.v1.subscriptions.cancel_async(subscription_id)
+            await self.client.v1.subscriptions.cancel_async(
+                subscription_id,
+                CANCEL_NOW,  # type: ignore[arg-type]
+            )
         except stripe.StripeError as exc:
-            raise ProviderError("cancelling the subscription at Stripe failed") from exc
-        return subscription_from(cancelled.to_dict())
+            if _missing(exc) or await self._has_ended(subscription_id, exc):
+                return
+            raise _failure("cancelling the subscription at Stripe failed", exc) from exc
+
+    async def _has_ended(self, subscription_id: str, refusal: stripe.StripeError) -> bool:
+        """Whether Stripe refused to cancel because the subscription is over already."""
+        if not isinstance(refusal, stripe.InvalidRequestError):
+            return False
+        try:
+            found = await self.client.v1.subscriptions.retrieve_async(subscription_id)
+        except stripe.StripeError as exc:
+            return _missing(exc)
+        return subscription_from(found.to_dict()).status in ENDED_STATUSES
+
+    async def delete_customer(self, customer_id: str) -> None:
+        try:
+            await self.client.v1.customers.delete_async(customer_id)
+        except stripe.StripeError as exc:
+            if _missing(exc):
+                return
+            raise _failure("deleting the customer at Stripe failed", exc) from exc
 
     async def fetch_price(self, plan_key: str, price_id: str) -> PlanPrice:
         try:

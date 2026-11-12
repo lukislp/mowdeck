@@ -4,11 +4,13 @@
 # Compose block for billing: paste the entries below "services:" into
 # infra/compose/docker-compose.yml. Build context is the repository root.
 services:
-  # --- Billing (ADR 0031): only with `--profile billing` -----------------------------------
+  # --- Billing (ADR 0031): only with the profile "billing" ----------------------------------
   # billing.enabled=false (the default) means these two services are not started at all: no
   # route, the web app's probe of /api/v1/billing/status gets 404 and shows nothing. Enable it
-  # with COMPOSE_PROFILES=billing (or --profile billing) together with
-  # ENTITLEMENTS_BILLING_ENABLED=true, and set the BILLING_* variables (docs/ops/billing.md).
+  # with COMPOSE_PROFILES=billing in .env together with ENTITLEMENTS_BILLING_ENABLED=true, and
+  # set the BILLING_* variables (docs/ops/billing.md). `--profile billing` on the command line
+  # alone is not enough: Identity learns from COMPOSE_PROFILES that Billing must confirm an
+  # account erasure (ADR 0082), and Billing refuses to start where Identity would not ask it.
   # One-shot job: Alembic migrations of the billing database (idempotent).
   billing-migrate:
     image: mowdeck/billing:${MOWDECK_VERSION:-dev}
@@ -70,6 +72,8 @@ services:
       MOWDECK_BILLING_GRACE_DAYS: ${BILLING_GRACE_DAYS:-14}
       MOWDECK_BILLING_APP_URL: ${BILLING_APP_URL:-}
       MOWDECK_BILLING_ENTITLEMENTS_URL: https://entitlements:8000
+      # The same value as Identity's MOWDECK_IDENTITY_OPTIONAL_SERVICES (see there).
+      MOWDECK_BILLING_OPTIONAL_SERVICES: ${COMPOSE_PROFILES:-}
     labels:
       - traefik.enable=true
       - traefik.http.routers.billing.rule=PathPrefix(`/api/v1/billing`)

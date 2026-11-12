@@ -8,7 +8,7 @@ from mowdeck_authz import RelationshipTuple, account, user
 from mowdeck_contracts.v1 import AccountCreated, AccountKind
 from test_billing_webhooks import _sub
 
-from billing.adapters.providers.fake import FakeProvider
+from billing.adapters.providers.fake import FakeProvider, fake_customer_id
 from billing.domain.models import OfferedPlan
 from billing.domain.prices import PriceTable
 
@@ -154,7 +154,15 @@ async def test_billing_checkout_household_without_trial_after_a_subscription() -
         assert first["business"] is False
         assert first["success_url"].startswith("https://app.example.org/account")
         # The subscription ended: a new checkout gets no second trial.
-        await h.webhook(_sub(h, owner.account_id, "canceled", ended_at=h.clock.ts - 400 * 86400))
+        await h.webhook(
+            _sub(
+                h,
+                owner.account_id,
+                "canceled",
+                customer_id=fake_customer_id(owner.account_id),
+                ended_at=h.clock.ts - 400 * 86400,
+            )
+        )
         await h.client.post(f"{API}/checkout", json={"plan": "home"}, headers=owner.headers)
         assert h.provider.checkouts[-1]["trial_days"] == 0
 
@@ -168,6 +176,7 @@ async def test_billing_checkout_refusals() -> None:
             f"{API}/checkout", json={"plan": "Bad Key"}, headers=owner.headers
         )
         assert invalid.status_code == 422
+        await h.customer(owner.account_id)
         await h.webhook(_sub(h, owner.account_id, "active"))
         conflict = await h.client.post(
             f"{API}/checkout", json={"plan": "home"}, headers=owner.headers
@@ -192,6 +201,7 @@ async def test_billing_portal_needs_a_customer() -> None:
 async def test_billing_subscription_summary_after_webhook() -> None:
     async with harness() as h:
         owner = await h.owner()
+        await h.customer(owner.account_id)
         await h.webhook(_sub(h, owner.account_id, "past_due", cancel_at_period_end=True))
         body = (await h.client.get(f"{API}/subscription", headers=owner.headers)).json()
         subscription = body["subscription"]

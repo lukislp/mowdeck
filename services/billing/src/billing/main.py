@@ -8,8 +8,12 @@ builds the app and serves it. Tests call :func:`build_app` with their own settin
 provider, authorizer, bus, plan catalogue, clock and principal resolver.
 
 Billing runs only where billing is enabled (Compose profile ``billing``); there is no switch
-inside. Startup: read the price file, subscribe ``identity.account.created``. Readiness: the bus
-(kit), the database and OpenFGA.
+inside. Startup: read the price file, subscribe ``identity.account.created`` and answer
+``account.erase.billing`` (ADR 0082). Readiness: the bus (kit), the database and OpenFGA.
+
+The container refuses to start where Identity was not told that Billing runs
+(:func:`ensure_identity_asks`): a deleted account would be erased everywhere else and keep its
+customer and its subscription at the payment provider.
 """
 
 from collections.abc import Mapping
@@ -29,6 +33,7 @@ from billing.adapters.api.demo import DEMO_POLICY
 from billing.adapters.api.deps import install_error_mapping
 from billing.adapters.api.routes import router
 from billing.adapters.bus.entitlements import BusEntitlementsGateway
+from billing.adapters.bus.erasure import subscribe_erasure
 from billing.adapters.bus.publisher import BusEventPublisher
 from billing.adapters.bus.subscriptions import subscribe_all
 from billing.adapters.db.store import SqlStore
@@ -36,6 +41,7 @@ from billing.adapters.plans import HttpPlanCatalog, StaticPlanCatalog
 from billing.adapters.providers.fake import FakeProvider
 from billing.adapters.providers.stripe import StripeProvider
 from billing.application.billing import BillingConfig, BillingService
+from billing.application.erasure import account_erasure
 from billing.application.ports import (
     Clock,
     EntitlementsGateway,
@@ -145,9 +151,12 @@ def build_app(
             clock=clock or utc_now,
         )
         app.state.billing_service = service
+        erasure = account_erasure(store_ref, active_provider)
+        app.state.erasure = erasure
         subscriptions: list[Subscription] = []
         if active_bus is not None:
             subscriptions = await subscribe_all(active_bus, service)
+            subscriptions.append(await subscribe_erasure(active_bus, erasure))
             cache = app.state.authorizer
             if hasattr(cache, "invalidate_subject"):
                 subscriptions.append(await subscribe_cache_invalidation(active_bus, cache))
@@ -191,9 +200,30 @@ def default_principal_resolver(
     return resolver
 
 
+def ensure_identity_asks(settings: Settings) -> None:
+    """Refuse to start where Identity does not ask Billing to erase a deleted account.
+
+    Identity asks the optional services its deployment names (ADR 0082), and the deployment
+    gives Billing the same list. Without ``billing`` in it an account erasure would complete
+    without Billing: the customer would stay at the payment provider and its subscription would
+    go on charging a deleted account. Better no Billing than that."""
+    if settings.erasure_asked:
+        return
+    msg = (
+        "billing is not in MOWDECK_BILLING_OPTIONAL_SERVICES, so Identity "
+        "(MOWDECK_IDENTITY_OPTIONAL_SERVICES) would not ask Billing to erase a deleted account "
+        "and its customer and subscription would stay at the payment provider. Compose: set "
+        "COMPOSE_PROFILES=billing in infra/compose/.env and recreate identity (`--profile "
+        "billing` on the command line alone does not tell Identity). Helm: "
+        "services.billing.enabled=true sets both."
+    )
+    raise ValueError(msg)
+
+
 def main() -> None:
     """Load the settings from the environment and serve the app."""
     settings = Settings.from_env()
+    ensure_identity_asks(settings)
     run(build_app(settings, principal_resolver=default_principal_resolver()), settings)
 
 

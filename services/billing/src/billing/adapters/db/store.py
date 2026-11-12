@@ -6,6 +6,11 @@
 The webhook ledger relies on the primary key ``(provider, event_id)``: two deliveries of one
 event insert concurrently, the second waits for the first's transaction and then finds the
 event claimed (``claim_event`` only updates an unclaimed or expired row).
+
+A provider event is applied under a row lock on its customer (``lock_customer``, ``SELECT ...
+FOR UPDATE``), and the erasure of an account deletes the customer rows first
+(``purge_account``): the delete waits for an event that is being applied and then removes what
+it wrote, and an event that comes later finds no customer (ADR 0082).
 """
 
 from collections.abc import AsyncIterator
@@ -16,6 +21,7 @@ from uuid import UUID
 
 import sqlalchemy as sa
 from mowdeck_contracts.v1 import AccountKind, PlanStatus, SubscriptionStatus
+from mowdeck_service_kit.db import account_row_counts, account_tables
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -109,6 +115,24 @@ class SqlTx:
             )
         ).first()
         return Customer(**dict(row._mapping)) if row else None
+
+    async def lock_customer(self, provider: str, provider_customer_id: str) -> Customer | None:
+        c = tables.customers
+        row = (
+            await self._conn.execute(
+                sa.select(c)
+                .where(c.c.provider == provider, c.c.provider_customer_id == provider_customer_id)
+                .with_for_update()
+            )
+        ).first()
+        return Customer(**dict(row._mapping)) if row else None
+
+    async def customers_of(self, account_id: UUID) -> list[Customer]:
+        c = tables.customers
+        result = await self._conn.execute(
+            sa.select(c).where(c.c.account_id == account_id).order_by(c.c.provider)
+        )
+        return [Customer(**dict(row._mapping)) for row in result]
 
     async def save_customer(self, customer: Customer) -> None:
         await self._conn.execute(
@@ -225,20 +249,25 @@ class SqlTx:
         )
         return bool(result.rowcount)
 
+    async def attribute_event(self, provider: str, event_id: str, account_id: UUID) -> None:
+        w = tables.webhook_events
+        await self._conn.execute(
+            sa.update(w)
+            .where(w.c.provider == provider, w.c.event_id == event_id)
+            .values(account_id=account_id)
+        )
+
     async def finish_event(
         self,
         provider: str,
         event_id: str,
         outcome: EventOutcome,
         processed_at: datetime | None,
-        account_id: UUID | None,
     ) -> None:
         w = tables.webhook_events
         values: dict[str, Any] = {"outcome": outcome.value, "processed_at": processed_at}
         if processed_at is None:
             values["claimed_at"] = None
-        if account_id is not None:
-            values["account_id"] = account_id
         await self._conn.execute(
             sa.update(w).where(w.c.provider == provider, w.c.event_id == event_id).values(**values)
         )
@@ -251,6 +280,27 @@ class SqlTx:
             )
         ).first()
         return _event(row) if row else None
+
+    async def purge_account(self, account_id: UUID) -> int:
+        removed = 0
+        # The customer rows first: the delete takes their locks, so it waits for a provider
+        # event that is being applied, and the statements below see what that event wrote.
+        for table in (
+            tables.customers,
+            tables.subscriptions,
+            tables.invoices,
+            tables.webhook_events,
+            tables.accounts,
+        ):
+            result = await self._conn.execute(
+                sa.delete(table).where(table.c.account_id == account_id)
+            )
+            removed += int(result.rowcount or 0)
+        return removed
+
+    async def account_rows(self, account_id: UUID) -> dict[str, int]:
+        """Counted over every table of the schema that has an ``account_id`` column."""
+        return await account_row_counts(self._conn, account_tables(tables.metadata), account_id)
 
 
 class SqlStore:

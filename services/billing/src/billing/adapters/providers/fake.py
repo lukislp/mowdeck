@@ -18,12 +18,27 @@ from mowdeck_contracts.v1 import SubscriptionStatus
 from billing.adapters.providers.stripe import verify_stripe_payload
 from billing.adapters.providers.stripe_events import event_from
 from billing.domain.errors import NotFoundError
-from billing.domain.models import BillingAccount, PlanPrice, ProviderEvent, ProviderSubscription
+from billing.domain.models import (
+    ENDED_STATUSES,
+    BillingAccount,
+    PlanPrice,
+    ProviderEvent,
+    ProviderSubscription,
+)
+
+
+def fake_customer_id(account_id: UUID) -> str:
+    """The customer id the fake provider gives an account (stable, so a fixture can name it)."""
+    return f"cus_fake_{account_id.hex[:12]}"
 
 
 @dataclass
 class FakeProvider:
-    """``PaymentProvider`` in memory; records every call for assertions."""
+    """``PaymentProvider`` in memory; records every call for assertions.
+
+    ``failures`` makes a call fail like the real provider would: the exception stored under a
+    method name is raised by that method until the entry is removed. ``calls`` lists every call
+    of the two erasure methods, failed ones included."""
 
     webhook_secret: str = "whsec_fake"  # noqa: S105 - a development value, not a secret
     amounts: dict[str, int] = field(default_factory=dict)
@@ -34,10 +49,13 @@ class FakeProvider:
     portals: list[str] = field(default_factory=list)
     subscriptions: dict[str, ProviderSubscription] = field(default_factory=dict)
     cancelled: list[str] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
+    calls: list[tuple[str, str]] = field(default_factory=list)
+    failures: dict[str, Exception] = field(default_factory=dict)
     fail_prices: bool = False
 
     async def create_customer(self, account: BillingAccount) -> str:
-        customer_id = f"cus_fake_{account.account_id.hex[:12]}"
+        customer_id = fake_customer_id(account.account_id)
         self.customers[customer_id] = account.account_id
         return customer_id
 
@@ -80,10 +98,15 @@ class FakeProvider:
             raise NotFoundError(f"unknown subscription {subscription_id}")
         return found
 
-    async def cancel_subscription(self, subscription_id: str) -> ProviderSubscription:
-        found = await self.fetch_subscription(subscription_id)
-        self.cancelled.append(subscription_id)
-        cancelled = ProviderSubscription(
+    def _attempt(self, method: str, object_id: str) -> None:
+        self.calls.append((method, object_id))
+        failure = self.failures.get(method)
+        if failure is not None:
+            raise failure
+
+    def _end(self, found: ProviderSubscription) -> None:
+        self.cancelled.append(found.id)
+        self.subscriptions[found.id] = ProviderSubscription(
             id=found.id,
             customer_id=found.customer_id,
             status=SubscriptionStatus.CANCELED,
@@ -92,8 +115,22 @@ class FakeProvider:
             account_id=found.account_id,
             current_period_end=found.current_period_end,
         )
-        self.subscriptions[subscription_id] = cancelled
-        return cancelled
+
+    async def cancel_subscription(self, subscription_id: str) -> None:
+        self._attempt("cancel_subscription", subscription_id)
+        found = self.subscriptions.get(subscription_id)
+        if found is not None and found.status not in ENDED_STATUSES:
+            self._end(found)
+
+    async def delete_customer(self, customer_id: str) -> None:
+        self._attempt("delete_customer", customer_id)
+        if self.customers.pop(customer_id, None) is None:
+            return
+        self.deleted.append(customer_id)
+        # Like Stripe: deleting a customer ends the subscriptions it still has.
+        for found in list(self.subscriptions.values()):
+            if found.customer_id == customer_id and found.status not in ENDED_STATUSES:
+                self._end(found)
 
     async def fetch_price(self, plan_key: str, price_id: str) -> PlanPrice:
         if self.fail_prices:

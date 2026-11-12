@@ -40,6 +40,7 @@ from identity.adapters.webauthn import PyWebAuthnCeremonies
 from identity.application.access import AccessChecker
 from identity.application.catalogue import CatalogueService
 from identity.application.deps import Deps
+from identity.application.erasure import scheduled_deletions
 from identity.application.event_erasure import EventErasureService
 from identity.application.keys import KeyManager
 from identity.application.ports import (
@@ -68,6 +69,10 @@ def key_cipher(settings: Settings) -> AesGcmKeyCipher:
 
 
 _log = get_logger("identity.runtime")
+
+ANNOUNCED_ACCOUNTS = 50
+"""At most this many account ids are named in the start-up warning about accounts past their
+grace period (the count is always complete; the rest: ``identity.cli erasures --scheduled``)."""
 
 
 @dataclass
@@ -163,24 +168,51 @@ class Runtime:
         )
         event_erasure = EventErasureService(deps, self.event_log or BusEventLog(bus))
         self.services.event_erasure = event_erasure
-        if not self.settings.erasure_enabled:
-            if not self.settings.demo_mode:
-                _log.info(
-                    "account erasure is switched off: accounts scheduled for deletion stay "
-                    "locked and restorable (MOWDECK_IDENTITY_ERASURE_ENABLED=false)"
-                )
-        else:
+        if self.settings.erasure_enabled:
             self.services.enable_erasure(
                 self.eraser
                 or BusAccountEraser(bus, timeout=self.settings.identity_erasure_timeout_seconds),
                 self.settings.erasure_config(),
                 event_erasure,
             )
+        if not self.settings.demo_mode:
+            await self._announce_erasure(deps)
         if self.settings.sandboxes_enabled:
             self.services.enable_sandboxes(
                 self.provisioner or self.http_provisioner(), self.settings.sandbox_config()
             )
         return self.services
+
+    async def _announce_erasure(self, deps: Deps) -> None:
+        """Say at start-up whether the purge of deleted accounts is on, which services it asks
+        and how many accounts wait for it. Accounts whose grace period is already over get a
+        warning of their own: the next sweep purges them and that cannot be undone, which an
+        operator who has just switched the purge on (or updated to the release that did) should
+        read before anything else."""
+        scheduled = await scheduled_deletions(deps)
+        due = [s for s in scheduled if s.due]
+        if not self.settings.erasure_enabled:
+            _log.info(
+                "account erasure is switched off: accounts scheduled for deletion stay "
+                "locked and restorable (MOWDECK_IDENTITY_ERASURE_ENABLED=false)",
+                scheduled=len(scheduled),
+                past_grace_period=len(due),
+            )
+            return
+        _log.info(
+            "account erasure is on: accounts are purged when their deletion grace period is over",
+            services=list(self.settings.erasure_config().services),
+            scheduled=len(scheduled),
+            past_grace_period=len(due),
+        )
+        if due:
+            _log.warning(
+                "accounts are past their deletion grace period and are purged at the next "
+                "sweep; this cannot be undone (to keep them: MOWDECK_IDENTITY_ERASURE_ENABLED="
+                "false, or their owners restore them)",
+                count=len(due),
+                accounts=[str(s.account_id) for s in due[:ANNOUNCED_ACCOUNTS]],
+            )
 
     def http_provisioner(self) -> HttpSandboxProvisioner:
         """The demo sandboxes' provisioner on the services' HTTP APIs (needs the seed secret)."""

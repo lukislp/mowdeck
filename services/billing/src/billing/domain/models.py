@@ -14,6 +14,9 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import AccountKind, PlanStatus, SubscriptionStatus
 
+ENDED_STATUSES = frozenset({SubscriptionStatus.CANCELED, SubscriptionStatus.INCOMPLETE_EXPIRED})
+"""A subscription in one of these is over for good: nothing is billed and it cannot recover."""
+
 
 @dataclass(slots=True)
 class BillingAccount:
@@ -66,10 +69,7 @@ class Subscription:
     @property
     def is_open(self) -> bool:
         """Still billed or recoverable (a new Checkout would create a second subscription)."""
-        return self.status not in (
-            SubscriptionStatus.CANCELED,
-            SubscriptionStatus.INCOMPLETE_EXPIRED,
-        )
+        return self.status not in ENDED_STATUSES
 
 
 @dataclass(slots=True)

@@ -14,6 +14,8 @@
 * ``reconcile [--account ID]``: make OpenFGA match the database.
 * ``erasures [--all]``: the purges of deleted accounts that are not finished (ADR 0082): state,
   which services confirmed, attempts and the last error; ``--all`` adds the finished ones.
+  ``erasures --scheduled``: the accounts scheduled for deletion whose purge has not begun, with
+  the end of their grace period and whether it is over (works with the purge switched off).
 * ``grant-platform-admin USERNAME [--revoke]``: make a user an operator admin
   (``platform:main#operator_admin``: manages accounts and plans, sees no mower data).
 
@@ -35,6 +37,7 @@ from mowdeck_service_kit.logging import configure_logging
 
 from identity.application.accounts import Registration
 from identity.application.context import SYSTEM
+from identity.application.erasure import ScheduledDeletion, scheduled_deletions
 from identity.domain.erasure import AccountErasure
 from identity.domain.errors import IdentityError
 from identity.runtime import Runtime
@@ -66,6 +69,17 @@ def erasure_line(erasure: AccountErasure) -> str:
     return f"{line}  last error: {erasure.last_error}" if erasure.last_error else line
 
 
+def scheduled_line(scheduled: ScheduledDeletion, *, purging: bool) -> str:
+    """One line per account scheduled for deletion: when its grace period ends and what happens
+    then on this installation."""
+    until = scheduled.delete_after.isoformat() if scheduled.delete_after else "unknown"
+    line = f"{scheduled.account_id}  deleting  grace period until {until}"
+    if not scheduled.due:
+        return f"{line}  the owner can restore it"
+    then = "purged at the next sweep" if purging else "stays as it is (the purge is off)"
+    return f"{line}  over: {then}"
+
+
 def parser() -> argparse.ArgumentParser:
     """The argument parser."""
     root = argparse.ArgumentParser(
@@ -90,6 +104,11 @@ def parser() -> argparse.ArgumentParser:
     reconcile.add_argument("--account", type=UUID)
     erasures = commands.add_parser("erasures", help="the purges of deleted accounts")
     erasures.add_argument("--all", action="store_true", help="include the finished purges")
+    erasures.add_argument(
+        "--scheduled",
+        action="store_true",
+        help="the accounts scheduled for deletion whose purge has not begun",
+    )
     platform = commands.add_parser(
         "grant-platform-admin", help="make a user an operator admin (platform:main)"
     )
@@ -137,6 +156,12 @@ async def run_command(args: argparse.Namespace, runtime: Runtime) -> str:
             else:
                 result = await services.accounts.reconcile_all()
             return f"reconciled: {result.writes} tuples written, {result.deletes} deleted"
+        case "erasures" if args.scheduled:
+            waiting = await scheduled_deletions(services.deps)
+            if not waiting:
+                return "no account is scheduled for deletion"
+            purging = services.erasure is not None
+            return "\n".join(scheduled_line(account, purging=purging) for account in waiting)
         case "erasures":
             if services.erasure is None:
                 return "account erasure is not enabled on this installation"

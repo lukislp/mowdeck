@@ -84,6 +84,7 @@ async def test_billing_webhook_without_configured_secret_refuses_everything() ->
 async def test_billing_webhook_replayed_event_is_processed_once() -> None:
     async with harness() as h:
         account_id = uuid4()
+        await h.customer(account_id)
         event = _sub(h, account_id, "active")
         first = await h.webhook(event)
         assert first.status_code == 200, first.text
@@ -107,6 +108,7 @@ async def test_billing_webhook_replayed_event_is_processed_once() -> None:
 async def test_billing_past_due_sets_grace_and_active_restores() -> None:
     async with harness(billing_grace_days=14) as h:
         account_id = uuid4()
+        await h.customer(account_id)
         period_start = h.clock.ts - DAY
         response = await h.webhook(_sub(h, account_id, "past_due", period_start=period_start))
         assert response.status_code == 200, response.text
@@ -131,7 +133,7 @@ async def test_billing_past_due_sets_grace_and_active_restores() -> None:
         assert summary.subscription is not None
         assert summary.subscription.status is SubscriptionStatus.ACTIVE
         assert summary.subscription.plan_status is PlanStatus.ACTIVE
-        assert summary.has_customer  # remembered from the subscription's customer
+        assert summary.has_customer
         changes = _changes(h)
         assert [c.plan_status for c in changes] == [PlanStatus.GRACE, PlanStatus.ACTIVE]
         assert changes[0].event_type == "customer.subscription.updated"
@@ -139,10 +141,24 @@ async def test_billing_past_due_sets_grace_and_active_restores() -> None:
 
 async def test_billing_status_mapping_trial_and_ended_subscriptions() -> None:
     async with harness(billing_grace_days=10) as h:
-        trial_account, ended_account, old_account = uuid4(), uuid4(), uuid4()
+        trial_account, ended_account, old_account, pending = uuid4(), uuid4(), uuid4(), uuid4()
+        for account_id, customer_id in (
+            (trial_account, "cus_t"),
+            (ended_account, "cus_c"),
+            (old_account, "cus_o"),
+            (pending, "cus_i"),
+        ):
+            await h.customer(account_id, customer_id)
         trial_end = h.clock.ts + 14 * DAY
         await h.webhook(
-            _sub(h, trial_account, "trialing", subscription_id="sub_t", trial_end=trial_end)
+            _sub(
+                h,
+                trial_account,
+                "trialing",
+                subscription_id="sub_t",
+                customer_id="cus_t",
+                trial_end=trial_end,
+            )
         )
         trial = h.entitlements.requests[-1]
         assert (trial.status, int(trial.trial_until.timestamp())) == (  # type: ignore[union-attr]
@@ -152,7 +168,14 @@ async def test_billing_status_mapping_trial_and_ended_subscriptions() -> None:
         # Canceled at the period end, still inside the grace days: grace until end + 10 days.
         ended_at = h.clock.ts - 2 * DAY
         await h.webhook(
-            _sub(h, ended_account, "canceled", subscription_id="sub_c", ended_at=ended_at)
+            _sub(
+                h,
+                ended_account,
+                "canceled",
+                subscription_id="sub_c",
+                customer_id="cus_c",
+                ended_at=ended_at,
+            )
         )
         ended = h.entitlements.requests[-1]
         assert ended.status is PlanStatus.GRACE
@@ -164,13 +187,16 @@ async def test_billing_status_mapping_trial_and_ended_subscriptions() -> None:
                 old_account,
                 "unpaid",
                 subscription_id="sub_o",
+                customer_id="cus_o",
                 period_start=h.clock.ts - 60 * DAY,
             )
         )
         assert h.entitlements.requests[-1].status is PlanStatus.EXPIRED
         # incomplete: the first payment is pending, the plan stays as it is.
         before = len(h.entitlements.requests)
-        response = await h.webhook(_sub(h, uuid4(), "incomplete", subscription_id="sub_i"))
+        response = await h.webhook(
+            _sub(h, pending, "incomplete", subscription_id="sub_i", customer_id="cus_i")
+        )
         assert response.json()["outcome"] == "applied"
         assert len(h.entitlements.requests) == before
 
@@ -178,6 +204,7 @@ async def test_billing_status_mapping_trial_and_ended_subscriptions() -> None:
 async def test_billing_out_of_order_event_is_stale() -> None:
     async with harness() as h:
         account_id = uuid4()
+        await h.customer(account_id)
         newer = _sub(h, account_id, "active", created=h.clock.ts)
         older = _sub(h, account_id, "past_due", created=h.clock.ts - 60)
         assert (await h.webhook(newer)).json()["outcome"] == "applied"
@@ -212,6 +239,7 @@ async def test_billing_unknown_account_and_ignored_types() -> None:
 async def test_billing_entitlements_timeout_answers_500_and_the_retry_applies() -> None:
     async with harness(entitlements_timeout=0.05) as h:
         account_id = uuid4()
+        await h.customer(account_id)
         event = _sub(h, account_id, "past_due")
         h.entitlements.silent = True
         failed = await h.webhook(event)
@@ -233,7 +261,9 @@ async def test_billing_entitlements_timeout_answers_500_and_the_retry_applies() 
 
 async def test_billing_rejected_plan_and_superseded_old_subscription() -> None:
     async with harness() as h:
-        account_id = uuid4()
+        account_id, without_plan = uuid4(), uuid4()
+        await h.customer(account_id)
+        await h.customer(without_plan, "cus_np")
         h.entitlements.known_plans = {"fleet"}
         rejected = await h.webhook(_sub(h, account_id, "active", subscription_id="sub_old"))
         assert rejected.json()["outcome"] == "rejected"
@@ -256,7 +286,7 @@ async def test_billing_rejected_plan_and_superseded_old_subscription() -> None:
                 customer_id="cus_np",
                 status="active",
                 price_id="price_unknown",
-                account_id=uuid4(),
+                account_id=without_plan,
                 period_start=h.clock.ts,
                 period_end=h.clock.ts + DAY,
             )
@@ -266,7 +296,9 @@ async def test_billing_rejected_plan_and_superseded_old_subscription() -> None:
 
 async def test_billing_checkout_completed_fetches_the_subscription() -> None:
     async with harness() as h:
-        account_id = uuid4()
+        account_id, bare_account = uuid4(), uuid4()
+        await h.customer(account_id, "cus_ck")
+        await h.customer(bare_account, "cus_2")
         h.provider.subscriptions["sub_ck"] = ProviderSubscription(
             id="sub_ck",
             customer_id="cus_ck",
@@ -295,15 +327,18 @@ async def test_billing_checkout_completed_fetches_the_subscription() -> None:
             customer = await tx.get_customer(account_id, "fake")
         assert customer is not None
         assert customer.provider_customer_id == "cus_ck"
-        # A checkout without subscription (unusual) only remembers the customer.
+        # A checkout without subscription (unusual) changes nothing.
         bare = checkout_completed_event(
             session_id="cs_2",
             customer_id="cus_2",
             subscription_id=None,
-            account_id=uuid4(),
+            account_id=bare_account,
             plan="home",
         )
         assert (await h.webhook(bare)).json()["outcome"] == "applied"
+        async with h.store.transaction() as tx:
+            ledger = await tx.get_event("fake", bare["id"])
+        assert ledger is not None and ledger.account_id == bare_account
         orphan = checkout_completed_event(
             session_id="cs_3",
             customer_id="cus_3",
@@ -319,6 +354,7 @@ async def test_billing_checkout_completed_fetches_the_subscription() -> None:
 async def test_billing_invoices_are_stored_and_listed_per_account() -> None:
     async with harness() as h:
         owner = await h.owner()
+        await h.customer(owner.account_id, "cus_inv")
         await h.webhook(_sub(h, owner.account_id, "active", customer_id="cus_inv"))
         for number, (kind, status) in enumerate(
             [("invoice.payment_failed", "open"), ("invoice.paid", "paid")]
@@ -359,6 +395,7 @@ async def test_billing_invoices_are_stored_and_listed_per_account() -> None:
 async def test_billing_trial_will_end_is_published_without_plan_change() -> None:
     async with harness() as h:
         account_id = uuid4()
+        await h.customer(account_id)
         event = {
             **_sub(h, account_id, "trialing", trial_end=h.clock.ts + 3 * DAY),
             "type": "customer.subscription.trial_will_end",
@@ -371,14 +408,3 @@ async def test_billing_trial_will_end_is_published_without_plan_change() -> None
             "home",
             None,
         )
-
-
-async def test_billing_cancel_open_subscriptions() -> None:
-    async with harness() as h:
-        account_id = uuid4()
-        h.provider.subscriptions["sub_1"] = ProviderSubscription(
-            id="sub_1", customer_id="cus_1", status=SubscriptionStatus.ACTIVE
-        )
-        await h.webhook(_sub(h, account_id, "active"))
-        assert await h.service.cancel(account_id) == ["sub_1"]
-        assert h.provider.cancelled == ["sub_1"]

@@ -148,6 +148,30 @@ def checkout_completed_event(
     return _event("checkout.session.completed", obj, created, event_id)
 
 
+def customer_event(
+    event_type: str,
+    *,
+    customer_id: str,
+    account_id: UUID | None = None,
+    email: str | None = None,
+    name: str | None = None,
+    created: int | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """A ``customer.*`` event, e.g. the ``customer.deleted`` Stripe sends after a customer was
+    deleted: the object is the customer as it was, with its e-mail address and name."""
+    obj = {
+        "id": customer_id,
+        "object": "customer",
+        "created": int(time.time()) if created is None else created,
+        "email": email,
+        "name": name,
+        "livemode": False,
+        "metadata": {"account_id": str(account_id)} if account_id is not None else {},
+    }
+    return _event(event_type, obj, created, event_id)
+
+
 def encode(event: dict[str, Any]) -> bytes:
     """The raw body Stripe would send."""
     return json.dumps(event, separators=(",", ":")).encode()

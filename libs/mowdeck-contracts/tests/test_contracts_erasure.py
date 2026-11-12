@@ -59,6 +59,12 @@ def test_fleet_comes_first_and_the_names_are_unique() -> None:
     assert len(set(ERASURE_SERVICES)) == len(ERASURE_SERVICES)
 
 
+def test_billing_is_asked_before_entitlements() -> None:
+    """Billing sets plans in Entitlements, and ``entitlements.plan.set`` creates the plan row of
+    any account: Entitlements erases after Billing can set nothing any more."""
+    assert ERASURE_SERVICES.index("billing") < ERASURE_SERVICES.index("entitlements")
+
+
 @pytest.mark.parametrize("name", ["", "Fleet", "a b"])
 def test_a_bad_service_name_is_refused(name: str) -> None:
     with pytest.raises(ValueError, match="invalid service"):

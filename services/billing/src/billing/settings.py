@@ -72,3 +72,16 @@ class Settings(ServiceSettings):
 
     billing_price_cache_seconds: float = Field(default=600, ge=0)
     """How long fetched prices are reused by ``GET /status``."""
+
+    billing_optional_services: str = ""
+    """The optional services this installation runs, comma separated, exactly as Identity gets
+    them in ``MOWDECK_IDENTITY_OPTIONAL_SERVICES`` (Compose passes ``COMPOSE_PROFILES`` to both,
+    the chart the enabled optional services). Identity asks Billing to erase a deleted account
+    only when ``billing`` is among them (ADR 0082), so ``python -m billing.main`` refuses to
+    start when it is not: a deleted account would keep its customer and its subscription at the
+    payment provider."""
+
+    @property
+    def erasure_asked(self) -> bool:
+        """The installation told Identity that Billing runs (``billing_optional_services``)."""
+        return "billing" in {name.strip() for name in self.billing_optional_services.split(",")}

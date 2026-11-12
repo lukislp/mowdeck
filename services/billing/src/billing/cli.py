@@ -11,6 +11,11 @@ without a Stripe account (provider ``fake``) or with stripe-mock. The secret is 
     docker compose -f infra/compose/docker-compose.yml --profile billing exec billing \\
         python -m billing.cli send-fixture --account-id <uuid> --status past_due
 
+Billing applies an event only to a customer it knows (an unknown one is answered with
+``unknown_account``), so the account needs a customer first: start a checkout for it once (the
+"Upgrade" button, or ``POST /api/v1/billing/checkout``). The event then names the customer the
+fake provider gave the account; ``--customer-id`` names another one.
+
 Against real Stripe use the Stripe CLI instead (``stripe listen`` / ``stripe trigger``).
 """
 
@@ -23,6 +28,7 @@ from uuid import UUID
 
 import httpx
 
+from billing.adapters.providers.fake import fake_customer_id
 from billing.adapters.providers.fixtures import encode, sign, subscription_event
 
 DEFAULT_URL = "http://127.0.0.1:8000/api/v1/billing/webhooks/stripe"
@@ -73,7 +79,7 @@ def send_fixture(args: argparse.Namespace, client: httpx.Client | None = None) -
     event = subscription_event(
         args.event_type,
         subscription_id=args.subscription_id or f"sub_fixture_{account.hex[:12]}",
-        customer_id=args.customer_id or f"cus_fixture_{account.hex[:12]}",
+        customer_id=args.customer_id or fake_customer_id(account),
         status=args.status,
         price_id=args.price_id,
         account_id=account,

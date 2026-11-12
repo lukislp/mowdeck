@@ -112,6 +112,7 @@ _REVOKED: tuple[str, ...] = ("event.identity.access.revoked.*",)
 USERS: dict[str, Access] = {
     "billing": Access(
         publish=("event.billing.>", "entitlements.plan.set"),
+        serve=("account.erase.billing",),
         consume=(*_REVOKED, "event.identity.account.created", *_GRANTS),
     ),
     "camera-relay": Access(

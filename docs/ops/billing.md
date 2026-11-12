@@ -21,7 +21,7 @@ Billing needs data only the operator has. Nothing here is legal or tax advice; h
 | 11 | Datenschutz / privacy policy (controller, purposes and legal bases, processors: hosting and **Stripe** as payment processor, retention, rights, supervisory authority) | `apps/web/static/legal/privacy.md` |
 | 12 | AVV / data processing agreements: with your hosting provider and with Stripe (Stripe's DPA is part of its services agreement); for business customers who process their staff's data in MowDeck, offer your own AVV | contracts |
 | 13 | Show the legal pages: `WEB_LEGAL_ENABLED=true` links Imprint, Terms and Privacy from the login page (the shipped files are placeholders with a visible banner until you replace them) | `.env` / Helm `config.WEB_LEGAL_ENABLED` |
-| 14 | Enable: `COMPOSE_PROFILES=billing` and `ENTITLEMENTS_BILLING_ENABLED=true` (Helm: `services.billing.enabled=true`, `config.ENTITLEMENTS_BILLING_ENABLED="true"`), `BILLING_APP_URL=https://<your host>`; optionally add `http://billing:8000` to Identity's module URLs (`MOWDECK_IDENTITY_MODULE_URLS`) so its descriptor is listed | `.env` / Helm |
+| 14 | Enable: `COMPOSE_PROFILES=billing` in `.env` (the variable, not only `--profile billing` on the command line: see [Deleted accounts](#deleted-accounts)) and `ENTITLEMENTS_BILLING_ENABLED=true` (Helm: `services.billing.enabled=true`, `config.ENTITLEMENTS_BILLING_ENABLED="true"`), `BILLING_APP_URL=https://<your host>`; optionally add `http://billing:8000` to Identity's module URLs (`MOWDECK_IDENTITY_MODULE_URLS`) so its descriptor is listed | `.env` / Helm |
 
 The legal pages are served from the web image (`/legal/<page>.md`); to replace them, build the image with your files or mount them read-only over `/usr/share/nginx/html/legal/{imprint,terms,privacy}.md` of the `web` container (served with `no-cache`, never precached by the service worker).
 
@@ -58,6 +58,20 @@ curl https://mowdeck.example.org/api/v1/billing/status
 5. Payment problems: use the test card `4000 0000 0000 0341` (attaches, then fails), or `stripe trigger invoice.payment_failed`; the subscription goes `past_due` and the account `grace` (viewing and emergency stop only). Paying again (update the card in the portal) restores `active`. `customer.subscription.trial_will_end` cannot be triggered: use a subscription with a short trial or Stripe test clocks.
 6. Replays: `stripe events resend evt_...` delivers an event again; the answer says `"duplicate": true` and nothing changes.
 
+## Deleted accounts
+
+When an account is deleted for good ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), after the grace period of 7 days), Identity asks Billing to erase it, before it asks Entitlements:
+
+1. Every open subscription of the account ends at Stripe **at once**, not at the period end, without a final invoice and without a proration. **Nothing is refunded**; refund in the Stripe Dashboard if your terms promise it, before the grace period ends.
+2. The Stripe customer is deleted, with its name, e-mail address, addresses, tax ids and payment methods.
+3. Billing deletes its rows of the account: the customer, the subscriptions, the invoice references and the ledger rows of its events. It keeps no invoice copies.
+
+**What stays at Stripe:** the invoices and payments of the deleted customer, which Stripe keeps as long as it must. Say so in your privacy policy (Stripe as processor, retention of invoices).
+
+A Stripe error (a rate limit, an outage, a key without the permission to delete customers) fails the erasure: Billing deletes nothing, Identity keeps the account locked and asks again with a growing wait, and `python -m identity.cli erasures` shows `billing` as the service it waits for. A restricted key needs write access to Customers and Subscriptions. Stripe sends `customer.subscription.deleted` and `customer.deleted` afterwards; Billing answers 200 and stores nothing of them (outcome `unknown_account` or `ignored`).
+
+**Identity must know that Billing runs,** or it would erase an account everywhere else and leave the customer and a running subscription at Stripe. The deployment tells it: Compose passes `COMPOSE_PROFILES` to Identity and to Billing, the chart sets both from `services.billing.enabled`. `docker compose --profile billing up` without `COMPOSE_PROFILES=billing` in `.env` does not tell Identity, so Billing refuses to start then and says why in its log. After adding the profile, recreate the stack (`docker compose up -d --wait`): Identity has to restart to read it.
+
 ## Without a Stripe account
 
 - **Fake provider** (local demo, nothing charged): `BILLING_PROVIDER=fake`, any `BILLING_STRIPE_WEBHOOK_SECRET`, price ids of your choice. Checkout and the portal return links back to the account page; send signed, Stripe shaped webhooks with
@@ -67,7 +81,7 @@ curl https://mowdeck.example.org/api/v1/billing/status
     python -m billing.cli send-fixture --account-id <account uuid> --status past_due
   ```
 
-  (`--status active|trialing|past_due|unpaid|canceled|...`; the account id is in `GET /api/v1/identity/me`).
+  (`--status active|trialing|past_due|unpaid|canceled|...`; the account id is in `GET /api/v1/identity/me`). Start a checkout for the account once before ("Upgrade" on the account page): Billing applies an event only to a customer it knows, and the checkout is what creates the customer. An event for an unknown customer answers `unknown_account`.
 - **stripe-mock** (`stripe/stripe-mock`, pinned in `.github/workflows/ci.yml` for the python job): `BILLING_STRIPE_API_BASE=http://stripe-mock:12111` with any `sk_test_...` key validates every request against Stripe's API definition, but it keeps no state and sends no webhooks.
 
 ## Operations

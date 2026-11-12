@@ -8,7 +8,7 @@ Licence: AGPL-3.0-only (see the repository `LICENSE`). Generated from `templates
 
 Billing handles money, Entitlements decides what an account may do ([ADR 0028](../../docs/adr/0028-entitlements-plans-and-enforcement.md)). Billing keeps one customer per account at the payment provider, starts hosted checkouts and opens the hosted customer portal, and turns the provider's webhooks into plan statuses that it sets in Entitlements over `entitlements.plan.set` (`source=billing`). No card data ever passes through MowDeck. It scales with webhooks: replicas share the exactly-once ledger in PostgreSQL.
 
-**Optional per installation.** `billing.enabled=false` (the default) means the service is not started at all: Compose runs it only with the profile `billing`, Helm only with `services.billing.enabled=true`. There is no switch inside the service. The web app probes `GET /api/v1/billing/status` and hides every billing element on a network error, a 404 (no route in Traefik) or a non-JSON answer. Enable Billing together with `ENTITLEMENTS_BILLING_ENABLED=true`, otherwise every account keeps the plan `unlimited` whatever it pays for.
+**Optional per installation.** `billing.enabled=false` (the default) means the service is not started at all: Compose runs it only with the profile `billing`, Helm only with `services.billing.enabled=true`. There is no switch inside the service. The web app probes `GET /api/v1/billing/status` and hides every billing element on a network error, a 404 (no route in Traefik) or a non-JSON answer. Enable Billing together with `ENTITLEMENTS_BILLING_ENABLED=true`, otherwise every account keeps the plan `unlimited` whatever it pays for. The deployment that enables Billing also tells Identity that Billing must confirm an account erasure ([Account erasure](#account-erasure-adr-0082)); the container refuses to start where it did not.
 
 **Providers.** `PaymentProvider` (`application/ports.py`) is the extension point: `StripeProvider` (Stripe Python SDK 16, API version `2026-09-30.endive`, `api_base` for stripe-mock), `FakeProvider` (no network, for tests and demos; it speaks Stripe's webhook format and checks the same signature). Paddle or invoices fit behind the same interface.
 
@@ -49,15 +49,40 @@ Handled event types (configure exactly these on the Stripe webhook endpoint): `c
 
 1. The `Stripe-Signature` header is verified against the raw body with `MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET` (300 s tolerance) before anything is parsed.
 2. The event id is recorded in `webhook_events` and claimed (one delivery at a time, a lease of 120 s). A processed event answers 200 with `duplicate: true` and changes nothing.
-3. Subscription events set the plan in Entitlements and publish `billing.subscription.changed`; `checkout.session.completed` remembers the customer and fetches the subscription; invoice events store the invoice reference; `trial_will_end` only publishes. An event older than the last one applied to its subscription is `stale` (Stripe does not guarantee the order).
-4. When Entitlements does not answer, the claim is released and the webhook answers 500: Stripe delivers it again.
+3. **Whose event it is** is decided by the customer row, never by the event alone: Billing creates the provider's customer of an account before the first checkout, so an event whose customer it does not know is nobody's and is dropped (`unknown_account`), also when its metadata names an account. The event is applied under a lock on that customer row.
+4. Subscription events set the plan in Entitlements and publish `billing.subscription.changed`; `checkout.session.completed` fetches the subscription and applies it; invoice events store the invoice reference; `trial_will_end` only publishes. An event older than the last one applied to its subscription is `stale` (Stripe does not guarantee the order).
+5. When Entitlements does not answer, the claim is released and the webhook answers 500: Stripe delivers it again.
 
 Outcomes in the ledger: `applied`, `ignored`, `stale`, `unknown_account`, `rejected` (Entitlements refused, e.g. an unknown plan; not retried), `failed`.
+
+## Account erasure (ADR 0082)
+
+Identity asks on `account.erase.billing` when a deleted account is purged, **before** it asks Entitlements ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 5). The use case is the kit's `AccountErasure` over `application/erasure.py`:
+
+1. **At the provider,** through `PaymentProvider` only: `cancel_subscription` for every subscription of the account that is still open (now, no final invoice, no proration, no refund), then `delete_customer`. Both are idempotent (already ended, already deleted, unknown to the provider: done). Stripe: `DELETE /v1/subscriptions/{id}` with `invoice_now=false&prorate=false`, `DELETE /v1/customers/{id}`. The invoices Stripe must keep stay at Stripe.
+2. **The rows,** afterwards and in one transaction (`Tx.purge_account`), the customer rows first:
+
+   | Table | Of an erased account |
+   | --- | --- |
+   | `accounts` | deleted (name and kind) |
+   | `customers` | deleted, after the provider confirmed |
+   | `subscriptions` | deleted |
+   | `invoices` | deleted: Billing keeps no invoice copies |
+   | `webhook_events` | rows with the account's id deleted. Rows without an account (unknown customers, ignored types) stay: an event id, a type, times and an outcome, no payload |
+
+3. What is left is counted over every table with an `account_id` column (`Tx.account_rows`); a row that remains fails the erasure.
+
+**A provider error fails the erasure:** `ok=false`, no row deleted (the rows are what names the customer for the next attempt), and Identity asks again with its backoff. `ProviderUnavailable` (a rate limit, a timeout, a 5xx) can succeed later by itself, `ProviderError` needs the operator (a key without the permission, a customer at a provider that is no longer configured). Rows of the fake provider are deleted without a call (`LOCAL_PROVIDERS`). Billing keeps nothing of an account in memory.
+
+**Events after the erasure** (`customer.subscription.deleted`, `customer.deleted`, an invoice, a repeated delivery) name a customer Billing no longer knows: acknowledged with 200, outcome `unknown_account` or `ignored`, nothing written, no plan set. An event that is being applied while the erasure runs holds the customer row (`Tx.lock_customer`, `SELECT ... FOR UPDATE`, held while Entitlements is asked); the erasure deletes the customer rows first and so waits for it.
+
+**Optional and not forgotten.** Identity asks Billing only where the deployment names it (`MOWDECK_IDENTITY_OPTIONAL_SERVICES`: Compose passes `COMPOSE_PROFILES`, the chart `billing` when enabled). Billing gets the same value as `MOWDECK_BILLING_OPTIONAL_SERVICES` and `ensure_identity_asks` (`main.py`) refuses to start without `billing` in it: otherwise an erased account would keep its customer and a running subscription at the provider. `docker compose --profile billing` alone does not set `COMPOSE_PROFILES`; set it in `.env`.
 
 ## Events and subjects
 
 | Direction | Subject | Kind | Payload | Notes |
 | --- | --- | --- | --- | --- |
+| served | `account.erase.billing` | core NATS (internal), queue `billing-erasure` | `AccountEraseRequest{account_id, requested_at, reason}` / `AccountEraseReply{ok, deleted, error?}` | from Identity when a deleted account is purged; `ok=false` while the provider did not confirm or rows remain |
 | request | `entitlements.plan.set` | core NATS (internal) | `PlanSetRequest{account_id, plan, status, trial_until?, grace_until?, reason, account_name?, reference?}` / `PlanSetReply{ok, plan, status, changed, error?}` | answered by Entitlements; repeating it changes nothing |
 | produced | `event.billing.subscription.changed` | JetStream `EVENTS` | `EventEnvelope[SubscriptionChanged]` | every applied subscription event; Notifications may turn it into a `billing` notification later |
 | consumed | `event.identity.account.created` | JetStream, durable and deliver group `billing-accounts` | `EventEnvelope[AccountCreated]` | remembers name and kind (household or business) |
@@ -83,21 +108,22 @@ All settings of `mowdeck-service-kit` apply (`MOWDECK_*`, any value also from `M
 | `MOWDECK_BILLING_ENTITLEMENTS_URL` | `http://entitlements:8000` | Entitlements for the public plan list (names, trial days); empty: none |
 | `MOWDECK_BILLING_ENTITLEMENTS_TIMEOUT_SECONDS` | `5` | Timeout of `entitlements.plan.set` |
 | `MOWDECK_BILLING_PRICE_CACHE_SECONDS` | `600` | Reuse of fetched prices |
+| `MOWDECK_BILLING_OPTIONAL_SERVICES` | empty | The optional parts the installation runs, as Identity gets them (Compose: `COMPOSE_PROFILES`; Helm: `billing`). `python -m billing.main` refuses to start unless `billing` is among them |
 
 Compose passes them as `BILLING_*` from `infra/compose/.env.example`; Helm as `config.BILLING_*` and `secrets.BILLING_STRIPE_*`.
 
 ## Data model
 
-`accounts` (account id, name, kind), `customers` (account, provider, provider customer id; unique per account and provider and per provider id), `subscriptions` (account, plan key, provider subscription id, status, period end, trial end, cancel at period end, plan status set, grace end, last event time), `invoices` (provider invoice id, amounts, currency, status, hosted and PDF links), `webhook_events` (provider and event id as primary key, received, attempts, claimed, processed, outcome, account). Migrations: `0001` (empty), `0002` (the schema); a drift test compares them with the metadata.
+`accounts` (account id, name, kind), `customers` (account, provider, provider customer id; unique per account and provider and per provider id), `subscriptions` (account, plan key, provider subscription id, status, period end, trial end, cancel at period end, plan status set, grace end, last event time), `invoices` (provider invoice id, amounts, currency, status, hosted and PDF links), `webhook_events` (provider and event id as primary key, received, attempts, claimed, processed, outcome, account). Every table has an `account_id` column; `webhook_events` stores no payload. Migrations: `0001` (empty), `0002` (the schema); a drift test compares them with the metadata.
 
 ## Layers
 
 | Package | Content | Rule |
 | --- | --- | --- |
-| `domain/` | models, the price file, the status rules | pure Python, no I/O |
-| `application/` | `BillingService` (status, checkout, portal, summary, invoices, webhooks, cancel), ports (`PaymentProvider`, store, Entitlements gateway, plan catalogue, publisher) | depends on `domain` and ports only |
+| `domain/` | models, the price file, the status rules, the erasure rule (`erasure.py`: which providers keep nothing outside) | pure Python, no I/O |
+| `application/` | `BillingService` (status, checkout, portal, summary, invoices, webhooks), `erasure.py` (`AccountPurge` and the kit's `AccountErasure`), ports (`PaymentProvider`, store, Entitlements gateway, plan catalogue, publisher) | depends on `domain` and ports only |
 | `adapters/api/` | FastAPI routers, schemas, the `can_manage_billing` gate | translate HTTP to use cases |
-| `adapters/bus/` | `entitlements.plan.set` gateway, `identity.account.created`, the event publisher | translate messages |
+| `adapters/bus/` | `entitlements.plan.set` gateway, `identity.account.created`, `account.erase.billing` (`erasure.py`), the event publisher | translate messages |
 | `adapters/db/` | SQLAlchemy Core store, Alembic migrations; `adapters/memory.py` for tests | implement the store port |
 | `adapters/providers/` | `StripeProvider`, `FakeProvider`, the Stripe object mapping, signed fixtures | implement `PaymentProvider` |
 | `adapters/plans.py` | the plan catalogue over Entitlements' public `GET /plans` | implement `PlanCatalog` |
@@ -111,7 +137,7 @@ docker compose -f infra/compose/docker-compose.yml --profile billing up -d --bui
 curl http://localhost/api/v1/billing/status
 ```
 
-Without a Stripe account: `BILLING_PROVIDER=fake` and any `BILLING_STRIPE_WEBHOOK_SECRET`, then send a signed fixture webhook from inside the container:
+Without a Stripe account: `BILLING_PROVIDER=fake` and any `BILLING_STRIPE_WEBHOOK_SECRET`. Start a checkout for the account once ("Upgrade" on the account page; it creates the customer the events belong to), then send a signed fixture webhook from inside the container:
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml --profile billing exec billing \
@@ -122,4 +148,4 @@ Against Stripe test mode: [Billing operations](../../docs/ops/billing.md) (Strip
 
 ## Tests
 
-`uv run pytest services/billing` runs the domain, API, webhook and store tests with the memory store, the fake provider, the in-memory OpenFGA fake, an in-memory bus with a fake Entitlements and a manual clock. Integration tests run when their URL is set: PostgreSQL (`MOWDECK_TEST_DATABASE_URL`: migrations up and down, drift, the store contract, the webhook path on PostgreSQL) and stripe-mock (`MOWDECK_TEST_STRIPE_MOCK_URL`, e.g. `docker run -d -p 12111:12111 stripe/stripe-mock:v0.206.0`: customer, Checkout, portal, subscription, price, and checkout through the API). stripe-mock validates the requests against Stripe's OpenAPI document but keeps no state and sends no webhooks, so the webhook path is covered by signed fixtures (`adapters/providers/fixtures.py`).
+`uv run pytest services/billing` runs the domain, API, webhook, erasure and store tests with the memory store, the fake provider, the in-memory OpenFGA fake, an in-memory bus with a fake Entitlements and a manual clock. Integration tests run when their URL is set: PostgreSQL (`MOWDECK_TEST_DATABASE_URL`: migrations up and down, drift, the store contract, the webhook path and the erasure on PostgreSQL, including the row lock between an event and an erasure) and stripe-mock (`MOWDECK_TEST_STRIPE_MOCK_URL`, e.g. `docker run -d -p 12111:12111 stripe/stripe-mock:v0.206.0`: customer, Checkout, portal, subscription, the cancellation and the customer deletion of the erasure, price, and checkout through the API). stripe-mock validates the requests against Stripe's OpenAPI document but keeps no state and sends no webhooks, so the webhook path is covered by signed fixtures (`adapters/providers/fixtures.py`).
