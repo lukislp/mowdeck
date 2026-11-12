@@ -224,6 +224,36 @@ class ProviderRefund:
     failure_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class CreditBalance:
+    """The balance a customer holds at the provider, as the refund of an erased account reads
+    it (ADR 0082, section 5), in ``currency`` and its smallest unit.
+
+    ``amount`` is positive when the provider holds a **credit** for the customer (Stripe writes
+    it as a negative ``balance``: a downgrade with proration, a credit note to the balance) and
+    negative when the customer owes money. ``cleared`` is what earlier attempts of the erasure
+    took off the balance already (their balance transactions carry the erasure's metadata): the
+    credit an erasure pays back is ``max(amount, 0) + cleared``, so a retry after the balance was
+    zeroed still knows what it was."""
+
+    amount: int
+    currency: str
+    cleared: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RecentPayment:
+    """A successful payment of a customer (a Stripe PaymentIntent, or a charge without one):
+    what a credit balance is paid back against. ``refunded`` is what the provider reports as
+    refunded of it already."""
+
+    payment_ref: str
+    amount: int
+    currency: str
+    created: datetime
+    refunded: int = 0
+
+
 @dataclass(slots=True)
 class ManualRefund:
     """A refund of an account erasure that Billing could not make and the operator pays back by

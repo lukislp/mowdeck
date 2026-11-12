@@ -43,6 +43,9 @@ since); a failed one is counted, and the next refund is made under a new idempot
 :data:`MAX_FAILED_REFUNDS` failed refunds, and at once when the provider refuses for good
 (:class:`~billing.domain.errors.RefundImpossible`), the refund is **skipped**: the erasure goes
 on, and the amount is recorded for the operator to pay out by hand (:class:`ManualRefund`).
+
+A **credit balance** the customer holds at the provider is paid back after the subscriptions
+ended, under the same retry and skip rules: :mod:`billing.domain.credit`.
 """
 
 from collections.abc import Sequence
@@ -63,7 +66,14 @@ from billing.domain.models import (
 )
 
 ERASURE_REASON = "account_erasure"
-"""The ``reason`` in the metadata of every refund an account erasure makes."""
+"""The ``reason`` in the metadata of every refund of a paid period an account erasure makes."""
+
+CREDIT_REASON = "account_erasure_credit_balance"
+"""The ``reason`` in the metadata of the refunds that pay back a customer's credit balance on
+an account erasure, and of the balance transaction that zeroes it (:mod:`billing.domain.credit`)."""
+
+ERASURE_REASONS = frozenset({ERASURE_REASON, CREDIT_REASON})
+"""Every ``reason`` an account erasure writes into the metadata of a refund."""
 
 MAX_FAILED_REFUNDS = 3
 """Failed or canceled refunds of one erasure on one invoice after which the refund is skipped
@@ -180,8 +190,9 @@ def erasure_metadata(account_id: UUID, subscription_id: str, invoice_id: str) ->
 
 
 def is_erasure_metadata(metadata: dict[str, str]) -> bool:
-    """Whether a refund with this metadata was made by an account erasure."""
-    return metadata.get("reason") == ERASURE_REASON
+    """Whether a refund with this metadata was made by an account erasure: of a paid period or
+    of the credit balance."""
+    return metadata.get("reason") in ERASURE_REASONS
 
 
 def is_erasure_refund(
@@ -330,12 +341,16 @@ def manual_refund(plan: RefundPlan, now: datetime) -> ManualRefund:
 
 
 def lost_refund_record(refund: ProviderRefund, now: datetime) -> ManualRefund:
-    """The record of a refund of an erasure that failed after the erasure was over."""
+    """The record of a refund of an erasure that failed after the erasure was over. A refund of
+    the credit balance names no invoice; its record has the key the erasure's own record of it
+    would have had (:func:`manual_refund_key` of the payment without an invoice)."""
     payment = refund.payment_ref or refund.id
     invoice = refund.metadata.get("invoice_id") or None
     reason = f"refund {refund.id} {refund.status.value}"
     if refund.failure_reason:
         reason = f"{reason} ({refund.failure_reason})"
+    if refund.metadata.get("reason") == CREDIT_REASON:
+        reason = f"credit balance: {reason}"
     return ManualRefund(
         id=uuid4(),
         key=manual_refund_key(payment, invoice),
