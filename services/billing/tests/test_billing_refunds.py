@@ -22,14 +22,21 @@ from billing.domain.models import (
     RefundStatus,
 )
 from billing.domain.refunds import (
+    MANUAL_REFUND_RETENTION,
     MAX_FAILED_REFUNDS,
     RefundAction,
+    covers,
+    earliest_invoice,
     erasure_metadata,
     erasure_refund_lost,
     idempotency_key,
+    lost_refund_record,
+    manual_refund,
+    manual_refund_key,
     plan_refund,
     refund_amount,
     round_down,
+    settled_before,
     skipped,
     unused_fraction,
 )
@@ -141,18 +148,81 @@ def test_what_was_paid_counts_not_the_price() -> None:
     assert refund_amount(invoice(1071, line(900)), [], MIDDLE) == 535
 
 
-def test_only_the_fixed_recurring_part_is_refunded() -> None:
-    usage = line(300, start=datetime(2026, 10, 1, tzinfo=UTC), end=START)  # in arrears
+def test_metered_usage_and_one_off_items_are_not_refunded() -> None:
+    """Usage bills consumption that has already happened (the period before, in arrears): none
+    of it is unused. A one-off item gets its share of what was paid, which is not refunded."""
+    usage = line(300, start=datetime(2026, 10, 1, tzinfo=UTC), end=START)
     # 12.00 paid: 9.00 for this month's price, 3.00 for last month's metered usage.
     assert refund_amount(invoice(1200, line(900), usage), [], MIDDLE) == 450
-    # An upgrade within the period, and a one-off item: not refunded.
-    upgrade = line(300, LineKind.PRORATION)
     one_off = line(200, LineKind.OTHER)
-    assert refund_amount(invoice(1400, line(900), upgrade, one_off), [], MIDDLE) == 450
+    assert refund_amount(invoice(1100, line(900), one_off), [], MIDDLE) == 450
     # A coupon on the whole invoice is shared in proportion: 10.00 paid of 15.00 billed.
     assert refund_amount(invoice(1000, line(900), line(600, LineKind.OTHER)), [], MIDDLE) == 300
-    # An invoice of usage alone (the period of the line is over): nothing.
+    # An invoice of usage alone (the period of the line is over): nothing, and not looked at.
     assert refund_amount(invoice(300, usage), [], MIDDLE) == 0
+    assert not covers(invoice(300, usage), MIDDLE)
+
+
+def test_a_proration_on_the_same_invoice_is_refunded_over_its_own_period() -> None:
+    # 9.00 for the month and 3.00 for an upgrade from the 16th, on one invoice of 12.00.
+    upgrade = line(300, LineKind.PRORATION, start=MIDDLE)
+    erased = datetime(2026, 11, 21, tzinfo=UTC)
+    # 9.00 x 10/30 + 3.00 x 10/15 = 3.00 + 2.00
+    assert refund_amount(invoice(1200, line(900), upgrade), [], erased) == 500
+    assert covers(invoice(300, upgrade), erased)
+    assert not covers(invoice(300, upgrade), START)  # the upgrade had not begun
+
+
+def test_an_upgrade_on_its_own_invoice_refunds_exactly_the_unused_new_plan() -> None:
+    """Plan A (9.00 a month) paid on 1 November; on the 16th an upgrade to plan B (12.00 a
+    month) is billed on its own invoice: a credit of 4.50 for A's unused half and a charge of
+    6.00 for B's half, 1.50 paid. Erased on the 21st: 10 days of B are unused, 4.00.
+
+    Each invoice is refunded for its own unused time: A's invoice 9.00 x 10/30 = 3.00, and of
+    the upgrade invoice the 1.50 paid, shared among its positive lines (the 6.00 of B alone),
+    x 10/15 = 1.00. Together 4.00. The credit is not a line to share among: sharing over all
+    lines (6.00 - 4.50 = 1.50) would give B's line the whole 6.00 and refund too much."""
+    erased = datetime(2026, 11, 21, tzinfo=UTC)
+    month = invoice(900)
+    upgrade = PaidInvoice(
+        invoice_id="in_2",
+        subscription_id="sub_1",
+        status="paid",
+        currency="eur",
+        amount_paid=150,
+        lines=(
+            line(-450, LineKind.PRORATION, start=MIDDLE),
+            line(600, LineKind.PRORATION, start=MIDDLE),
+        ),
+        payment_ref="pi_2",
+        payment_amount=150,
+    )
+    assert covers(month, erased)
+    assert covers(upgrade, erased)
+    assert refund_amount(month, [], erased) == 300
+    assert refund_amount(upgrade, [], erased) == 100
+    # A downgrade whose credit is larger than the charge: nothing was paid on that invoice.
+    downgrade = PaidInvoice(
+        invoice_id="in_3",
+        subscription_id="sub_1",
+        status="paid",
+        currency="eur",
+        amount_paid=0,
+        lines=(
+            line(-450, LineKind.PRORATION, start=MIDDLE),
+            line(300, LineKind.PRORATION, start=MIDDLE),
+        ),
+        payment_ref=None,
+    )
+    assert refund_amount(downgrade, [], erased) == 0
+
+
+def test_a_credit_line_lowers_what_was_paid_and_is_not_shared() -> None:
+    # 9.00 for the month, 3.00 off as a credit line: 6.00 paid, all of it for the month.
+    credit = line(-300, LineKind.OTHER)
+    assert refund_amount(invoice(600, line(900), credit), [], MIDDLE) == 300
+    # Only credits and nothing positive: nothing to share.
+    assert refund_amount(invoice(600, credit), [], MIDDLE) == 0
 
 
 def test_what_was_refunded_already_is_taken_off() -> None:
@@ -271,8 +341,70 @@ def test_nothing_to_refund() -> None:
 
 
 def test_a_refund_of_an_erasure_that_failed_later_is_lost() -> None:
-    assert erasure_refund_lost(ours(RefundStatus.FAILED))
-    assert erasure_refund_lost(ours(RefundStatus.CANCELED))
-    assert not erasure_refund_lost(ours(RefundStatus.PENDING))
-    assert not erasure_refund_lost(ours(RefundStatus.SUCCEEDED))
-    assert not erasure_refund_lost(refund(300, RefundStatus.FAILED))  # not an erasure's
+    for status in (RefundStatus.FAILED, RefundStatus.CANCELED):
+        lost = ours(status)
+        assert erasure_refund_lost(lost, [lost])
+    assert not erasure_refund_lost(ours(RefundStatus.PENDING), [])
+    assert not erasure_refund_lost(ours(RefundStatus.SUCCEEDED), [])
+    assert not erasure_refund_lost(refund(300, RefundStatus.FAILED), [])  # not an erasure's
+
+
+def test_a_failed_refund_that_a_later_attempt_replaced_is_not_lost() -> None:
+    failed = ours(RefundStatus.FAILED)
+    replaced = ProviderRefund(
+        id="re_2",
+        payment_ref="pi_1",
+        amount=400,
+        currency="eur",
+        status=RefundStatus.PENDING,
+        metadata=failed.metadata,
+    )
+    assert not erasure_refund_lost(failed, [failed, replaced])
+    other_invoice = ProviderRefund(
+        id="re_3",
+        payment_ref="pi_1",
+        amount=400,
+        currency="eur",
+        status=RefundStatus.SUCCEEDED,
+        metadata=erasure_metadata(ACCOUNT, "sub_1", "in_0"),
+    )
+    assert erasure_refund_lost(failed, [failed, other_invoice])
+
+
+# --- the record of refunds the operator pays by hand ------------------------------------------
+
+
+def test_a_skipped_refund_is_recorded_without_the_account() -> None:
+    plan = skipped(plan_refund(ACCOUNT, invoice(), [], MIDDLE), "payment too old")
+    record = manual_refund(plan, MIDDLE)
+    assert (record.payment_ref, record.invoice_ref) == ("pi_1", "in_1")
+    assert (record.amount, record.currency, record.reason) == (450, "eur", "payment too old")
+    assert record.key == manual_refund_key("pi_1", "in_1") == "pi_1:in_1"
+    assert (record.created_at, record.settled_at, record.is_open) == (MIDDLE, None, True)
+    assert str(ACCOUNT) not in repr(record)
+
+
+def test_a_lost_refund_is_recorded_under_the_same_key_as_a_skipped_one() -> None:
+    failed = ProviderRefund(
+        id="re_9",
+        payment_ref="pi_1",
+        amount=450,
+        currency="eur",
+        status=RefundStatus.FAILED,
+        metadata=erasure_metadata(ACCOUNT, "sub_1", "in_1"),
+        failure_reason="expired_or_canceled_card",
+    )
+    record = lost_refund_record(failed, MIDDLE)
+    assert record.key == "pi_1:in_1"
+    assert (record.amount, record.invoice_ref) == (450, "in_1")
+    assert record.reason == "refund re_9 failed (expired_or_canceled_card)"
+    assert str(ACCOUNT) not in repr(record)
+
+
+def test_settled_records_are_kept_for_the_retention() -> None:
+    assert timedelta(days=30) == MANUAL_REFUND_RETENTION
+    assert settled_before(MIDDLE) == MIDDLE - timedelta(days=30)
+
+
+def test_invoices_are_looked_for_one_longest_period_back() -> None:
+    assert earliest_invoice(MIDDLE) == MIDDLE - timedelta(days=366)

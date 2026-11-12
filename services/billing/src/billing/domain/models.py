@@ -224,6 +224,29 @@ class ProviderRefund:
     failure_reason: str | None = None
 
 
+@dataclass(slots=True)
+class ManualRefund:
+    """A refund of an account erasure that Billing could not make and the operator pays back by
+    hand (ADR 0082, section 5). It names the payment and the invoice at the provider, the amount
+    and why, and never the account, a name or an e-mail address: the payment is enough to find
+    the payer in the provider's dashboard. ``key`` makes one record per payment and invoice."""
+
+    id: UUID
+    key: str
+    payment_ref: str
+    invoice_ref: str | None
+    amount: int
+    currency: str
+    reason: str
+    created_at: datetime
+    settled_at: datetime | None = None
+
+    @property
+    def is_open(self) -> bool:
+        """Not paid back yet."""
+        return self.settled_at is None
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderCharge:
     """A charge (one payment) as the provider describes it, e.g. in ``charge.refunded``."""

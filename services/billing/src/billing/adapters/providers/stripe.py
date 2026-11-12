@@ -17,12 +17,13 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
 * Webhooks: the ``Stripe-Signature`` header is verified with the endpoint secret
   (``stripe.WebhookSignature``, 300 s tolerance) against the raw body before anything is parsed.
 * Account erasure (ADR 0082): first the refund of the unused part of the paid period. The
-  latest paid invoice of the subscription is ``GET /v1/invoices?subscription=&status=paid``
-  (the newest one with a line of a subscription price; all its lines from
-  ``GET /v1/invoices/{id}/lines`` when the invoice carries only the first page), its payment
-  ``GET /v1/invoice_payments?invoice=&status=paid``, the refunds of that payment
-  ``GET /v1/refunds?payment_intent=`` (or ``charge=``). The refund is ``POST /v1/refunds`` on
-  the PaymentIntent (or charge) with ``amount``, ``reason=requested_by_customer``, the metadata
+  paid invoices of the subscription are ``GET /v1/invoices?subscription=&status=paid`` with
+  ``created[gte]`` one longest period back (:func:`billing.domain.refunds.earliest_invoice`,
+  366 days), every page; of those the ones that bill time containing now (all their lines from
+  ``GET /v1/invoices/{id}/lines`` when the invoice carries only the first page), each with its
+  payment ``GET /v1/invoice_payments?invoice=&status=paid`` and the refunds of that payment
+  ``GET /v1/refunds?payment_intent=`` (or ``charge=``). A refund is ``POST /v1/refunds`` on the
+  PaymentIntent (or charge) with ``amount``, ``reason=requested_by_customer``, the metadata
   of the erasure and an ``Idempotency-Key`` header; Stripe refunds in the payment's currency to
   the original payment method. A refusal of the request (any ``InvalidRequestError``) is
   ``RefundImpossible``; a reused key with other parameters (``IdempotencyError``: the amount
@@ -38,6 +39,7 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
 """
 
 import json
+from datetime import datetime
 from typing import Any
 
 import stripe
@@ -57,13 +59,13 @@ from billing.domain.errors import (
 from billing.domain.models import (
     ENDED_STATUSES,
     BillingAccount,
-    LineKind,
     PaidInvoice,
     PlanPrice,
     ProviderEvent,
     ProviderRefund,
     ProviderSubscription,
 )
+from billing.domain.refunds import covers, earliest_invoice
 
 WEBHOOK_TOLERANCE_SECONDS = 300
 """Accepted age of a webhook signature (Stripe's default)."""
@@ -90,9 +92,6 @@ disputed, or nothing of it is left to refund. Any other ``InvalidRequestError`` 
 treated as permanent too (Stripe answers a payment older than it allows to refund without a
 dedicated code); retrying the same request cannot change a 400, and the operator is warned with
 the amount either way."""
-
-INVOICE_PAGE = 10
-"""Paid invoices of a subscription looked at for the latest one that bills a period."""
 
 
 def _missing(exc: stripe.StripeError) -> bool:
@@ -271,22 +270,31 @@ class StripeProvider:
                 return
             raise _failure("deleting the customer at Stripe failed", exc) from exc
 
-    async def latest_paid_invoice(self, subscription_id: str) -> PaidInvoice | None:
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        found: list[PaidInvoice] = []
+        params: dict[str, Any] = {
+            "subscription": subscription_id,
+            "status": "paid",
+            "created": {"gte": int(earliest_invoice(now).timestamp())},
+            "limit": 100,
+        }
         try:
-            page = await self.client.v1.invoices.list_async(
-                {"subscription": subscription_id, "status": "paid", "limit": INVOICE_PAGE}
-            )
-            for invoice in page.data:
-                obj = invoice.to_dict()
-                lines = await self._lines(obj)
-                found = paid_invoice_from(obj, subscription_id, lines, None)
-                if not any(line.kind is LineKind.RECURRING for line in found.lines):
-                    continue  # prorations or one-off items alone
-                payment = await self._payment(str(obj["id"]))
-                return paid_invoice_from(obj, subscription_id, lines, payment)
+            while True:
+                page = await self.client.v1.invoices.list_async(params)  # type: ignore[arg-type]
+                for invoice in page.data:
+                    obj = invoice.to_dict()
+                    lines = await self._lines(obj)
+                    if not covers(paid_invoice_from(obj, subscription_id, lines, None), now):
+                        continue  # a period that is over, or one-off items alone
+                    payment = await self._payment(str(obj["id"]))
+                    found.append(paid_invoice_from(obj, subscription_id, lines, payment))
+                if not page.has_more or not page.data:
+                    return found
+                params = {**params, "starting_after": page.data[-1].id}
         except stripe.StripeError as exc:
             raise _failure("reading the paid invoices at Stripe failed", exc) from exc
-        return None
 
     async def _lines(self, invoice: dict[str, Any]) -> list[dict[str, Any]]:
         """Every line of an invoice (the invoice object carries the first page only)."""

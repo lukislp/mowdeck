@@ -72,24 +72,36 @@ A Stripe error (a rate limit, an outage, a key without the permission to delete 
 
 ### Refunds on erasure
 
-**The rule** ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), section 5): refund = (what the customer paid for the current period - what was refunded of that payment already) x the unused part of the period, `(period end - now) / (period end - period start)`, at the moment the purge runs (after the grace period), rounded down to the cent (whole units for zero-decimal currencies such as JPY). "Paid" is the latest paid invoice of the subscription after discounts, coupons and credit balance, with tax; only the fixed recurring price counts, not metered usage, prorations of a plan change or one-off items. Nothing is refunded for a trial, a 100 % coupon, an unpaid invoice or a period that is over. Example: 9.00 EUR for 1 to 30 November, purged on 21 November: 2.99 EUR back.
+**The rule** ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), section 5): every paid invoice of the subscription that bills time containing the moment of the purge is refunded against its own payment: the month's (or year's) invoice, and an upgrade within the period that was billed on its own invoice. Per invoice: refund = (what the customer paid on it for time after now - what was refunded of that payment already) x the unused part, `(period end - now) / (period end - period start)`, at the moment the purge runs (after the grace period), rounded down to the cent (whole units for zero-decimal currencies such as JPY). "Paid" is after discounts, coupons and credit balance, with tax, shared among the invoice's positive lines; the subscription price and prorations of a plan change count, each over its own period. **Metered usage is not refunded:** it bills consumption that has already happened. One-off items are not refunded either. Nothing is refunded for a trial, a 100 % coupon or a period that is over. Example: 9.00 EUR for 1 to 30 November, purged on 21 November: 2.99 EUR back. Billing asks Stripe for the paid invoices of the last 366 days (MowDeck sells monthly and yearly plans).
 
-**What you see in Stripe:** a refund on the invoice's payment with the reason "requested by customer" and the metadata `reason=account_erasure`, `account_id`, `subscription_id`, `invoice_id`. Stripe sends the customer its usual refund receipt if receipts are on (Settings, Customer emails). Refunds to bank accounts and some wallets stay *pending* for days; Billing counts a pending refund as made and the erasure goes on.
+**What you see in Stripe:** a refund on each invoice's payment with the reason "requested by customer" and the metadata `reason=account_erasure`, `account_id`, `subscription_id`, `invoice_id`. Stripe sends the customer its usual refund receipt if receipts are on (Settings, Customer emails). Refunds to bank accounts and some wallets stay *pending* for days; Billing counts a pending refund as made and the erasure goes on.
 
-**When a refund fails,** the erasure fails (`python -m identity.cli erasures` shows `billing`), the subscription keeps running, and Identity asks again; a retry never refunds twice (it finds the earlier refund by its metadata). **When a refund cannot be made** (Stripe refuses for good: the payment is too old for a refund, disputed, or refunded in full already; or 3 refunds of the erasure failed), the erasure goes on without it and Billing logs a **warning**:
+**When a refund fails,** the erasure fails (`python -m identity.cli erasures` shows `billing`), the subscription keeps running, and Identity asks again; a retry never refunds twice (it finds the earlier refunds by their metadata and makes only the missing ones). **When a refund cannot be made** (Stripe refuses for good: the payment is too old for a refund, disputed, or refunded in full already; or 3 refunds of the erasure failed), the erasure goes on without it and Billing **records a manual refund**: the payment, the invoice, the amount and why, and no account. A refund Stripe accepted and that fails after the erasure (for example to a closed card, reported by `refund.failed` / `refund.updated`) is recorded the same way, once per payment and invoice.
+
+### Paying back manual refunds
+
+The record is the source of truth; the warnings in the log say the same:
+
+| Warning | Meaning |
+| --- | --- |
+| `refund of an erased account skipped: recorded to pay it out by hand` | the erasure skipped a refund and recorded it |
+| `a refund of an account erasure failed: pay it out by hand` | a refund failed after the erasure and was recorded |
+| `refund of an erased account waits for the customer` | Stripe asked the customer for the details it needs (`requires_action`); nothing to do at first, if Stripe cancels it later the second warning follows and a record is written |
+
+**Alert:** the gauge `mowdeck_billing_manual_refunds_open` (on Billing's `/metrics`) counts the open records; alert when it is above 0. MowDeck ships no alert rules: add it to your Prometheus, for example `mowdeck_billing_manual_refunds_open > 0` for 1h.
+
+**List and settle** with the access token of an operator admin (`python -m identity.cli grant-platform-admin <user>`; the same permission as the operator area of the web app, which gets a page for this in a later release):
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml logs billing | grep -E "pay it out by hand|waits for the customer"
-# Kubernetes: kubectl logs deploy/mowdeck-billing | grep -E "pay it out by hand|waits for the customer"
+AUTH="Authorization: Bearer $ACCESS"   # an operator admin's access token
+curl -s -H "$AUTH" https://<your host>/api/v1/billing/operator/manual-refunds | jq
+# [{"id": "...", "payment_ref": "pi_...", "invoice_ref": "in_...", "amount": 600, "currency": "eur",
+#   "reason": "Stripe refuses the refund for good (...)", "created_at": "...", "settled_at": null}]
+curl -s -X POST -H "$AUTH" https://<your host>/api/v1/billing/operator/manual-refunds/<id>/settle
+curl -s -H "$AUTH" "https://<your host>/api/v1/billing/operator/manual-refunds?settled=true"
 ```
 
-| Warning | Meaning | What you do |
-| --- | --- | --- |
-| `refund of an erased account skipped: pay it out by hand` | the refund was not made; `amount` and `currency` (smallest unit: `600 eur` is 6.00 EUR), `account_id`, `payment`, `reason` | pay the amount back yourself (e.g. a bank transfer; the customer record at Stripe is gone, the payment `payment` still shows who paid) and keep the record in your bookkeeping |
-| `a refund of an account erasure failed: pay it out by hand` | a refund Stripe accepted failed later (e.g. a closed card), reported by `refund.failed` / `refund.updated` | the same |
-| `refund of an erased account waits for the customer` | Stripe asked the customer for the details it needs (`requires_action`) | nothing at first; if Stripe cancels it later, the second warning follows |
-
-Make sure `refund.updated` and `refund.failed` are among the webhook events (step 5 of the checklist), or a refund that fails later goes unnoticed.
+`amount` is in the currency's smallest unit (`600` `eur` is 6.00 EUR). For each open record: find the payment `payment_ref` in the Stripe Dashboard (Payments, search the id; the payer's details are on the payment even though the customer is deleted), pay the amount back outside Stripe (for example a bank transfer), keep the proof in your bookkeeping, then settle the record. A settled record is deleted 30 days later. The record names no account on purpose: keeping the payment and the amount after the account is erased is needed to make the repayment (Art. 17(3)(b) GDPR); say so in your privacy policy.
 
 **Tax and bookkeeping:** a refund changes the revenue of the period it belongs to, and with Stripe Tax the refunded tax is reversed in Stripe's tax reports. Check with your tax adviser how it appears in your bookkeeping (a credit note, the VAT return of which period). Say in your terms that an account deletion refunds the unused part of a paid period (step 10 of the checklist).
 

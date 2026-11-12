@@ -10,6 +10,7 @@ operator has a Stripe account. Checkout and portal URLs point back to the web ap
 
 import secrets
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -28,7 +29,7 @@ from billing.domain.models import (
     ProviderSubscription,
     RefundStatus,
 )
-from billing.domain.refunds import refunded_already
+from billing.domain.refunds import covers, refunded_already
 
 
 def fake_customer_id(account_id: UUID) -> str:
@@ -45,9 +46,9 @@ class FakeProvider:
     of the three erasure methods that change something (``refund``, ``cancel_subscription``,
     ``delete_customer``), failed ones included.
 
-    Refunds: ``paid_invoices`` holds the latest paid invoice per subscription id, ``refunds``
-    the refunds per payment. A new refund gets ``refund_status``; an idempotency key that was
-    used before answers the refund made with it, like Stripe."""
+    Refunds: ``paid_invoices`` holds the paid invoices per subscription id (newest first),
+    ``refunds`` the refunds per payment. A new refund gets ``refund_status``; an idempotency key
+    that was used before answers the refund made with it, like Stripe."""
 
     webhook_secret: str = "whsec_fake"  # noqa: S105 - a development value, not a secret
     amounts: dict[str, int] = field(default_factory=dict)
@@ -62,7 +63,7 @@ class FakeProvider:
     calls: list[tuple[str, str]] = field(default_factory=list)
     failures: dict[str, Exception] = field(default_factory=dict)
     fail_prices: bool = False
-    paid_invoices: dict[str, PaidInvoice] = field(default_factory=dict)
+    paid_invoices: dict[str, list[PaidInvoice]] = field(default_factory=dict)
     refunds: dict[str, list[ProviderRefund]] = field(default_factory=dict)
     refund_status: RefundStatus = RefundStatus.SUCCEEDED
     idempotency_keys: dict[str, ProviderRefund] = field(default_factory=dict)
@@ -129,11 +130,13 @@ class FakeProvider:
             current_period_end=found.current_period_end,
         )
 
-    async def latest_paid_invoice(self, subscription_id: str) -> PaidInvoice | None:
-        failure = self.failures.get("latest_paid_invoice")
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        failure = self.failures.get("paid_invoices_covering")
         if failure is not None:
             raise failure
-        return self.paid_invoices.get(subscription_id)
+        return [i for i in self.paid_invoices.get(subscription_id, []) if covers(i, now)]
 
     async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
         failure = self.failures.get("refunds_of")
@@ -152,7 +155,12 @@ class FakeProvider:
         self._attempt("refund", payment_ref)
         if idempotency_key in self.idempotency_keys:
             return self.idempotency_keys[idempotency_key]
-        paid = [i for i in self.paid_invoices.values() if i.payment_ref == payment_ref]
+        paid = [
+            i
+            for invoices in self.paid_invoices.values()
+            for i in invoices
+            if i.payment_ref == payment_ref
+        ]
         left = (paid[0].payment_amount if paid else 0) - refunded_already(
             self.refunds.get(payment_ref, [])
         )

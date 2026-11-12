@@ -12,25 +12,36 @@ POST /checkout          ``can_manage_billing``  start a hosted checkout for a pl
 POST /portal            ``can_manage_billing``  open the hosted customer portal (URL)
 GET  /invoices          ``can_manage_billing``  the account's invoice references
 POST /webhooks/stripe   signature only          provider events (raw body, rate limited)
+GET  /operator/         ``can_manage_accounts`` refunds of erased accounts to pay back by
+  manual-refunds        on ``platform:main``    hand (``?settled=true``: with settled ones)
+POST /operator/         ``can_manage_accounts`` mark one as paid back (404 unknown id)
+  manual-refunds/{id}/  on ``platform:main``
+  settle
 ======================  ======================  ============================================
 
 ``can_manage_billing`` on the token's account: the owner (or a member granted
 ``billing.manage``); admins get 403, principals outside the account 404.
 """
 
-from fastapi import APIRouter, Header, Request
+from uuid import UUID
 
-from billing.adapters.api.deps import BillingManager, RequestBase, ServiceDep
+from fastapi import APIRouter, Header, Request
+from mowdeck_service_kit import get_logger
+
+from billing.adapters.api.deps import BillingManager, Operator, RequestBase, ServiceDep
 from billing.adapters.api.schemas import (
     BillingStatusOut,
     CheckoutIn,
     InvoiceOut,
+    ManualRefundOut,
     RedirectOut,
     SubscriptionSummaryOut,
     WebhookOut,
 )
+from billing.domain.errors import NotFoundError
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+_log = get_logger("billing.api")
 
 
 @router.get("/status")
@@ -97,3 +108,32 @@ async def stripe_webhook(
         outcome=result.outcome.value if result.outcome else None,
         duplicate=result.duplicate,
     )
+
+
+@router.get("/operator/manual-refunds")
+async def manual_refunds(
+    principal: Operator, service: ServiceDep, settled: bool = False
+) -> list[ManualRefundOut]:
+    """Refunds of erased accounts that Billing could not make and the operator pays back by
+    hand (ADR 0082), oldest first: the payment and invoice at the provider, amount, currency
+    and why. Open ones only, with ``settled=true`` also those settled in the last 30 days. No
+    record names an account."""
+    del principal
+    return [ManualRefundOut.of(r) for r in await service.manual_refunds.listing(settled=settled)]
+
+
+@router.post("/operator/manual-refunds/{refund_id}/settle")
+async def settle_manual_refund(
+    refund_id: UUID, principal: Operator, service: ServiceDep
+) -> ManualRefundOut:
+    """Mark a manual refund as paid back. Settling again keeps the first time; 404 for an
+    unknown id (or one deleted 30 days after it was settled)."""
+    settled = await service.manual_refunds.settle(refund_id)
+    if settled is None:
+        raise NotFoundError(f"no manual refund {refund_id}")
+    _log.info(
+        "manual refund settled by an operator",
+        manual_refund=str(refund_id),
+        operator=str(principal.subject),
+    )
+    return ManualRefundOut.of(settled)

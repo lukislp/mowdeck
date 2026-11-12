@@ -193,6 +193,77 @@
         "title": "InvoiceOut",
         "type": "object"
       },
+      "ManualRefundOut": {
+        "description": "A refund of an erased account that the operator pays back by hand (ADR 0082). It names\nthe payment and the invoice at the provider, never the account.",
+        "properties": {
+          "amount": {
+            "description": "Smallest currency unit (cents; whole yen for JPY).",
+            "title": "Amount",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "invoice_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The provider's invoice.",
+            "title": "Invoice Ref"
+          },
+          "payment_ref": {
+            "description": "The provider's payment (PaymentIntent or charge).",
+            "title": "Payment Ref",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why the refund could not be made at the provider.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the operator marked it paid back.",
+            "title": "Settled At"
+          }
+        },
+        "required": [
+          "id",
+          "payment_ref",
+          "invoice_ref",
+          "amount",
+          "currency",
+          "reason",
+          "created_at",
+          "settled_at"
+        ],
+        "title": "ManualRefundOut",
+        "type": "object"
+      },
       "ModuleDescriptor": {
         "description": "Self-description of a service, served at ``/.well-known/mowdeck-module``.",
         "properties": {
@@ -759,6 +830,98 @@
           }
         },
         "summary": "Invoices",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/operator/manual-refunds": {
+      "get": {
+        "description": "Refunds of erased accounts that Billing could not make and the operator pays back by\nhand (ADR 0082), oldest first: the payment and invoice at the provider, amount, currency\nand why. Open ones only, with ``settled=true`` also those settled in the last 30 days. No\nrecord names an account.",
+        "operationId": "manual_refunds_api_v1_billing_operator_manual_refunds_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "settled",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Settled",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ManualRefundOut"
+                  },
+                  "title": "Response Manual Refunds Api V1 Billing Operator Manual Refunds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Manual Refunds",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/billing/operator/manual-refunds/{refund_id}/settle": {
+      "post": {
+        "description": "Mark a manual refund as paid back. Settling again keeps the first time; 404 for an\nunknown id (or one deleted 30 days after it was settled).",
+        "operationId": "settle_manual_refund_api_v1_billing_operator_manual_refunds__refund_id__settle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refund_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Refund Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualRefundOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Settle Manual Refund",
         "tags": [
           "billing"
         ]

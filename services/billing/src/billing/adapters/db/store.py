@@ -31,6 +31,7 @@ from billing.domain.models import (
     Customer,
     EventOutcome,
     Invoice,
+    ManualRefund,
     Subscription,
     WebhookEvent,
 )
@@ -297,6 +298,53 @@ class SqlTx:
             )
             removed += int(result.rowcount or 0)
         return removed
+
+    async def add_manual_refund(self, refund: ManualRefund) -> bool:
+        m = tables.manual_refunds
+        result = await self._conn.execute(
+            pg_insert(m)
+            .values(
+                id=refund.id,
+                key=refund.key,
+                payment_ref=refund.payment_ref,
+                invoice_ref=refund.invoice_ref,
+                amount=refund.amount,
+                currency=refund.currency,
+                reason=refund.reason,
+                created_at=refund.created_at,
+                settled_at=refund.settled_at,
+            )
+            .on_conflict_do_nothing(index_elements=[m.c.key])
+        )
+        return bool(result.rowcount)
+
+    async def manual_refunds(self, *, settled: bool) -> list[ManualRefund]:
+        m = tables.manual_refunds
+        query = sa.select(m).order_by(m.c.created_at, m.c.id)
+        if not settled:
+            query = query.where(m.c.settled_at.is_(None))
+        rows = (await self._conn.execute(query)).all()
+        return [ManualRefund(**dict(row._mapping)) for row in rows]
+
+    async def settle_manual_refund(self, refund_id: UUID, at: datetime) -> ManualRefund | None:
+        m = tables.manual_refunds
+        await self._conn.execute(
+            sa.update(m).where(m.c.id == refund_id, m.c.settled_at.is_(None)).values(settled_at=at)
+        )
+        row = (await self._conn.execute(sa.select(m).where(m.c.id == refund_id))).first()
+        return ManualRefund(**dict(row._mapping)) if row else None
+
+    async def delete_settled_manual_refunds(self, before: datetime) -> int:
+        m = tables.manual_refunds
+        result = await self._conn.execute(
+            sa.delete(m).where(m.c.settled_at.is_not(None), m.c.settled_at < before)
+        )
+        return int(result.rowcount or 0)
+
+    async def open_manual_refunds(self) -> int:
+        m = tables.manual_refunds
+        query = sa.select(sa.func.count()).select_from(m).where(m.c.settled_at.is_(None))
+        return int((await self._conn.execute(query)).scalar_one())
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         """Counted over every table of the schema that has an ``account_id`` column."""

@@ -7,7 +7,7 @@ becomes, and the same calls against stripe-mock (``MOWDECK_TEST_STRIPE_MOCK_URL`
 ``test_billing_stripe``). No real Stripe key and no real call.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -71,9 +71,9 @@ class _Api:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, Any, Any]] = []
-        self.invoices: list[dict[str, Any]] = []
+        self.invoices: list[list[dict[str, Any]]] = []
         self.lines: list[dict[str, Any]] = []
-        self.payments: list[dict[str, Any]] = []
+        self.payments: dict[str, list[dict[str, Any]]] = {}
         self.refunds: list[dict[str, Any]] = []
         self.create_error: stripe.StripeError | None = None
         self.list_error: stripe.StripeError | None = None
@@ -86,9 +86,19 @@ class _Api:
         if self.list_error is not None:
             raise self.list_error
         if "subscription" in params:
-            return _page(*self.invoices)
+            # Pages of invoices: the first, or the one after the invoice named by the cursor.
+            index = 0
+            if "starting_after" in params:
+                index = next(
+                    i + 1
+                    for i, page in enumerate(self.invoices)
+                    if page and page[-1]["id"] == params["starting_after"]
+                )
+            if index >= len(self.invoices):
+                return _page()
+            return _page(*self.invoices[index], has_more=index + 1 < len(self.invoices))
         if "invoice" in params:
-            return _page(*self.payments)
+            return _page(*self.payments.get(params["invoice"], []))
         return _page(*self.refunds)
 
     async def _lines(self, invoice_id: str, params: Any = None) -> Any:
@@ -120,71 +130,86 @@ def _with(api: _Api) -> StripeProvider:
 # --- reading the paid period ------------------------------------------------------------------
 
 
-async def test_billing_stripe_the_latest_paid_invoice_that_bills_a_period() -> None:
-    """The newest paid invoice is of an upgrade alone and is passed over; the one before bills
-    the month, carries only the first page of its lines and was paid by a PaymentIntent."""
+NOW = datetime(2026, 11, 16, tzinfo=UTC)
+
+
+def _paid(
+    invoice_id: str, amount: int, *lines: dict[str, Any], more: bool = False
+) -> dict[str, Any]:
+    return {
+        "id": invoice_id,
+        "status": "paid",
+        "currency": "eur",
+        "amount_paid": amount,
+        "lines": {"data": list(lines), "has_more": more},
+    }
+
+
+def _by_intent(payment_intent: str, amount: int) -> dict[str, Any]:
+    return {
+        "id": f"inpay_{payment_intent}",
+        "payment": {"type": "payment_intent", "payment_intent": payment_intent},
+        "amount_paid": amount,
+    }
+
+
+async def test_billing_stripe_every_paid_invoice_that_covers_now() -> None:
+    """Two pages of paid invoices, created at most one longest period back. Kept: an upgrade
+    billed on its own (proration lines) and the month's invoice, whose first page of lines is
+    completed from the lines endpoint and which was paid by a PaymentIntent. Passed over: last
+    month's invoice and one of one-off items."""
     api = _Api()
+    upgrade = _line(600, _price(proration=True), start=START + 1_296_000)
+    credit = _line(-450, _price(proration=True), start=START + 1_296_000)
     api.invoices = [
-        {
-            "id": "in_3",
-            "status": "paid",
-            "currency": "eur",
-            "amount_paid": 300,
-            "lines": {"data": [_line(300, _price(proration=True))], "has_more": False},
-        },
-        {
-            "id": "in_2",
-            "status": "paid",
-            "currency": "eur",
-            "amount_paid": 1071,
-            "lines": {"data": [_line(900, _price())], "has_more": True},
-        },
+        [_paid("in_3", 150, credit, upgrade), _paid("in_one_off", 200, _line(200, ONE_OFF))],
+        [
+            _paid("in_2", 1071, _line(900, _price()), more=True),
+            _paid("in_1", 900, _line(900, _price(), start=START - 2_592_000, end=START)),
+        ],
     ]
     api.lines = [
         _line(900, _price()),
         _line(200, ONE_OFF),
         _line(50, _price(), start=START - 2_592_000, end=START),
     ]
-    api.payments = [
-        {"id": "inpay_0", "payment": {"type": "out_of_band_payment"}, "amount_paid": 1071},
-        {
-            "id": "inpay_1",
-            "payment": {"type": "payment_intent", "payment_intent": "pi_2"},
-            "amount_paid": 1071,
-        },
-    ]
+    api.payments = {
+        "in_3": [_by_intent("pi_3", 150)],
+        "in_2": [
+            {"id": "inpay_0", "payment": {"type": "out_of_band_payment"}, "amount_paid": 1071},
+            _by_intent("pi_2", 1071),
+        ],
+    }
 
-    found = await _with(api).latest_paid_invoice("sub_1")
+    found = await _with(api).paid_invoices_covering("sub_1", NOW)
 
-    assert found is not None
-    assert (found.invoice_id, found.subscription_id, found.status) == ("in_2", "sub_1", "paid")
-    assert (found.currency, found.amount_paid) == ("eur", 1071)
-    assert (found.payment_ref, found.payment_amount) == ("pi_2", 1071)
+    assert [i.invoice_id for i in found] == ["in_3", "in_2"]
+    upgrade_invoice, month = found
+    assert (upgrade_invoice.payment_ref, upgrade_invoice.payment_amount) == ("pi_3", 150)
+    assert [line.amount for line in upgrade_invoice.lines] == [-450, 600]
+    assert {line.kind for line in upgrade_invoice.lines} == {LineKind.PRORATION}
+    assert (month.subscription_id, month.status, month.currency) == ("sub_1", "paid", "eur")
+    assert (month.amount_paid, month.payment_ref, month.payment_amount) == (1071, "pi_2", 1071)
     start, end = datetime(2026, 11, 1, tzinfo=UTC), datetime(2026, 12, 1, tzinfo=UTC)
-    assert found.lines == (
+    assert month.lines == (
         InvoiceLine(900, LineKind.RECURRING, start, end),
         InvoiceLine(200, LineKind.OTHER, start, end),
         InvoiceLine(50, LineKind.RECURRING, datetime(2026, 10, 2, tzinfo=UTC), start),
     )
-    assert api.calls[0] == ("list", {"subscription": "sub_1", "status": "paid", "limit": 10}, None)
+    since = int((NOW - timedelta(days=366)).timestamp())
+    first = {"subscription": "sub_1", "status": "paid", "created": {"gte": since}, "limit": 100}
+    assert api.calls[0] == ("list", first, None)
+    assert ("list", {**first, "starting_after": "in_one_off"}, None) in api.calls
     assert ("lines", "in_2", {"limit": 100}) in api.calls
-    assert ("list", {"invoice": "in_2", "status": "paid", "limit": 10}, None) in api.calls
+    payments_asked = [c[1]["invoice"] for c in api.calls if "invoice" in (c[1] or {})]
+    assert payments_asked == ["in_3", "in_2"]  # only for the invoices kept
 
 
 async def test_billing_stripe_no_paid_invoice_and_one_paid_without_a_payment() -> None:
     api = _Api()
-    assert await _with(api).latest_paid_invoice("sub_1") is None
-    api.invoices = [
-        {
-            "id": "in_1",
-            "status": "paid",
-            "currency": "eur",
-            "amount_paid": 0,
-            "lines": {"data": [_line(900, _price())]},
-        }
-    ]
-    found = await _with(api).latest_paid_invoice("sub_1")
-    assert found is not None
+    assert await _with(api).paid_invoices_covering("sub_1", NOW) == []
+    api.invoices = [[_paid("in_1", 0, _line(900, _price()))]]
+    [found] = await _with(api).paid_invoices_covering("sub_1", NOW)
     assert (found.payment_ref, found.payment_amount) == (None, 0)
 
 
@@ -283,7 +308,7 @@ async def test_billing_stripe_refund_failures_say_whether_a_retry_can_help(
     for call in (
         _with(api).refund("pi_2", 600, "eur", "key", METADATA),
         _with(api).refunds_of("pi_2"),
-        _with(api).latest_paid_invoice("sub_1"),
+        _with(api).paid_invoices_covering("sub_1", NOW),
     ):
         with pytest.raises(ProviderError) as failed:
             await call
@@ -343,8 +368,8 @@ async def test_billing_stripe_mock_refund_calls() -> None:
     """stripe-mock checks every parameter against Stripe's API definition (the idempotency key
     is a header it accepts); its answers are fixtures, not the objects asked for."""
     provider = StripeProvider("sk_test_123", "whsec", api_base=MOCK_URL, max_network_retries=0)
-    found = await provider.latest_paid_invoice("sub_123")
-    assert found is None or found.subscription_id == "sub_123"
+    found = await provider.paid_invoices_covering("sub_123", datetime.now(UTC))
+    assert all(invoice.subscription_id == "sub_123" for invoice in found)
     refunds = await provider.refunds_of("pi_123")
     assert all(r.id.startswith("re_") for r in refunds)
     await provider.refunds_of("ch_123")

@@ -19,6 +19,7 @@ from billing.domain.models import (
     Customer,
     EventOutcome,
     Invoice,
+    ManualRefund,
     OfferedPlan,
     PaidInvoice,
     PlanPrice,
@@ -75,16 +76,21 @@ class PaymentProvider(Protocol):
         """The current state of a subscription at the provider."""
         ...
 
-    async def latest_paid_invoice(self, subscription_id: str) -> PaidInvoice | None:
-        """The newest paid invoice of a subscription that bills a period of it (an invoice of
-        prorations or one-off items alone is passed over), with its lines and the payment that
-        paid it; None when there is none. For the refund of an erased account (ADR 0082).
-        Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later)."""
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        """Every paid invoice of a subscription that bills time containing ``now`` (a positive
+        recurring or proration line whose period contains it, see
+        :func:`billing.domain.refunds.covers`), each with all its lines and the payment that
+        paid it: the invoice of the period and an upgrade billed on its own invoice. Looks back
+        no further than :func:`billing.domain.refunds.earliest_invoice`. For the refund of an
+        erased account (ADR 0082). Raises ``ProviderError`` (``ProviderUnavailable`` when the
+        call can succeed later)."""
         ...
 
     async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
         """Every refund of a payment, with its status and metadata (how a retry of an erasure
-        finds the refund it made). Raises ``ProviderError`` like :meth:`latest_paid_invoice`."""
+        finds the refund it made). Raises ``ProviderError`` like :meth:`paid_invoices_covering`."""
         ...
 
     async def refund(
@@ -218,6 +224,27 @@ class Tx(Protocol):
         first, under their lock (see :meth:`lock_customer`), then subscriptions, invoice
         references, the account's ledger rows and the account itself. The number of rows
         removed; idempotent."""
+        ...
+
+    async def add_manual_refund(self, refund: ManualRefund) -> bool:
+        """Record a refund the operator pays by hand, unless one with its ``key`` exists (one
+        per payment and invoice); True if inserted."""
+        ...
+
+    async def manual_refunds(self, *, settled: bool) -> list[ManualRefund]:
+        """The open records, oldest first; with ``settled`` the settled ones too."""
+        ...
+
+    async def settle_manual_refund(self, refund_id: UUID, at: datetime) -> ManualRefund | None:
+        """Mark a record as paid back (once: a settled one keeps its time); None if unknown."""
+        ...
+
+    async def delete_settled_manual_refunds(self, before: datetime) -> int:
+        """Delete the records settled before ``before``; how many."""
+        ...
+
+    async def open_manual_refunds(self) -> int:
+        """How many records are not settled."""
         ...
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:

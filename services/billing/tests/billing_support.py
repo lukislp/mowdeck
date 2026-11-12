@@ -18,7 +18,13 @@ from uuid import UUID, uuid4
 import httpx
 from fastapi import FastAPI
 from mowdeck_auth.testing import TestKeys, bearer
-from mowdeck_authz import RelationshipTuple, TupleWriter, account, principal_subject
+from mowdeck_authz import (
+    PLATFORM_OBJECT,
+    RelationshipTuple,
+    TupleWriter,
+    account,
+    principal_subject,
+)
 from mowdeck_authz.testing import InMemoryAuthorizer
 from mowdeck_contracts.v1 import (
     PlanSetError,
@@ -171,6 +177,18 @@ class Harness:
     async def owner(self) -> Person:
         """A new account and its owner."""
         return await self.member("owner")
+
+    async def operator(self) -> Person:
+        """An owner who is also an operator admin (``platform:main#operator_admin``)."""
+        person = await self.owner()
+        await self.identity.write(
+            [
+                RelationshipTuple(
+                    principal_subject(person.principal), "operator_admin", PLATFORM_OBJECT
+                )
+            ]
+        )
+        return person
 
     async def customer(self, account_id: UUID, customer_id: str = "cus_1") -> None:
         """The account's customer at the provider, as a started checkout leaves it: Billing

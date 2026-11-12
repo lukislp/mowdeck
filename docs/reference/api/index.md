@@ -7,7 +7,7 @@ Every MowDeck service publishes an HTTP API under `/api/v1/<service>` on the sam
 | Service | Base path | Operations | What it does |
 | --- | --- | --- | --- |
 | [assistant](assistant.md) | `/api/v1/assistant` | 2 | Chat control: proposals from typed requests (optional add-on, ADR 0075). |
-| [billing](billing.md) | `/api/v1/billing` | 6 | Plans, checkout and the Stripe webhook (only with billing enabled). |
+| [billing](billing.md) | `/api/v1/billing` | 8 | Plans, checkout and the Stripe webhook (only with billing enabled). |
 | [device-gateway](device-gateway.md) | `/api/v1/device-gateway` | 1 | Mower links of the installation (operator view). |
 | [entitlements](entitlements.md) | `/api/v1/entitlements` | 8 | What the account's plan allows; usage and limits. |
 | [fleet](fleet.md) | `/api/v1/fleet` | 55 | Mowers, sites, groups, linked cloud accounts, base stations and commands. |
