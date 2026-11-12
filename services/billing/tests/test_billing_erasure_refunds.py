@@ -195,9 +195,7 @@ async def test_a_retry_after_a_later_failure_never_refunds_twice() -> None:
 async def test_a_refund_refused_for_good_is_skipped_with_a_warning() -> None:
     async with harness() as h:
         account_id = await paying(h)
-        h.provider.failures["refund"] = RefundImpossible(
-            "Stripe refuses (charge_expired_for_refund)"
-        )
+        h.provider.failures["refund"] = RefundImpossible("Stripe refuses (charge_disputed)")
 
         with structlog.testing.capture_logs() as logs:
             reply = await erase(h, account_id)
@@ -213,7 +211,7 @@ async def test_a_refund_refused_for_good_is_skipped_with_a_warning() -> None:
         assert warning["account_id"] == str(account_id)
         assert (warning["amount"], warning["currency"]) == (600, "eur")
         assert warning["payment"] == "pi_sub_1"
-        assert "charge_expired_for_refund" in warning["reason"]
+        assert "charge_disputed" in warning["reason"]
 
 
 async def test_after_too_many_failed_refunds_the_erasure_goes_on_with_a_warning() -> None:

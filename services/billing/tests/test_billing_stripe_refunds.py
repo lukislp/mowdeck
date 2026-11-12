@@ -254,13 +254,23 @@ async def test_billing_stripe_a_refund_refused_for_good(code: str) -> None:
         await _with(api).refund("pi_2", 600, "eur", "key", METADATA)
 
 
+async def test_billing_stripe_any_invalid_refund_request_is_refused_for_good() -> None:
+    """A payment older than Stripe refunds comes back as a 400 without a dedicated code: it
+    must not block the erasure on every retry."""
+    api = _Api()
+    api.create_error = _error(
+        stripe.InvalidRequestError, "charge too old to refund", None, http_status=400
+    )
+    with pytest.raises(RefundImpossible, match="too old"):
+        await _with(api).refund("pi_2", 600, "eur", "key", METADATA)
+
+
 @pytest.mark.parametrize(
     ("error", "later"),
     [
         (_error(stripe.RateLimitError, "slow down", http_status=429), True),
         (_error(stripe.APIConnectionError, "timed out"), True),
         (_error(stripe.APIError, "stripe is down", http_status=503), True),
-        (_error(stripe.InvalidRequestError, "amount too large", "amount", http_status=400), False),
         (_error(stripe.PermissionError, "restricted key", http_status=403), False),
     ],
 )

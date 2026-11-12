@@ -80,14 +80,16 @@ cannot bill or credit somebody who is deleting their account)."""
 
 PERMANENT_REFUND_CODES = frozenset(
     {
-        "charge_expired_for_refund",
         "charge_disputed",
         "refund_disputed_payment",
         "charge_already_refunded",
     }
 )
-"""Stripe's error codes for a refund that asking again cannot make: the payment is older than
-Stripe allows, it is disputed, or nothing of it is left to refund."""
+"""Stripe's documented error codes for a refund that asking again cannot make: the payment is
+disputed, or nothing of it is left to refund. Any other ``InvalidRequestError`` on a refund is
+treated as permanent too (Stripe answers a payment older than it allows to refund without a
+dedicated code); retrying the same request cannot change a 400, and the operator is warned with
+the amount either way."""
 
 INVOICE_PAGE = 10
 """Paid invoices of a subscription looked at for the latest one that bills a period."""
@@ -361,8 +363,8 @@ class StripeProvider:
             msg = "the refund's idempotency key was used with other parameters; asked again later"
             raise ProviderUnavailable(msg) from exc
         except stripe.StripeError as exc:
-            if isinstance(exc, stripe.InvalidRequestError) and exc.code in PERMANENT_REFUND_CODES:
-                msg = f"Stripe refuses the refund for good ({exc.code})"
+            if isinstance(exc, stripe.InvalidRequestError):
+                msg = f"Stripe refuses the refund for good ({exc.code or exc.user_message or exc})"
                 raise RefundImpossible(msg) from exc
             raise _failure("refunding the payment at Stripe failed", exc) from exc
         del currency  # the payment's own: Stripe takes no currency for a payment's refund
