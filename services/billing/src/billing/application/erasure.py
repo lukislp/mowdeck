@@ -93,8 +93,9 @@ class AccountPurge:
     async def purge(self, account_id: UUID) -> int:
         """Refund the unused part of each paid period and end the open subscriptions, pay back
         the credit balance, zero it and delete the customer at the provider, then delete the
-        rows; the number of rows removed (0 when Billing never knew the account). Raises ``ProviderError`` when the provider did not
-        confirm (``RefundFailed`` for a refund that failed), and deletes no row then."""
+        rows; the number of rows removed (0 when Billing never knew the account). Raises
+        ``ProviderError`` when the provider did not confirm (``RefundFailed`` for a refund that
+        failed), and deletes no row then."""
         async with self._store.transaction() as tx:
             customers = await tx.customers_of(account_id)
             open_subscriptions = [s for s in await tx.subscriptions_of(account_id) if s.is_open]
