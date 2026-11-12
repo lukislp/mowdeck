@@ -8,6 +8,9 @@ Field paths follow the Stripe API version pinned by the SDK (``2026-09-30.endive
 ``2025-03-31.basil`` the billing period lives on the subscription items
 (``items.data[].current_period_end``) and an invoice names its subscription under
 ``parent.subscription_details.subscription``. The older top-level fields are read as a fallback.
+An invoice line says what it bills under ``parent``: ``subscription_item_details`` (a price of
+the subscription, or a proration of it) or ``invoice_item_details`` (a one-off item, or a
+proration); an invoice names its payments in ``invoice_payments``, not on the invoice.
 """
 
 from datetime import UTC, datetime
@@ -17,10 +20,16 @@ from uuid import UUID
 from mowdeck_contracts.v1 import SubscriptionStatus
 
 from billing.domain.models import (
+    InvoiceLine,
+    LineKind,
+    PaidInvoice,
+    ProviderCharge,
     ProviderCheckout,
     ProviderEvent,
     ProviderInvoice,
+    ProviderRefund,
     ProviderSubscription,
+    RefundStatus,
 )
 
 
@@ -105,6 +114,88 @@ def invoice_from(obj: dict[str, Any]) -> ProviderInvoice:
     )
 
 
+def _int(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def line_from(obj: dict[str, Any]) -> InvoiceLine | None:
+    """A Stripe invoice ``line_item``; None without a period."""
+    period = obj.get("period") if isinstance(obj.get("period"), dict) else {}
+    start = _ts(period.get("start")) if period else None
+    end = _ts(period.get("end")) if period else None
+    if start is None or end is None:
+        return None
+    parent = obj.get("parent") if isinstance(obj.get("parent"), dict) else {}
+    details = parent.get("subscription_item_details") if parent else None
+    one_off = parent.get("invoice_item_details") if parent else None
+    if isinstance(details, dict):
+        kind = LineKind.PRORATION if details.get("proration") else LineKind.RECURRING
+    elif isinstance(one_off, dict) and one_off.get("proration"):
+        kind = LineKind.PRORATION
+    else:
+        kind = LineKind.OTHER
+    return InvoiceLine(
+        amount=_int(obj.get("amount")), kind=kind, period_start=start, period_end=end
+    )
+
+
+def payment_ref_from(obj: dict[str, Any]) -> str | None:
+    """The PaymentIntent or charge of a Stripe ``invoice_payment``."""
+    payment = obj.get("payment") if isinstance(obj.get("payment"), dict) else {}
+    if not payment:
+        return None
+    return _id(payment.get("payment_intent")) or _id(payment.get("charge"))
+
+
+def paid_invoice_from(
+    obj: dict[str, Any],
+    subscription_id: str,
+    lines: list[dict[str, Any]],
+    payment: dict[str, Any] | None,
+) -> PaidInvoice:
+    """A paid Stripe ``invoice`` with all its lines and the ``invoice_payment`` that paid it."""
+    found = [line_from(line) for line in lines]
+    return PaidInvoice(
+        invoice_id=str(obj["id"]),
+        subscription_id=subscription_id,
+        status=str(obj.get("status") or "unknown"),
+        currency=str(obj.get("currency") or ""),
+        amount_paid=_int(obj.get("amount_paid")),
+        lines=tuple(line for line in found if line is not None),
+        payment_ref=payment_ref_from(payment) if payment else None,
+        payment_amount=_int(payment.get("amount_paid")) if payment else 0,
+    )
+
+
+def refund_from(obj: dict[str, Any]) -> ProviderRefund:
+    """A Stripe ``refund``."""
+    try:
+        status = RefundStatus(str(obj.get("status")))
+    except ValueError:
+        status = RefundStatus.PENDING
+    metadata = {str(k): str(v) for k, v in _metadata(obj).items()}
+    return ProviderRefund(
+        id=str(obj["id"]),
+        payment_ref=_id(obj.get("payment_intent")) or _id(obj.get("charge")),
+        amount=_int(obj.get("amount")),
+        currency=str(obj.get("currency") or ""),
+        status=status,
+        metadata=metadata,
+        failure_reason=obj.get("failure_reason") or None,
+    )
+
+
+def charge_from(obj: dict[str, Any]) -> ProviderCharge:
+    """A Stripe ``charge``."""
+    return ProviderCharge(
+        id=str(obj["id"]),
+        customer_id=_id(obj.get("customer")),
+        currency=str(obj.get("currency") or ""),
+        amount=_int(obj.get("amount")),
+        amount_refunded=_int(obj.get("amount_refunded")),
+    )
+
+
 def checkout_from(obj: dict[str, Any]) -> ProviderCheckout:
     """A Stripe ``checkout.session`` object."""
     metadata = _metadata(obj)
@@ -130,5 +221,7 @@ def event_from(payload: dict[str, Any]) -> ProviderEvent:
         subscription=subscription_from(obj) if kind == "subscription" else None,
         invoice=invoice_from(obj) if kind == "invoice" else None,
         checkout=checkout_from(obj) if kind == "checkout.session" else None,
+        refund=refund_from(obj) if kind == "refund" else None,
+        charge=charge_from(obj) if kind == "charge" else None,
         livemode=bool(payload.get("livemode")),
     )

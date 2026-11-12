@@ -19,9 +19,12 @@ from billing.domain.models import (
     Customer,
     EventOutcome,
     Invoice,
+    ManualRefund,
     OfferedPlan,
+    PaidInvoice,
     PlanPrice,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
     Subscription,
     WebhookEvent,
@@ -73,9 +76,44 @@ class PaymentProvider(Protocol):
         """The current state of a subscription at the provider."""
         ...
 
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        """Every paid invoice of a subscription that bills time containing ``now`` (a positive
+        recurring or proration line whose period contains it, see
+        :func:`billing.domain.refunds.covers`), each with all its lines and the payment that
+        paid it: the invoice of the period and an upgrade billed on its own invoice. Looks back
+        no further than :func:`billing.domain.refunds.earliest_invoice`. For the refund of an
+        erased account (ADR 0082). Raises ``ProviderError`` (``ProviderUnavailable`` when the
+        call can succeed later)."""
+        ...
+
+    async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
+        """Every refund of a payment, with its status and metadata (how a retry of an erasure
+        finds the refund it made). Raises ``ProviderError`` like :meth:`paid_invoices_covering`."""
+        ...
+
+    async def refund(
+        self,
+        payment_ref: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> ProviderRefund:
+        """Refund ``amount`` (smallest unit of ``currency``, the payment's currency) of a payment
+        to its original payment method, with ``metadata`` on the refund. The same
+        ``idempotency_key`` never refunds twice. Raises ``RefundImpossible`` when the provider
+        refuses for a reason that does not pass (the payment is too old, disputed, or its
+        method cannot be refunded), else ``ProviderError`` (``ProviderUnavailable`` when the
+        call can succeed later). A refund the provider accepts and then reports as failed comes
+        back with that status."""
+        ...
+
     async def cancel_subscription(self, subscription_id: str) -> None:
         """End a subscription now, for an account that is erased (ADR 0082): at once and not at
-        the period end, without a final invoice, a proration or a refund. Idempotent: a
+        the period end, without a final invoice and without a proration (the unused part of a
+        paid period is refunded before, with :meth:`refund`). Idempotent: a
         subscription that has ended already, or that the provider does not know, is a success.
         Raises ``ProviderError`` (``ProviderUnavailable`` when the call can succeed later) while
         the provider has not confirmed that the subscription is over."""
@@ -186,6 +224,27 @@ class Tx(Protocol):
         first, under their lock (see :meth:`lock_customer`), then subscriptions, invoice
         references, the account's ledger rows and the account itself. The number of rows
         removed; idempotent."""
+        ...
+
+    async def add_manual_refund(self, refund: ManualRefund) -> bool:
+        """Record a refund the operator pays by hand, unless one with its ``key`` exists (one
+        per payment and invoice); True if inserted."""
+        ...
+
+    async def manual_refunds(self, *, settled: bool) -> list[ManualRefund]:
+        """The open records, oldest first; with ``settled`` the settled ones too."""
+        ...
+
+    async def settle_manual_refund(self, refund_id: UUID, at: datetime) -> ManualRefund | None:
+        """Mark a record as paid back (once: a settled one keeps its time); None if unknown."""
+        ...
+
+    async def delete_settled_manual_refunds(self, before: datetime) -> int:
+        """Delete the records settled before ``before``; how many."""
+        ...
+
+    async def open_manual_refunds(self) -> int:
+        """How many records are not settled."""
         ...
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:

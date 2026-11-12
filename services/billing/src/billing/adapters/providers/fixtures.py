@@ -172,6 +172,72 @@ def customer_event(
     return _event(event_type, obj, created, event_id)
 
 
+def refund_event(
+    event_type: str,
+    *,
+    refund_id: str,
+    payment_intent: str,
+    amount: int,
+    status: str,
+    metadata: dict[str, str] | None = None,
+    currency: str = "eur",
+    failure_reason: str | None = None,
+    created: int | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """A ``refund.updated`` or ``refund.failed`` event: the object is the refund, which names
+    the payment but no customer."""
+    obj = {
+        "id": refund_id,
+        "object": "refund",
+        "amount": amount,
+        "balance_transaction": None,
+        "charge": f"ch_{payment_intent[-10:]}",
+        "created": int(time.time()) if created is None else created,
+        "currency": currency,
+        "destination_details": {"type": "card", "card": {"type": "refund"}},
+        "failure_reason": failure_reason,
+        "metadata": metadata or {},
+        "payment_intent": payment_intent,
+        "reason": "requested_by_customer",
+        "receipt_number": None,
+        "status": status,
+    }
+    return _event(event_type, obj, created, event_id)
+
+
+def charge_refunded_event(
+    *,
+    charge_id: str,
+    customer_id: str,
+    payment_intent: str,
+    amount: int,
+    amount_refunded: int,
+    currency: str = "eur",
+    created: int | None = None,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """A ``charge.refunded`` event: the object is the charge, with its customer and the billing
+    details the customer gave."""
+    obj = {
+        "id": charge_id,
+        "object": "charge",
+        "amount": amount,
+        "amount_captured": amount,
+        "amount_refunded": amount_refunded,
+        "billing_details": {"email": "lukas@example.org", "name": "Lukas Example"},
+        "captured": True,
+        "created": int(time.time()) if created is None else created,
+        "currency": currency,
+        "customer": customer_id,
+        "paid": True,
+        "payment_intent": payment_intent,
+        "refunded": amount_refunded >= amount,
+        "status": "succeeded",
+    }
+    return _event("charge.refunded", obj, created, event_id)
+
+
 def encode(event: dict[str, Any]) -> bytes:
     """The raw body Stripe would send."""
     return json.dumps(event, separators=(",", ":")).encode()

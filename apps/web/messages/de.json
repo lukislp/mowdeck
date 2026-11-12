@@ -3053,7 +3053,7 @@
   "deletion_account_intro": "Löscht dieses Konto und alles darin, in allen Teilen von MowDeck: Mäher, Standorte, Karten, Zeitpläne, Verlauf, Benachrichtigungen, verknüpfte Herstellerkonten und deinen Benutzer.",
   "deletion_account_grace": "Die Löschung beginnt am {date}. Bis dahin behältst du vollen Zugriff, deine Mäher laufen nach ihren Zeitplänen weiter und du kannst sie jederzeit stoppen. Bis zu diesem Datum kannst du die Löschung abbrechen.",
   "deletion_account_locked": "API-Tokens funktionieren sofort nicht mehr. Bis zum Datum lassen sich keine Mitglieder und keine Tokens hinzufügen.",
-  "deletion_account_billing": "Abrechnung: Wenn die Löschung beginnt, enden deine Abonnements sofort, ohne Erstattung für den Rest eines bezahlten Zeitraums. Dein Kundendatensatz beim Zahlungsanbieter wird gelöscht. Rechnungen und Zahlungsbelege bleiben beim Zahlungsanbieter.",
+  "deletion_account_billing": "Abrechnung: Wenn die Löschung beginnt, wird der ungenutzte Teil des laufenden, bezahlten Zeitraums auf das ursprüngliche Zahlungsmittel erstattet, und deine Abonnements enden. Der Betrag wird an diesem Tag berechnet. Dein Kundendatensatz beim Zahlungsanbieter wird gelöscht. Rechnungen und Zahlungsbelege bleiben beim Zahlungsanbieter.",
   "deletion_account_remains": "Technische Hinweise ohne Inhalt, bis zu 30 Tage nach der Löschung.",
   "deletion_backups": "Sicherungen, die der Betreiber dieses Servers angelegt hat, können die Daten noch enthalten, bis sie ersetzt werden. Wie lange sie aufbewahrt werden, legt der Betreiber fest.",
   "deletion_third_push": "Push-Nachrichten hören auf. Was der Push-Dienst eines Browsers oder ein ntfy-Server schon hat, bleibt dort, wie bereits zugestellte Nachrichten.",

@@ -7,14 +7,17 @@
 * ``can_manage_billing`` on that account (the owner, or a member granted ``billing.manage``;
   admins are excluded by the model) is required; a member without it gets 403, a principal who
   is not even a member of the token's account 404.
+* Operator endpoints (``/operator/...``) need ``can_manage_accounts`` on ``platform:main`` in
+  OpenFGA, the gate of the web app's operator area (operator admins, written by
+  ``python -m identity.cli grant-platform-admin``); everybody else gets 403.
 """
 
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
-from mowdeck_authz import Relation
-from mowdeck_authz.fastapi import principal_account, require_or_not_found
+from mowdeck_authz import PLATFORM_OBJECT, ObjectRef, Relation
+from mowdeck_authz.fastapi import principal_account, require, require_or_not_found
 from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit.errors import (
     BadRequest,
@@ -52,6 +55,16 @@ BillingManager = Annotated[
     Depends(require_or_not_found(Relation.CAN_MANAGE_BILLING, principal_account)),
 ]
 """``can_manage_billing`` on the token's account (403 for members without it, 404 otherwise)."""
+
+
+def platform_object(request: Request) -> ObjectRef:
+    """Resolver of the operator endpoints: the single ``platform:main`` object."""
+    del request
+    return PLATFORM_OBJECT
+
+
+Operator = Annotated[Principal, Depends(require(Relation.CAN_MANAGE_ACCOUNTS, platform_object))]
+"""``can_manage_accounts`` on ``platform:main`` (403 otherwise, 401 without a token)."""
 
 
 def request_base(request: Request) -> str:

@@ -469,7 +469,7 @@ flowchart LR
   end
   subgraph billing["billing"]
     direction TB
-    billing_billing["billing<br/>6 operations"]
+    billing_billing["billing<br/>8 operations"]
   end
   subgraph device_gateway["device-gateway"]
     direction TB
@@ -530,7 +530,7 @@ flowchart LR
 |---|---|---|---|
 | `assistant` | `assistant` | 2 | 2 |
 | `assistant` | `operations` | 1 | 1 |
-| `billing` | `billing` | 6 | 6 |
+| `billing` | `billing` | 8 | 8 |
 | `billing` | `operations` | 1 | 1 |
 | `device-gateway` | `device-gateway` | 1 | 1 |
 | `device-gateway` | `operations` | 1 | 1 |
@@ -586,7 +586,7 @@ flowchart LR
     vision["vision"]
   end
   subgraph pg[PostgreSQL]
-    db_billing[("billing<br/>2 migrations")]
+    db_billing[("billing<br/>3 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>14 migrations")]
     db_identity[("identity<br/>13 migrations")]

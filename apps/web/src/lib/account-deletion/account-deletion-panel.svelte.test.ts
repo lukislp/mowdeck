@@ -156,13 +156,18 @@ describe('the danger area', () => {
     expect(screen.queryByTestId('deletion-billing')).toBeNull();
   });
 
-  it('names the payment provider, and no refund, only where Billing runs', async () => {
+  it('names the payment provider and the refund of the unused period only where Billing runs', async () => {
     const fake = new Fake([OWNER]);
     fake.deps.billing = vi.fn(async () => true);
     mount(fake);
     await fireEvent.click(screen.getByTestId('deletion-start'));
     const billing = await screen.findByTestId('deletion-billing');
-    expect(billing).toHaveTextContent('ohne Erstattung');
+    expect(billing).toHaveTextContent(
+      'der ungenutzte Teil des laufenden, bezahlten Zeitraums auf das ursprüngliche Zahlungsmittel erstattet',
+    );
+    expect(billing).toHaveTextContent('Der Betrag wird an diesem Tag berechnet');
+    expect(billing).not.toHaveTextContent('ohne Erstattung');
+    expect(billing).not.toHaveTextContent(/\d+[,.]\d{2}/);
     expect(billing).toHaveTextContent(
       'Rechnungen und Zahlungsbelege bleiben beim Zahlungsanbieter',
     );

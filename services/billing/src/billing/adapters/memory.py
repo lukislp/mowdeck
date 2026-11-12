@@ -21,6 +21,7 @@ from billing.domain.models import (
     Customer,
     EventOutcome,
     Invoice,
+    ManualRefund,
     Subscription,
     WebhookEvent,
 )
@@ -33,6 +34,7 @@ class _Data:
     subscriptions: dict[tuple[str, str], Subscription] = field(default_factory=dict)
     invoices: dict[tuple[str, str], Invoice] = field(default_factory=dict)
     events: dict[tuple[str, str], WebhookEvent] = field(default_factory=dict)
+    manual_refunds: dict[UUID, ManualRefund] = field(default_factory=dict)
 
 
 class MemoryTx:
@@ -160,6 +162,37 @@ class MemoryTx:
         data.invoices = {k: v for k, v in data.invoices.items() if v.account_id != account_id}
         data.events = {k: v for k, v in data.events.items() if v.account_id != account_id}
         return removed
+
+    async def add_manual_refund(self, refund: ManualRefund) -> bool:
+        if any(r.key == refund.key for r in self.data.manual_refunds.values()):
+            return False
+        self.data.manual_refunds[refund.id] = replace(refund)
+        return True
+
+    async def manual_refunds(self, *, settled: bool) -> list[ManualRefund]:
+        found = [replace(r) for r in self.data.manual_refunds.values() if settled or r.is_open]
+        return sorted(found, key=lambda r: (r.created_at, str(r.id)))
+
+    async def settle_manual_refund(self, refund_id: UUID, at: datetime) -> ManualRefund | None:
+        found = self.data.manual_refunds.get(refund_id)
+        if found is None:
+            return None
+        if found.settled_at is None:
+            found.settled_at = at
+        return replace(found)
+
+    async def delete_settled_manual_refunds(self, before: datetime) -> int:
+        gone = [
+            r.id
+            for r in self.data.manual_refunds.values()
+            if r.settled_at is not None and r.settled_at < before
+        ]
+        for refund_id in gone:
+            del self.data.manual_refunds[refund_id]
+        return len(gone)
+
+    async def open_manual_refunds(self) -> int:
+        return sum(1 for r in self.data.manual_refunds.values() if r.is_open)
 
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         return {table: found for table, found in self._account_rows(account_id).items() if found}

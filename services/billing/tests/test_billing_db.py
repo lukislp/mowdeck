@@ -18,7 +18,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -42,6 +42,7 @@ from billing.domain.models import (
     Customer,
     EventOutcome,
     Invoice,
+    ManualRefund,
     Subscription,
     WebhookEvent,
 )
@@ -294,6 +295,43 @@ async def store_contract(store: Store) -> None:
         assert await tx.get_event("stripe", "evt_unknown") is not None
 
 
+async def manual_refund_contract(store: Store) -> None:
+    """The record of refunds to pay by hand: one per key, listed oldest first, settled once,
+    deleted after the retention only when settled."""
+    at = datetime(2026, 11, 12, tzinfo=UTC)
+
+    def record(key: str, minutes: int) -> ManualRefund:
+        return ManualRefund(
+            id=uuid4(),
+            key=key,
+            payment_ref=key.split(":")[0],
+            invoice_ref=key.split(":")[1] or None,
+            amount=600,
+            currency="eur",
+            reason="refused",
+            created_at=at + timedelta(minutes=minutes),
+        )
+
+    first, second, twin = record("pi_1:in_1", 0), record("pi_2:", 1), record("pi_1:in_1", 2)
+    async with store.transaction() as tx:
+        assert await tx.add_manual_refund(first)
+        assert await tx.add_manual_refund(second)
+        assert not await tx.add_manual_refund(twin)
+        assert [r.id for r in await tx.manual_refunds(settled=False)] == [first.id, second.id]
+        assert await tx.open_manual_refunds() == 2
+        settled = await tx.settle_manual_refund(first.id, at + timedelta(days=1))
+        assert settled is not None and settled.settled_at == at + timedelta(days=1)
+        again = await tx.settle_manual_refund(first.id, at + timedelta(days=2))
+        assert again is not None and again.settled_at == at + timedelta(days=1)
+        assert await tx.settle_manual_refund(uuid4(), at) is None
+        assert [r.id for r in await tx.manual_refunds(settled=False)] == [second.id]
+        assert await tx.open_manual_refunds() == 1
+        assert second.invoice_ref is None
+        assert await tx.delete_settled_manual_refunds(at + timedelta(days=1)) == 0
+        assert await tx.delete_settled_manual_refunds(at + timedelta(days=40)) == 1
+        assert [r.id for r in await tx.manual_refunds(settled=True)] == [second.id]
+
+
 @asynccontextmanager
 async def store_of(kind: str, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Store]:
     """The memory store, or the SQL store on a fresh migrated database."""
@@ -314,6 +352,7 @@ STORES = [pytest.param("memory"), pytest.param("postgres", marks=needs_db)]
 
 async def test_billing_memory_store_contract() -> None:
     await store_contract(MemoryStore())
+    await manual_refund_contract(MemoryStore())
 
 
 async def test_billing_memory_store_rolls_back_on_error() -> None:
@@ -332,6 +371,7 @@ async def test_billing_db_store_contract(monkeypatch: pytest.MonkeyPatch) -> Non
         engine = create_async_engine(async_database_url(url))
         try:
             await store_contract(SqlStore(engine))
+            await manual_refund_contract(SqlStore(engine))
         finally:
             await engine.dispose()
 

@@ -8,14 +8,19 @@ builds the app and serves it. Tests call :func:`build_app` with their own settin
 provider, authorizer, bus, plan catalogue, clock and principal resolver.
 
 Billing runs only where billing is enabled (Compose profile ``billing``); there is no switch
-inside. Startup: read the price file, subscribe ``identity.account.created`` and answer
-``account.erase.billing`` (ADR 0082). Readiness: the bus (kit), the database and OpenFGA.
+inside. Startup: read the price file, subscribe ``identity.account.created``, answer
+``account.erase.billing`` (ADR 0082) and start the sweep of the manual refunds (every
+``SWEEP_SECONDS``: settled records past their retention are deleted, the gauge
+``mowdeck_billing_manual_refunds_open`` is refreshed). Readiness: the bus (kit), the database
+and OpenFGA.
 
 The container refuses to start where Identity was not told that Billing runs
 (:func:`ensure_identity_asks`): a deleted account would be erased everywhere else and keep its
 customer and its subscription at the payment provider.
 """
 
+import asyncio
+import contextlib
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -37,11 +42,13 @@ from billing.adapters.bus.erasure import subscribe_erasure
 from billing.adapters.bus.publisher import BusEventPublisher
 from billing.adapters.bus.subscriptions import subscribe_all
 from billing.adapters.db.store import SqlStore
+from billing.adapters.metrics import BillingMetrics
 from billing.adapters.plans import HttpPlanCatalog, StaticPlanCatalog
 from billing.adapters.providers.fake import FakeProvider
 from billing.adapters.providers.stripe import StripeProvider
 from billing.application.billing import BillingConfig, BillingService
 from billing.application.erasure import account_erasure
+from billing.application.manual_refunds import SWEEP_SECONDS, ManualRefunds
 from billing.application.ports import (
     Clock,
     EntitlementsGateway,
@@ -129,6 +136,16 @@ def build_app(
         connection = FgaConnection(AuthzSettings.from_env())
     store_ref: Store = store
     catalog_ref: PlanCatalog = plan_catalog
+    tasks: list[asyncio.Task[None]] = []
+
+    async def sweep_loop(manual: ManualRefunds, metrics: BillingMetrics) -> None:
+        """Delete settled manual refunds after their retention and report the open ones."""
+        while True:
+            try:
+                metrics.manual_refunds_open(await manual.sweep())
+            except Exception:
+                _log.exception("sweeping the manual refunds failed")
+            await asyncio.sleep(SWEEP_SECONDS)
 
     async def startup(app: FastAPI) -> None:
         active_bus: EventBus | None = app.state.bus
@@ -151,7 +168,7 @@ def build_app(
             clock=clock or utc_now,
         )
         app.state.billing_service = service
-        erasure = account_erasure(store_ref, active_provider)
+        erasure = account_erasure(store_ref, active_provider, service.clock)
         app.state.erasure = erasure
         subscriptions: list[Subscription] = []
         if active_bus is not None:
@@ -161,9 +178,22 @@ def build_app(
             if hasattr(cache, "invalidate_subject"):
                 subscriptions.append(await subscribe_cache_invalidation(active_bus, cache))
         app.state.subscriptions = subscriptions
+        metrics = BillingMetrics(app.state.metrics_registry)
+        app.state.billing_metrics = metrics
+        tasks.append(
+            asyncio.create_task(
+                sweep_loop(service.manual_refunds, metrics), name="billing-manual-refunds"
+            )
+        )
         _log.info("billing started", provider=active_provider.name, plans=sorted(table.sold))
 
     async def shutdown(app: FastAPI) -> None:
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        tasks.clear()
         for subscription in getattr(app.state, "subscriptions", []):
             await subscription.unsubscribe()
         if connection is not None:

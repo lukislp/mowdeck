@@ -5,12 +5,13 @@
 
 from datetime import datetime
 from typing import Annotated
+from uuid import UUID
 
 from mowdeck_contracts.v1 import PlanStatus, SubscriptionStatus
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from billing.application.billing import BillingStatus, StatusPlan, SubscriptionSummary
-from billing.domain.models import Invoice, Subscription
+from billing.domain.models import Invoice, ManualRefund, Subscription
 
 PlanKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_-]{0,63}$")]
 
@@ -144,6 +145,34 @@ class InvoiceOut(BaseModel):
             issued_at=invoice.issued_at,
             hosted_url=invoice.hosted_url,
             pdf_url=invoice.pdf_url,
+        )
+
+
+class ManualRefundOut(BaseModel):
+    """A refund of an erased account that the operator pays back by hand (ADR 0082). It names
+    the payment and the invoice at the provider, never the account."""
+
+    id: UUID
+    payment_ref: str = Field(description="The provider's payment (PaymentIntent or charge).")
+    invoice_ref: str | None = Field(description="The provider's invoice.")
+    amount: int = Field(description="Smallest currency unit (cents; whole yen for JPY).")
+    currency: str
+    reason: str = Field(description="Why the refund could not be made at the provider.")
+    created_at: datetime
+    settled_at: datetime | None = Field(description="When the operator marked it paid back.")
+
+    @classmethod
+    def of(cls, refund: ManualRefund) -> "ManualRefundOut":
+        """From the domain model."""
+        return cls(
+            id=refund.id,
+            payment_ref=refund.payment_ref,
+            invoice_ref=refund.invoice_ref,
+            amount=refund.amount,
+            currency=refund.currency,
+            reason=refund.reason,
+            created_at=refund.created_at,
+            settled_at=refund.settled_at,
         )
 
 

@@ -8,6 +8,10 @@
 * ``subscriptions``: the subscriptions as the provider's webhooks reported them.
 * ``invoices``: invoice references (amounts, status, links to the hosted page and the PDF).
 * ``webhook_events``: every provider event id once (exactly-once processing).
+* ``manual_refunds``: refunds of erased accounts the operator pays back by hand (ADR 0082). The
+  one table without an ``account_id``: it names the payment and the invoice at the provider,
+  the amount and why, and nobody (kept under Art. 17(3)(b) GDPR until the repayment is done,
+  deleted 30 days after it is settled).
 """
 
 from sqlalchemy import (
@@ -116,3 +120,19 @@ webhook_events = Table(
     Column("account_id", Uuid),
     PrimaryKeyConstraint("provider", "event_id"),
 )
+
+manual_refunds = Table(
+    "manual_refunds",
+    metadata,
+    Column("id", Uuid, primary_key=True),
+    Column("key", String(600), nullable=False),
+    Column("payment_ref", String(255), nullable=False),
+    Column("invoice_ref", String(255)),
+    Column("amount", BigInteger, nullable=False),
+    Column("currency", String(3), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("created_at", TS, nullable=False),
+    Column("settled_at", TS),
+    UniqueConstraint("key"),
+)
+Index("ix_manual_refunds_settled", manual_refunds.c.settled_at)

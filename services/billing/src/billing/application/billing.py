@@ -22,6 +22,13 @@ late ``customer.subscription.deleted``, invoice or checkout event of that custom
 write a row nor set a plan again. An event is applied under a lock on its customer row
 (:meth:`~billing.application.ports.Tx.lock_customer`) which the erasure also takes, so an event
 that is being applied finishes, plan and all, before the rows go.
+
+**Refund events** (``refund.updated``, ``refund.failed``, ``charge.refunded``) write no row
+of an account: Billing stores no refunds. They come mostly after an account erasure refunded
+the rest of a paid period, for a customer Billing no longer knows, and are acknowledged and
+dropped like any event of such a customer. A refund of an erasure that the provider reports as
+failed or canceled after the erasure was over is recorded for the operator, who pays it out by
+hand (:mod:`billing.application.manual_refunds`), and logged as a warning.
 """
 
 import asyncio
@@ -38,6 +45,7 @@ from mowdeck_contracts.v1 import (
 )
 from mowdeck_service_kit import get_logger
 
+from billing.application.manual_refunds import ManualRefunds
 from billing.application.ports import (
     Clock,
     EntitlementsGateway,
@@ -55,12 +63,15 @@ from billing.domain.models import (
     Invoice,
     OfferedPlan,
     PlanPrice,
+    ProviderCharge,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
     Subscription,
     WebhookEvent,
 )
 from billing.domain.prices import PriceTable
+from billing.domain.refunds import is_erasure_metadata, is_initiated
 from billing.domain.rules import plan_decision
 
 _log = get_logger("billing.service")
@@ -75,7 +86,14 @@ SUBSCRIPTION_EVENTS = frozenset(
 TRIAL_WILL_END = "customer.subscription.trial_will_end"
 CHECKOUT_COMPLETED = "checkout.session.completed"
 INVOICE_EVENTS = frozenset({"invoice.paid", "invoice.payment_failed"})
-HANDLED_EVENTS = SUBSCRIPTION_EVENTS | INVOICE_EVENTS | {TRIAL_WILL_END, CHECKOUT_COMPLETED}
+REFUND_EVENTS = frozenset({"refund.updated", "refund.failed"})
+CHARGE_REFUNDED = "charge.refunded"
+HANDLED_EVENTS = (
+    SUBSCRIPTION_EVENTS
+    | INVOICE_EVENTS
+    | REFUND_EVENTS
+    | {TRIAL_WILL_END, CHECKOUT_COMPLETED, CHARGE_REFUNDED}
+)
 """The provider event types Billing handles (the webhook endpoint should send only these)."""
 
 
@@ -166,6 +184,7 @@ class BillingService:
         self.events = events
         self.config = config
         self.clock = clock
+        self.manual_refunds = ManualRefunds(store, clock)
         self._cache = _PriceCache()
         self._cache_lock = asyncio.Lock()
 
@@ -400,7 +419,39 @@ class BillingService:
             return await self._trial_will_end(event.subscription, event)
         if event.type in INVOICE_EVENTS and event.invoice is not None:
             return await self._apply_invoice(event)
+        if event.type in REFUND_EVENTS and event.refund is not None:
+            return await self._refund_reported(event.refund), None
+        if event.type == CHARGE_REFUNDED and event.charge is not None:
+            return await self._charge_refunded(event, event.charge)
         return EventOutcome.IGNORED, None
+
+    async def _refund_reported(self, refund: ProviderRefund) -> EventOutcome:
+        """A refund changed. Nothing of it is stored; a refund of an account erasure belongs to
+        an account that is erased (or being erased): ``unknown_account``. When it failed after
+        the erasure was over, the amount is recorded for the operator to pay out by hand
+        (:meth:`ManualRefunds.record_lost`)."""
+        if not is_erasure_metadata(refund.metadata):
+            return EventOutcome.IGNORED
+        if is_initiated(refund):
+            return EventOutcome.UNKNOWN_ACCOUNT
+        running = False
+        account_id = _uuid(refund.metadata.get("account_id"))
+        if account_id is not None:
+            async with self.store.transaction() as tx:
+                running = bool(await tx.account_rows(account_id))
+        await self.manual_refunds.record_lost(refund, self.provider, erasure_running=running)
+        return EventOutcome.UNKNOWN_ACCOUNT
+
+    async def _charge_refunded(
+        self, event: ProviderEvent, charge: ProviderCharge
+    ) -> tuple[EventOutcome, UUID | None]:
+        """A payment was refunded (by an erasure or in the provider's dashboard). Nothing is
+        stored; the customer decides whose event it is, as for every event."""
+        async with self.store.transaction() as tx:
+            account_id = await self._customer_of(tx, event, charge.customer_id)
+        if account_id is None:
+            return EventOutcome.UNKNOWN_ACCOUNT, None
+        return EventOutcome.IGNORED, account_id
 
     async def _apply_subscription(
         self, data: ProviderSubscription, event: ProviderEvent, customer_id: str | None
@@ -554,3 +605,10 @@ class BillingService:
                 )
             )
         return EventOutcome.APPLIED, account_id
+
+
+def _uuid(value: str | None) -> UUID | None:
+    try:
+        return UUID(value) if value else None
+    except ValueError:
+        return None

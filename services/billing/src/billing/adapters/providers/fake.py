@@ -10,6 +10,7 @@ operator has a Stripe account. Checkout and portal URLs point back to the web ap
 
 import secrets
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -17,14 +18,18 @@ from mowdeck_contracts.v1 import SubscriptionStatus
 
 from billing.adapters.providers.stripe import verify_stripe_payload
 from billing.adapters.providers.stripe_events import event_from
-from billing.domain.errors import NotFoundError
+from billing.domain.errors import NotFoundError, ProviderError
 from billing.domain.models import (
     ENDED_STATUSES,
     BillingAccount,
+    PaidInvoice,
     PlanPrice,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
+    RefundStatus,
 )
+from billing.domain.refunds import covers, refunded_already
 
 
 def fake_customer_id(account_id: UUID) -> str:
@@ -38,7 +43,12 @@ class FakeProvider:
 
     ``failures`` makes a call fail like the real provider would: the exception stored under a
     method name is raised by that method until the entry is removed. ``calls`` lists every call
-    of the two erasure methods, failed ones included."""
+    of the three erasure methods that change something (``refund``, ``cancel_subscription``,
+    ``delete_customer``), failed ones included.
+
+    Refunds: ``paid_invoices`` holds the paid invoices per subscription id (newest first),
+    ``refunds`` the refunds per payment. A new refund gets ``refund_status``; an idempotency key
+    that was used before answers the refund made with it, like Stripe."""
 
     webhook_secret: str = "whsec_fake"  # noqa: S105 - a development value, not a secret
     amounts: dict[str, int] = field(default_factory=dict)
@@ -53,6 +63,10 @@ class FakeProvider:
     calls: list[tuple[str, str]] = field(default_factory=list)
     failures: dict[str, Exception] = field(default_factory=dict)
     fail_prices: bool = False
+    paid_invoices: dict[str, list[PaidInvoice]] = field(default_factory=dict)
+    refunds: dict[str, list[ProviderRefund]] = field(default_factory=dict)
+    refund_status: RefundStatus = RefundStatus.SUCCEEDED
+    idempotency_keys: dict[str, ProviderRefund] = field(default_factory=dict)
 
     async def create_customer(self, account: BillingAccount) -> str:
         customer_id = fake_customer_id(account.account_id)
@@ -115,6 +129,55 @@ class FakeProvider:
             account_id=found.account_id,
             current_period_end=found.current_period_end,
         )
+
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        failure = self.failures.get("paid_invoices_covering")
+        if failure is not None:
+            raise failure
+        return [i for i in self.paid_invoices.get(subscription_id, []) if covers(i, now)]
+
+    async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
+        failure = self.failures.get("refunds_of")
+        if failure is not None:
+            raise failure
+        return list(self.refunds.get(payment_ref, []))
+
+    async def refund(
+        self,
+        payment_ref: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> ProviderRefund:
+        self._attempt("refund", payment_ref)
+        if idempotency_key in self.idempotency_keys:
+            return self.idempotency_keys[idempotency_key]
+        paid = [
+            i
+            for invoices in self.paid_invoices.values()
+            for i in invoices
+            if i.payment_ref == payment_ref
+        ]
+        left = (paid[0].payment_amount if paid else 0) - refunded_already(
+            self.refunds.get(payment_ref, [])
+        )
+        if amount <= 0 or amount > left:
+            msg = f"refund of {amount} exceeds the {left} left of {payment_ref}"
+            raise ProviderError(msg)
+        made = ProviderRefund(
+            id=f"re_fake_{secrets.token_hex(6)}",
+            payment_ref=payment_ref,
+            amount=amount,
+            currency=currency,
+            status=self.refund_status,
+            metadata=dict(metadata),
+        )
+        self.refunds.setdefault(payment_ref, []).append(made)
+        self.idempotency_keys[idempotency_key] = made
+        return made
 
     async def cancel_subscription(self, subscription_id: str) -> None:
         self._attempt("cancel_subscription", subscription_id)

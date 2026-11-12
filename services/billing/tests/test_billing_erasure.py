@@ -32,7 +32,7 @@ from mowdeck_service_kit.db import account_tables
 from mowdeck_service_kit.erasure import ErasureIncomplete
 from test_billing_db import STORES, store_of
 
-from billing.adapters.db.tables import metadata, webhook_events
+from billing.adapters.db.tables import manual_refunds, metadata, webhook_events
 from billing.adapters.memory import MemoryTx
 from billing.adapters.providers.fake import FakeProvider, fake_customer_id
 from billing.adapters.providers.fixtures import (
@@ -133,8 +133,24 @@ def _changes(h: Harness) -> int:
 def test_every_table_of_billing_belongs_to_an_account() -> None:
     """The erasure counts the tables with an ``account_id`` column. A table without one would
     be invisible to it: this fails when one is added, so its rows get an owner or a decision.
-    No table is keyed by a provider id alone (a customer, subscription or session id)."""
-    assert {table.name for table in metadata.sorted_tables} - ACCOUNT_TABLES == set()
+    No table is keyed by a provider id alone (a customer, subscription or session id).
+
+    The one decision so far: ``manual_refunds`` (refunds the operator pays back by hand) has no
+    account on purpose. It must outlive the erasure until the money went back (Art. 17(3)(b)
+    GDPR) and names only the payment and the invoice at the provider, never the account, a
+    name or an e-mail address (its columns are pinned below)."""
+    assert {table.name for table in metadata.sorted_tables} - ACCOUNT_TABLES == {"manual_refunds"}
+    assert {column.name for column in manual_refunds.columns} == {
+        "id",
+        "key",
+        "payment_ref",
+        "invoice_ref",
+        "amount",
+        "currency",
+        "reason",
+        "created_at",
+        "settled_at",
+    }
     assert {
         "accounts",
         "customers",

@@ -16,9 +16,21 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
   existing customer ``customer_update`` saves name and address entered in Checkout.
 * Webhooks: the ``Stripe-Signature`` header is verified with the endpoint secret
   (``stripe.WebhookSignature``, 300 s tolerance) against the raw body before anything is parsed.
-* Account erasure (ADR 0082): ``DELETE /v1/subscriptions/{id}`` with ``invoice_now=false`` and
+* Account erasure (ADR 0082): first the refund of the unused part of the paid period. The
+  paid invoices of the subscription are ``GET /v1/invoices?subscription=&status=paid`` with
+  ``created[gte]`` one longest period back (:func:`billing.domain.refunds.earliest_invoice`,
+  366 days), every page; of those the ones that bill time containing now (all their lines from
+  ``GET /v1/invoices/{id}/lines`` when the invoice carries only the first page), each with its
+  payment ``GET /v1/invoice_payments?invoice=&status=paid`` and the refunds of that payment
+  ``GET /v1/refunds?payment_intent=`` (or ``charge=``). A refund is ``POST /v1/refunds`` on the
+  PaymentIntent (or charge) with ``amount``, ``reason=requested_by_customer``, the metadata
+  of the erasure and an ``Idempotency-Key`` header; Stripe refunds in the payment's currency to
+  the original payment method. A refusal of the request (any ``InvalidRequestError``) is
+  ``RefundImpossible``; a reused key with other parameters (``IdempotencyError``: the amount
+  shrank between two attempts) is ``ProviderUnavailable``, and the next attempt finds the
+  refund by its metadata. Then ``DELETE /v1/subscriptions/{id}`` with ``invoice_now=false`` and
   ``prorate=false`` ends a subscription at once, without a final invoice and without a credit
-  for the unused time; nothing is refunded. ``DELETE /v1/customers/{id}`` deletes the customer
+  for the unused time. ``DELETE /v1/customers/{id}`` deletes the customer
   object (and ends any subscription Billing never heard of). Stripe keeps the invoices and
   payments of a deleted customer for as long as it must; they are no longer reachable from
   MowDeck. Both calls are idempotent here: Stripe's ``resource_missing`` and a subscription
@@ -27,19 +39,33 @@ request against Stripe's OpenAPI document but keeps no state and sends no webhoo
 """
 
 import json
+from datetime import datetime
 from typing import Any
 
 import stripe
 
-from billing.adapters.providers.stripe_events import event_from, subscription_from
-from billing.domain.errors import InvalidSignature, ProviderError, ProviderUnavailable
+from billing.adapters.providers.stripe_events import (
+    event_from,
+    paid_invoice_from,
+    refund_from,
+    subscription_from,
+)
+from billing.domain.errors import (
+    InvalidSignature,
+    ProviderError,
+    ProviderUnavailable,
+    RefundImpossible,
+)
 from billing.domain.models import (
     ENDED_STATUSES,
     BillingAccount,
+    PaidInvoice,
     PlanPrice,
     ProviderEvent,
+    ProviderRefund,
     ProviderSubscription,
 )
+from billing.domain.refunds import covers, earliest_invoice
 
 WEBHOOK_TOLERANCE_SECONDS = 300
 """Accepted age of a webhook signature (Stripe's default)."""
@@ -52,6 +78,20 @@ CANCEL_NOW = {"invoice_now": False, "prorate": False}
 """How a subscription of an erased account ends: no final invoice for what is pending, no
 credit for the unused time (both are Stripe's defaults, stated so that a changed default
 cannot bill or credit somebody who is deleting their account)."""
+
+
+PERMANENT_REFUND_CODES = frozenset(
+    {
+        "charge_disputed",
+        "refund_disputed_payment",
+        "charge_already_refunded",
+    }
+)
+"""Stripe's documented error codes for a refund that asking again cannot make: the payment is
+disputed, or nothing of it is left to refund. Any other ``InvalidRequestError`` on a refund is
+treated as permanent too (Stripe answers a payment older than it allows to refund without a
+dedicated code); retrying the same request cannot change a 400, and the operator is warned with
+the amount either way."""
 
 
 def _missing(exc: stripe.StripeError) -> bool:
@@ -229,6 +269,114 @@ class StripeProvider:
             if _missing(exc):
                 return
             raise _failure("deleting the customer at Stripe failed", exc) from exc
+
+    async def paid_invoices_covering(
+        self, subscription_id: str, now: datetime
+    ) -> list[PaidInvoice]:
+        found: list[PaidInvoice] = []
+        params: dict[str, Any] = {
+            "subscription": subscription_id,
+            "status": "paid",
+            "created": {"gte": int(earliest_invoice(now).timestamp())},
+            "limit": 100,
+        }
+        try:
+            while True:
+                page = await self.client.v1.invoices.list_async(params)  # type: ignore[arg-type]
+                for invoice in page.data:
+                    obj = invoice.to_dict()
+                    lines = await self._lines(obj)
+                    if not covers(paid_invoice_from(obj, subscription_id, lines, None), now):
+                        continue  # a period that is over, or one-off items alone
+                    payment = await self._payment(str(obj["id"]))
+                    found.append(paid_invoice_from(obj, subscription_id, lines, payment))
+                if not page.has_more or not page.data:
+                    return found
+                params = {**params, "starting_after": page.data[-1].id}
+        except stripe.StripeError as exc:
+            raise _failure("reading the paid invoices at Stripe failed", exc) from exc
+
+    async def _lines(self, invoice: dict[str, Any]) -> list[dict[str, Any]]:
+        """Every line of an invoice (the invoice object carries the first page only)."""
+        lines = invoice.get("lines")
+        lines = lines if isinstance(lines, dict) else {}
+        data = lines.get("data")
+        first = [line for line in data if isinstance(line, dict)] if isinstance(data, list) else []
+        if not lines.get("has_more"):
+            return first
+        found: list[dict[str, Any]] = []
+        params: dict[str, Any] = {"limit": 100}
+        while True:
+            page = await self.client.v1.invoices.line_items.list_async(
+                str(invoice["id"]),
+                params,  # type: ignore[arg-type]
+            )
+            found.extend(line.to_dict() for line in page.data)
+            if not page.has_more or not page.data:
+                return found
+            params = {"limit": 100, "starting_after": page.data[-1].id}
+
+    async def _payment(self, invoice_id: str) -> dict[str, Any] | None:
+        """The payment that paid the invoice (None when it was paid without one)."""
+        page = await self.client.v1.invoice_payments.list_async(
+            {"invoice": invoice_id, "status": "paid", "limit": 10}
+        )
+        for payment in page.data:
+            obj = payment.to_dict()
+            inner = obj.get("payment")
+            if isinstance(inner, dict) and inner.get("type") in {"payment_intent", "charge"}:
+                return obj
+        return None
+
+    @staticmethod
+    def _payment_param(payment_ref: str) -> dict[str, str]:
+        key = "charge" if payment_ref.startswith(("ch_", "py_")) else "payment_intent"
+        return {key: payment_ref}
+
+    async def refunds_of(self, payment_ref: str) -> list[ProviderRefund]:
+        params: dict[str, Any] = {**self._payment_param(payment_ref), "limit": 100}
+        try:
+            page = await self.client.v1.refunds.list_async(params)  # type: ignore[arg-type]
+        except stripe.StripeError as exc:
+            raise _failure("reading the refunds at Stripe failed", exc) from exc
+        return [refund_from(refund.to_dict()) for refund in page.data]
+
+    def refund_params(
+        self, payment_ref: str, amount: int, metadata: dict[str, str]
+    ) -> dict[str, Any]:
+        """The parameters of ``POST /v1/refunds`` (separate for the tests). No ``currency``:
+        Stripe refunds in the payment's currency (the parameter is for customer balance
+        refunds only)."""
+        return {
+            **self._payment_param(payment_ref),
+            "amount": amount,
+            "reason": "requested_by_customer",
+            "metadata": dict(metadata),
+        }
+
+    async def refund(
+        self,
+        payment_ref: str,
+        amount: int,
+        currency: str,
+        idempotency_key: str,
+        metadata: dict[str, str],
+    ) -> ProviderRefund:
+        try:
+            made = await self.client.v1.refunds.create_async(
+                self.refund_params(payment_ref, amount, metadata),  # type: ignore[arg-type]
+                {"idempotency_key": idempotency_key},
+            )
+        except stripe.IdempotencyError as exc:
+            msg = "the refund's idempotency key was used with other parameters; asked again later"
+            raise ProviderUnavailable(msg) from exc
+        except stripe.StripeError as exc:
+            if isinstance(exc, stripe.InvalidRequestError):
+                msg = f"Stripe refuses the refund for good ({exc.code or exc.user_message or exc})"
+                raise RefundImpossible(msg) from exc
+            raise _failure("refunding the payment at Stripe failed", exc) from exc
+        del currency  # the payment's own: Stripe takes no currency for a payment's refund
+        return refund_from(made.to_dict())
 
     async def fetch_price(self, plan_key: str, price_id: str) -> PlanPrice:
         try:

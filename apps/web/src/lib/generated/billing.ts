@@ -61,6 +61,50 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/operator/manual-refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Manual Refunds
+         * @description Refunds of erased accounts that Billing could not make and the operator pays back by
+         *     hand (ADR 0082), oldest first: the payment and invoice at the provider, amount, currency
+         *     and why. Open ones only, with ``settled=true`` also those settled in the last 30 days. No
+         *     record names an account.
+         */
+        get: operations["manual_refunds_api_v1_billing_operator_manual_refunds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/operator/manual-refunds/{refund_id}/settle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Settle Manual Refund
+         * @description Mark a manual refund as paid back. Settling again keeps the first time; 404 for an
+         *     unknown id (or one deleted 30 days after it was settled).
+         */
+        post: operations["settle_manual_refund_api_v1_billing_operator_manual_refunds__refund_id__settle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/portal": {
         parameters: {
             query?: never;
@@ -249,6 +293,50 @@ export type components = {
             pdf_url: string | null;
             /** Status */
             status: string;
+        };
+        /**
+         * ManualRefundOut
+         * @description A refund of an erased account that the operator pays back by hand (ADR 0082). It names
+         *     the payment and the invoice at the provider, never the account.
+         */
+        ManualRefundOut: {
+            /**
+             * Amount
+             * @description Smallest currency unit (cents; whole yen for JPY).
+             */
+            amount: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Invoice Ref
+             * @description The provider's invoice.
+             */
+            invoice_ref: string | null;
+            /**
+             * Payment Ref
+             * @description The provider's payment (PaymentIntent or charge).
+             */
+            payment_ref: string;
+            /**
+             * Reason
+             * @description Why the refund could not be made at the provider.
+             */
+            reason: string;
+            /**
+             * Settled At
+             * @description When the operator marked it paid back.
+             */
+            settled_at: string | null;
         };
         /**
          * ModuleDescriptor
@@ -519,6 +607,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoiceOut"][];
+                };
+            };
+        };
+    };
+    manual_refunds_api_v1_billing_operator_manual_refunds_get: {
+        parameters: {
+            query?: {
+                settled?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRefundOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settle_manual_refund_api_v1_billing_operator_manual_refunds__refund_id__settle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManualRefundOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

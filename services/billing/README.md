@@ -36,8 +36,12 @@ All routes are mounted under `/api/v1` (OpenAPI at `/api/v1/openapi.json`). Trae
 | POST | `/api/v1/billing/portal` | `can_manage_billing` | `{url}` of the customer portal; 404 before the first checkout |
 | GET | `/api/v1/billing/invoices` | `can_manage_billing` | invoice references, newest first: number, status, amounts in cents, links to the hosted page and the PDF |
 | POST | `/api/v1/billing/webhooks/stripe` | `Stripe-Signature` only | provider events, raw body; 400 invalid signature, 200 handled or repeated, 500 handling failed (Stripe retries) |
-| GET | `/healthz`, `/readyz`, `/metrics` | none | Liveness, readiness (bus, database, OpenFGA), Prometheus metrics |
+| GET | `/api/v1/billing/operator/manual-refunds` | `can_manage_accounts` on `platform:main` | refunds of erased accounts to pay back by hand, oldest first: id, payment, invoice, amount (smallest unit), currency, reason, created, settled; open only, `?settled=true` adds the settled ones (ADR 0082) |
+| POST | `/api/v1/billing/operator/manual-refunds/{id}/settle` | `can_manage_accounts` on `platform:main` | mark one as paid back (settling again keeps the first time); 404 unknown id |
+| GET | `/healthz`, `/readyz`, `/metrics` | none | Liveness, readiness (bus, database, OpenFGA), Prometheus metrics (with `mowdeck_billing_manual_refunds_open`: open manual refunds, alert on `> 0`) |
 | GET | `/.well-known/mowdeck-module` | none | Module descriptor: no permissions, the event `billing.subscription.changed` |
+
+The operator routes use the gate of the web app's operator area: `can_manage_accounts` on `platform:main` (operator admins, `python -m identity.cli grant-platform-admin`); everybody else gets 403.
 
 `can_manage_billing` on the token's account: the owner, or a member granted `billing.manage` (declared by Identity). Admins get 403 (billing is owner only in the roles table), principals outside the account 404. Every account endpoint acts on the token's account, never on a path value.
 
@@ -45,7 +49,7 @@ Checkout: `mode=subscription` with the plan's price, `client_reference_id`, `met
 
 ## Webhooks
 
-Handled event types (configure exactly these on the Stripe webhook endpoint): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.paid`, `invoice.payment_failed`. Others are recorded as `ignored`.
+Handled event types (configure exactly these on the Stripe webhook endpoint): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.trial_will_end`, `invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `refund.updated`, `refund.failed`. The refund events store nothing: they are `unknown_account` for an erased account (and a warning when a refund of an erasure failed), `ignored` otherwise. Others are recorded as `ignored`.
 
 1. The `Stripe-Signature` header is verified against the raw body with `MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET` (300 s tolerance) before anything is parsed.
 2. The event id is recorded in `webhook_events` and claimed (one delivery at a time, a lease of 120 s). A processed event answers 200 with `duplicate: true` and changes nothing.
@@ -59,7 +63,7 @@ Outcomes in the ledger: `applied`, `ignored`, `stale`, `unknown_account`, `rejec
 
 Identity asks on `account.erase.billing` when a deleted account is purged, **before** it asks Entitlements ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), section 5). The use case is the kit's `AccountErasure` over `application/erasure.py`:
 
-1. **At the provider,** through `PaymentProvider` only: `cancel_subscription` for every subscription of the account that is still open (now, no final invoice, no proration, no refund), then `delete_customer`. Both are idempotent (already ended, already deleted, unknown to the provider: done). Stripe: `DELETE /v1/subscriptions/{id}` with `invoice_now=false&prorate=false`, `DELETE /v1/customers/{id}`. The invoices Stripe must keep stay at Stripe.
+1. **At the provider,** through `PaymentProvider` only, for every subscription of the account that is still open: the **refund** of the unused time paid on each of its paid invoices that bill time containing now: the period's invoice and an upgrade billed on its own (`paid_invoices_covering`, `refunds_of`, `refund`; the rule is `domain/refunds.py`), then `cancel_subscription` (now, no final invoice, no proration); after all subscriptions `delete_customer`. All are idempotent (a refund is found again by its metadata and made under an idempotency key; already ended, already deleted, unknown to the provider: done). Stripe: `POST /v1/refunds` on the invoice's PaymentIntent with `Idempotency-Key: mowdeck-erasure-refund-<account>-<subscription>-<invoice>` and the metadata `reason=account_erasure`, `DELETE /v1/subscriptions/{id}` with `invoice_now=false&prorate=false`, `DELETE /v1/customers/{id}`. The invoices, payments and refunds Stripe must keep stay at Stripe.
 2. **The rows,** afterwards and in one transaction (`Tx.purge_account`), the customer rows first:
 
    | Table | Of an erased account |
@@ -71,6 +75,8 @@ Identity asks on `account.erase.billing` when a deleted account is purged, **bef
    | `webhook_events` | rows with the account's id deleted. Rows without an account (unknown customers, ignored types) stay: an event id, a type, times and an outcome, no payload |
 
 3. What is left is counted over every table with an `account_id` column (`Tx.account_rows`); a row that remains fails the erasure.
+
+**The refund**, per invoice = (paid on it for time after now - refunded already) x unused part, at the moment of the purge, rounded down to the currency's smallest unit; what was paid is shared among the invoice's positive lines, and the recurring and proration lines whose period contains now count, each over its own period. Metered usage is not refunded (it bills consumption that has already happened), nor are one-off items; 0 for a trial, a 100 % coupon or a period that is over. `pending` counts as made (bank refunds stay pending for days). A refund that is `failed` or `canceled` fails the erasure before its subscription ends (`RefundFailed`); a refund Stripe refuses for good (`RefundImpossible`) or that failed 3 times (`MAX_FAILED_REFUNDS`) is skipped and recorded in `manual_refunds` (payment, invoice, amount, reason; no account) in the transaction that deletes the rows, with the warning `refund of an erased account skipped: recorded to pay it out by hand`. A refund of an erasure that fails after the erasure (`refund.failed` / `refund.updated`) is recorded too, once per payment and invoice. Operators list and settle the records over `/operator/manual-refunds` ([Billing operations](../../docs/ops/billing.md#paying-back-manual-refunds)); settled ones are deleted after 30 days by the service's sweep (every 5 minutes), which also sets the gauge `mowdeck_billing_manual_refunds_open`.
 
 **A provider error fails the erasure:** `ok=false`, no row deleted (the rows are what names the customer for the next attempt), and Identity asks again with its backoff. `ProviderUnavailable` (a rate limit, a timeout, a 5xx) can succeed later by itself, `ProviderError` needs the operator (a key without the permission, a customer at a provider that is no longer configured). Rows of the fake provider are deleted without a call (`LOCAL_PROVIDERS`). Billing keeps nothing of an account in memory.
 
@@ -114,15 +120,15 @@ Compose passes them as `BILLING_*` from `infra/compose/.env.example`; Helm as `c
 
 ## Data model
 
-`accounts` (account id, name, kind), `customers` (account, provider, provider customer id; unique per account and provider and per provider id), `subscriptions` (account, plan key, provider subscription id, status, period end, trial end, cancel at period end, plan status set, grace end, last event time), `invoices` (provider invoice id, amounts, currency, status, hosted and PDF links), `webhook_events` (provider and event id as primary key, received, attempts, claimed, processed, outcome, account). Every table has an `account_id` column; `webhook_events` stores no payload. Migrations: `0001` (empty), `0002` (the schema); a drift test compares them with the metadata.
+`accounts` (account id, name, kind), `customers` (account, provider, provider customer id; unique per account and provider and per provider id), `subscriptions` (account, plan key, provider subscription id, status, period end, trial end, cancel at period end, plan status set, grace end, last event time), `invoices` (provider invoice id, amounts, currency, status, hosted and PDF links), `webhook_events` (provider and event id as primary key, received, attempts, claimed, processed, outcome, account). Every table has an `account_id` column; `webhook_events` stores no payload. `manual_refunds` (id, unique key per payment and invoice, payment, invoice, amount, currency, reason, created, settled) is the one table without an `account_id`: it outlives the erasure until the repayment is made (Art. 17(3)(b) GDPR) and names nobody. Migrations: `0001` (empty), `0002` (the schema), `0003` (`manual_refunds`); a drift test compares them with the metadata.
 
 ## Layers
 
 | Package | Content | Rule |
 | --- | --- | --- |
-| `domain/` | models, the price file, the status rules, the erasure rule (`erasure.py`: which providers keep nothing outside) | pure Python, no I/O |
-| `application/` | `BillingService` (status, checkout, portal, summary, invoices, webhooks), `erasure.py` (`AccountPurge` and the kit's `AccountErasure`), ports (`PaymentProvider`, store, Entitlements gateway, plan catalogue, publisher) | depends on `domain` and ports only |
-| `adapters/api/` | FastAPI routers, schemas, the `can_manage_billing` gate | translate HTTP to use cases |
+| `domain/` | models, the price file, the status rules, the erasure rule (`erasure.py`: which providers keep nothing outside), the refund rule of an erasure (`refunds.py`: amount, retries, when to give up) | pure Python, no I/O |
+| `application/` | `BillingService` (status, checkout, portal, summary, invoices, webhooks), `erasure.py` (`AccountPurge` and the kit's `AccountErasure`), `manual_refunds.py` (record, list, settle, sweep of the refunds paid by hand), ports (`PaymentProvider`, store, Entitlements gateway, plan catalogue, publisher) | depends on `domain` and ports only |
+| `adapters/api/` | FastAPI routers, schemas, the `can_manage_billing` gate and the operator gate | translate HTTP to use cases |
 | `adapters/bus/` | `entitlements.plan.set` gateway, `identity.account.created`, `account.erase.billing` (`erasure.py`), the event publisher | translate messages |
 | `adapters/db/` | SQLAlchemy Core store, Alembic migrations; `adapters/memory.py` for tests | implement the store port |
 | `adapters/providers/` | `StripeProvider`, `FakeProvider`, the Stripe object mapping, signed fixtures | implement `PaymentProvider` |
@@ -148,4 +154,4 @@ Against Stripe test mode: [Billing operations](../../docs/ops/billing.md) (Strip
 
 ## Tests
 
-`uv run pytest services/billing` runs the domain, API, webhook, erasure and store tests with the memory store, the fake provider, the in-memory OpenFGA fake, an in-memory bus with a fake Entitlements and a manual clock. Integration tests run when their URL is set: PostgreSQL (`MOWDECK_TEST_DATABASE_URL`: migrations up and down, drift, the store contract, the webhook path and the erasure on PostgreSQL, including the row lock between an event and an erasure) and stripe-mock (`MOWDECK_TEST_STRIPE_MOCK_URL`, e.g. `docker run -d -p 12111:12111 stripe/stripe-mock:v0.206.0`: customer, Checkout, portal, subscription, the cancellation and the customer deletion of the erasure, price, and checkout through the API). stripe-mock validates the requests against Stripe's OpenAPI document but keeps no state and sends no webhooks, so the webhook path is covered by signed fixtures (`adapters/providers/fixtures.py`).
+`uv run pytest services/billing` runs the domain, API, webhook, erasure and store tests with the memory store, the fake provider, the in-memory OpenFGA fake, an in-memory bus with a fake Entitlements and a manual clock. Integration tests run when their URL is set: PostgreSQL (`MOWDECK_TEST_DATABASE_URL`: migrations up and down, drift, the store contract, the webhook path and the erasure on PostgreSQL, including the row lock between an event and an erasure) and stripe-mock (`MOWDECK_TEST_STRIPE_MOCK_URL`, e.g. `docker run -d -p 12111:12111 stripe/stripe-mock:v0.206.0`: customer, Checkout, portal, subscription, the cancellation and the customer deletion of the erasure, price, the invoice, payment and refund calls of the erasure refund, and checkout through the API). stripe-mock validates the requests against Stripe's OpenAPI document but keeps no state and sends no webhooks, so the webhook path is covered by signed fixtures (`adapters/providers/fixtures.py`).

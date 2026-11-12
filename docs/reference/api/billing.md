@@ -35,6 +35,36 @@ The newest invoices of the caller's account (links to the provider's pages).
 | --- | --- | --- |
 | 200 | Successful Response | `application/json` array of [InvoiceOut](#invoiceout) |
 
+#### GET /api/v1/billing/operator/manual-refunds
+
+**Manual Refunds**
+
+Refunds of erased accounts that Billing could not make and the operator pays back by hand (ADR 0082), oldest first: the payment and invoice at the provider, amount, currency and why. Open ones only, with `settled=true` also those settled in the last 30 days. No record names an account.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `settled` | query | boolean | no | default `false` |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` array of [ManualRefundOut](#manualrefundout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### POST /api/v1/billing/operator/manual-refunds/{refund_id}/settle
+
+**Settle Manual Refund**
+
+Mark a manual refund as paid back. Settling again keeps the first time; 404 for an unknown id (or one deleted 30 days after it was settled).
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `refund_id` | path | string (uuid) | yes |  |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [ManualRefundOut](#manualrefundout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
 #### POST /api/v1/billing/portal
 
 **Portal**
@@ -130,6 +160,21 @@ An invoice reference; the document itself stays at the provider.
 | `number` | string or null | yes |  |
 | `pdf_url` | string or null | yes |  |
 | `status` | string | yes |  |
+
+### ManualRefundOut
+
+A refund of an erased account that the operator pays back by hand (ADR 0082). It names the payment and the invoice at the provider, never the account.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes | Smallest currency unit (cents; whole yen for JPY). |
+| `created_at` | string (date-time) | yes |  |
+| `currency` | string | yes |  |
+| `id` | string (uuid) | yes |  |
+| `invoice_ref` | string or null | yes | The provider's invoice. |
+| `payment_ref` | string | yes | The provider's payment (PaymentIntent or charge). |
+| `reason` | string | yes | Why the refund could not be made at the provider. |
+| `settled_at` | string (date-time) or null | yes | When the operator marked it paid back. |
 
 ### PlanStatus
 
