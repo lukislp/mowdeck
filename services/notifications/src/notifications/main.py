@@ -61,6 +61,7 @@ from notifications.adapters.bus.fleet import seed_directory
 from notifications.adapters.bus.photo import BusPhotoSource
 from notifications.adapters.bus.publisher import BusPublisher
 from notifications.adapters.bus.subscriptions import subscribe_all
+from notifications.adapters.bus.user_erasure import subscribe_user_erasure
 from notifications.adapters.channels import ChannelContext, ChannelRegistry
 from notifications.adapters.channels.vapid import VapidKeys, load_keys, load_or_create
 from notifications.adapters.db.store import SqlStore
@@ -240,6 +241,10 @@ def build_app(
             )
             if services.erasure is not None:
                 subscriptions.append(await subscribe_erasure(active_bus, services.erasure))
+            if services.user_erasure is not None:
+                subscriptions.append(
+                    await subscribe_user_erasure(active_bus, services.user_erasure)
+                )
         if isinstance(plans, EntitlementsClient):
             plans.attach(active_bus)
             plan_events = await plans.subscribe()

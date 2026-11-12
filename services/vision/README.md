@@ -76,7 +76,8 @@ Proposal states: `analysing`, then `proposed` (waits for approval until `expires
 | requests | `gateway.mower.<id>.photo` | `PhotoRequest`, `PhotoReply` | a still image when the app sent none |
 | subscribes (every instance) | `telemetry.mower.*`, `device.mower.>` (newest per subject), `command.mower.*`, `command.result.mower.*` | | the view: states (without acknowledgements, ADR 0078: the next state replaces a lost one), maps, capabilities, the route of the running job (`path`), recent commands and the areas of the newest `start_mow`, emergency stops, command results |
 | answers (queue `vision-erasure`, internal, Identity only) | `account.erase.vision` | `AccountEraseRequest` / `AccountEraseReply` | deletes everything of a deleted account, see [Account erasure](#account-erasure) |
-| subscribes (durable `vision-identity`) | `event.identity.>` | `UserChanged` | disabled or deleted users lose their provider settings and preferences |
+| subscribes (durable `vision-identity`) | `event.identity.>` | `UserChanged` | disabled users lose their provider settings and preferences |
+| subscribes (durable queue `vision-users`) | `event.identity.user.deleted` | `UserChanged` | forgets a deleted user, see [A deleted user](#a-deleted-user) |
 | subscribes (durable queue `vision-auto`) | `telemetry.mower.*` | `MowerState` | automatic analysis on errors (not subscribed with `VISION_AUTO_ENABLED=false`) |
 
 Drive links without reverse ([ADR 0049](../../docs/adr/0049-manual-driving-over-the-mammotion-cloud.md)): the context's `motion.reverse` is the mower's `capabilities.drive_reverse` (false while a Mammotion mower is driven over the cloud), and the prompt tells the model to plan no negative `linear` then. A plan with a backwards step is not offered without reverse (`rules.reverse_problem`, "step N drives backwards, but the mower's drive link cannot reverse"; the dock fallback may be offered instead), and the executor refuses an approved plan with a backwards step when the link lost reverse since the analysis (`aborted`, nothing driven, no drive session). A backwards step is never dropped or cut to zero. The fake provider plans forwards only without reverse.
@@ -170,6 +171,23 @@ A result that arrives after the delete is not stored: `provider_requests` rows t
 
 Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's handler; the use case is `application/erasure.py` (the kit's `AccountErasure` over the purge of the demo sandboxes, [ADR 0076](../../docs/adr/0076-demo-sandboxes.md), and the row count of the `Store` port); the stopping is `VisionService.stop_account`, the SQL is in `adapters/db/`.
 
+## A deleted user
+
+When a member deletes themselves or an admin deletes a sub-user ([ADR 0082](../../docs/adr/0082-account-deletion-inside-the-app.md), "delete me"), Identity publishes `identity.user.deleted`. The account goes on, and so do its proposals: who asked for an analysis, approved it and decided it is the account's record of what its mower did, like Fleet's commands.
+
+- **Deleted, in one transaction, in the account of the event:** the user's rows in every table with a `user_id` column, read from the schema (`mowdeck_service_kit.db.user_tables`): `user_providers` (their own model, base URL, the encrypted key and headers), `user_preferences` (stereo preference, the opt-in to automatic analyses and the consent to a cloud model) and `provider_requests` (the cost rows of the model calls they made). The cost rows also count towards the daily caps, so the account's cap for analyses with the installation's model no longer counts the deleted user's calls of that day.
+- **Scrubbed, in the same transaction:** the person's name in `proposals.requested_by`, `approved_by` and `decided_by` (`PrincipalRef`s, read from the schema with `principal_ref_columns`). The `display_name` goes; the reference keeps its subject id and kind, as do `requested_by_subject` and `approved_by_subject`. The proposals, their pictures and drive steps stay with the account.
+- **Nothing in memory:** analyses, executions and the automatic analysis are kept per proposal and mower, not per user.
+- **Checked:** afterwards the user's rows and the references that still carry the name are counted over the same tables and columns (`Store.user_leftovers`); something left fails the event, so JetStream delivers it again. The use case is idempotent; a user the service never knew changes nothing.
+- **A still valid token** of the user is refused by the kit's token verification (the deny list, ADR 0082, section 12), so no request of the user starts an analysis afterwards.
+- **A disabled user** (`identity.user.disabled`, consumer `vision-identity`) loses only their own model and preferences (`Store.delete_user`): the user may be enabled again, so the cost rows and the name stay.
+
+Not closed by this: an analysis the user started that is still running in another replica records its cost row after the erasure (the event is acknowledged by then), as a late message does for an erased account (ADR 0082, section 12, open point 1).
+
+`tests/test_vision_user_erasure.py` pins the tables and the columns, so a change of the schema needs a decision here.
+
+Layers: `adapters/bus/user_erasure.py` subscribes (durable `vision-users`) and hands the event to the kit's handler; the use case is `application/user_erasure.py` (the kit's `UserErasure` over `Store.forget_user` and `Store.user_leftovers`); the SQL is in `adapters/db/`.
+
 ## Data model
 
 `proposals` (one row per round, with `light_used`, `stereo`, `frames`, `trigger` and `trigger_error_code`, `action` (`drive` or `return_to_dock`) and `fallback` from migration 0006, `low_confidence`, `alternative_action`, `model_refused` and `approved_option` from migration 0007; a partial unique index allows one open proposal per mower), `proposal_steps` (per step: timestamps, frames, outcome), `proposal_images` (deleted after `delete_after`), `provider_requests` (cost accounting, daily caps), `user_providers` (model, base URL, AES-GCM ciphertexts of the key and the extra headers, last test), `user_preferences` (per user and account: `stereo_frames` from migration 0004, `auto_analysis` and the principal kind it acts as from migration 0005; deleted with the user), `auto_watch` (the current recoverable error per mower). Migrations: `python -m vision.adapters.db.migrate` (Compose `vision-migrate`, Helm a Job).
@@ -179,8 +197,8 @@ Layers: `adapters/bus/erasure.py` subscribes and hands the request to the kit's 
 | Layer | Contents |
 | --- | --- |
 | `domain` | models and the answer schema, families and base URL policy, scene context (mower frame), rules (evaluation, start and abort rules, geofence, verification) |
-| `application` | `erasure.py` (the account erasure), `assist.py` (requests, decisions, rounds, sweeps), `executor.py` (drive session, frames, safety watch, verification, return to dock), `providers.py` (settings, resolution, test), `ports.py` |
-| `adapters` | `api` (routes, schemas, problem mapping), `bus` (view, Fleet, photos, publisher, subscriptions, the account erasure request), `db` (tables, store, migrations), `providers` (LiteLLM, fake, prompt and schema), `crypto.py`, `memory.py` |
+| `application` | `erasure.py` (the account erasure), `user_erasure.py` (a deleted user), `assist.py` (requests, decisions, rounds, sweeps), `executor.py` (drive session, frames, safety watch, verification, return to dock), `providers.py` (settings, resolution, test), `ports.py` |
+| `adapters` | `api` (routes, schemas, problem mapping), `bus` (view, Fleet, photos, publisher, subscriptions, the account erasure request, the user erasure), `db` (tables, store, migrations), `providers` (LiteLLM, fake, prompt and schema), `crypto.py`, `memory.py` |
 
 Startup imports LiteLLM first, on the main thread, before the service subscribes to anything or serves a request (2 to 7 s, logged as `litellm loaded` with the seconds). A warm-up thread used to import it while the startup went on and sometimes tripped Python's module-lock deadlock detection (`loading litellm failed`), so the first analysis paid the import. A failed import is a single warning; the first analysis tries again.
 

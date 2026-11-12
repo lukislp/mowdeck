@@ -432,9 +432,19 @@ class Store(ActivityStore, Protocol):
         """Delete finished deliveries last updated before ``before``."""
         ...
 
-    async def drop_user(self, user_id: UUID, account_id: UUID | None) -> None:
-        """Delete everything of a user (in one account, or in all when ``account_id`` is None),
-        silences included."""
+    async def forget_user(self, user_id: UUID, account_id: UUID | None) -> int:
+        """Delete a user's own rows (in one account, or in all when ``account_id`` is None):
+        every table with a ``user_id`` column, read from the schema (preferences, test throttle,
+        push subscriptions, APNs devices, ntfy target, inbox, deliveries, silences, Live Activity
+        registrations), and the camera photos that only those inbox items referenced (a photo
+        is reached through an inbox item and nothing else, ADR 0056). A photo another user's
+        item still shows stays. One transaction; idempotent; returns how many rows went."""
+        ...
+
+    async def user_rows(self, user_id: UUID) -> dict[str, int]:
+        """The rows of a user still stored, by table, over every table with a ``user_id``
+        column; tables without one are left out, so a user the service holds nothing of
+        answers ``{}`` (ADR 0082)."""
         ...
 
     async def purge_account(self, account_id: UUID) -> AccountPurge:

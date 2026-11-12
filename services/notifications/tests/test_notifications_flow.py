@@ -239,7 +239,9 @@ async def test_notifications_flow_foreign_or_malformed_messages_are_dropped() ->
                 type=IDENTITY_USER_DELETED, producer="identity", payload={"x": 1}
             ),
         )
-        assert len(h.bus.dropped) == 9
+        # The two malformed deletions: "nope" by both identity consumers, the invalid payload
+        # by the user erasure's (the other consumer ignores the type now).
+        assert len(h.bus.dropped) == 10
         assert await h.inbox(owner) == []
 
 
