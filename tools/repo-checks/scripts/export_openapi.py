@@ -176,7 +176,9 @@ def _billing() -> FastAPI:
     from billing.settings import Settings
 
     return build_app(
-        Settings.model_validate({**_COMMON, "billing_provider": "fake"}),
+        Settings.model_validate(
+            {**_COMMON, "billing_provider": "fake", "billing_ledger_key": "x" * 32}
+        ),
         bus=InMemoryBus(),
         store=MemoryStore(),
         provider=FakeProvider(),

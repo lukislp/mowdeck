@@ -22,6 +22,9 @@ dependencies = [
   "alembic>=1.16.0",
   "httpx>=0.28.1",
   "pyyaml>=6.0.2",
+  # IANA time zones for the month buckets of the payments dashboard (the slim image has no
+  # system zoneinfo).
+  "tzdata>=2025.2",
   # Stripe adapter (StripeClient with base_addresses for stripe-mock, async calls over httpx).
   "stripe>=16.0.0,<17",
 ]

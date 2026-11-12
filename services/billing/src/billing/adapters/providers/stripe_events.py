@@ -10,7 +10,9 @@ Field paths follow the Stripe API version pinned by the SDK (``2026-09-30.endive
 ``parent.subscription_details.subscription``. The older top-level fields are read as a fallback.
 An invoice line says what it bills under ``parent``: ``subscription_item_details`` (a price of
 the subscription, or a proration of it) or ``invoice_item_details`` (a one-off item, or a
-proration); an invoice names its payments in ``invoice_payments``, not on the invoice.
+proration); an invoice names its payments in ``invoice_payments``, not on the invoice. Its tax
+is the sum of ``total_taxes``, the price of a line ``pricing.price_details.price``. A dispute
+(``charge.dispute.*``) carries the charge it disputes and no customer.
 """
 
 from datetime import UTC, datetime
@@ -26,6 +28,7 @@ from billing.domain.models import (
     PaidInvoice,
     ProviderCharge,
     ProviderCheckout,
+    ProviderDispute,
     ProviderEvent,
     ProviderInvoice,
     ProviderRefund,
@@ -93,7 +96,42 @@ def subscription_from(obj: dict[str, Any]) -> ProviderSubscription:
         ended_at=_ts(obj.get("ended_at")),
         trial_end=_ts(obj.get("trial_end")),
         cancel_at_period_end=bool(obj.get("cancel_at_period_end")),
+        started_at=_ts(obj.get("start_date")) or _ts(obj.get("created")),
+        canceled_at=_ts(obj.get("canceled_at")),
     )
+
+
+def _tax(obj: dict[str, Any]) -> int | None:
+    """The tax of an invoice: the sum of ``total_taxes`` (since ``2025-03-31.basil``), else the
+    older ``tax``; None when the invoice reports neither (no Stripe Tax)."""
+    taxes = obj.get("total_taxes")
+    if isinstance(taxes, list):
+        return sum(_int(t.get("amount")) for t in taxes if isinstance(t, dict))
+    tax = obj.get("tax")
+    return tax if isinstance(tax, int) and not isinstance(tax, bool) else None
+
+
+def _line_price(line: dict[str, Any]) -> str | None:
+    """The price of an invoice line: ``pricing.price_details.price`` in the pinned API version,
+    ``price`` in older ones."""
+    pricing = line.get("pricing") if isinstance(line.get("pricing"), dict) else {}
+    details = pricing.get("price_details") if isinstance(pricing, dict) else None
+    if isinstance(details, dict) and _id(details.get("price")):
+        return _id(details.get("price"))
+    return _id(line.get("price"))
+
+
+def _subscription_lines(obj: dict[str, Any]) -> list[tuple[InvoiceLine, str | None]]:
+    lines = obj.get("lines")
+    data = lines.get("data") if isinstance(lines, dict) else None
+    found: list[tuple[InvoiceLine, str | None]] = []
+    for raw in data if isinstance(data, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        line = line_from(raw)
+        if line is not None and line.kind is LineKind.RECURRING:
+            found.append((line, _line_price(raw)))
+    return found
 
 
 def invoice_from(obj: dict[str, Any]) -> ProviderInvoice:
@@ -101,6 +139,9 @@ def invoice_from(obj: dict[str, Any]) -> ProviderInvoice:
     parent = obj.get("parent") if isinstance(obj.get("parent"), dict) else {}
     details = parent.get("subscription_details") if isinstance(parent, dict) else None
     subscription = _id(details.get("subscription")) if isinstance(details, dict) else None
+    transitions = obj.get("status_transitions")
+    paid_at = _ts(transitions.get("paid_at")) if isinstance(transitions, dict) else None
+    recurring = _subscription_lines(obj)
     return ProviderInvoice(
         id=str(obj["id"]),
         customer_id=_id(obj.get("customer")),
@@ -113,6 +154,12 @@ def invoice_from(obj: dict[str, Any]) -> ProviderInvoice:
         number=obj.get("number") or None,
         hosted_url=obj.get("hosted_invoice_url") or None,
         pdf_url=obj.get("invoice_pdf") or None,
+        tax=_tax(obj),
+        paid_at=paid_at,
+        attempt_count=_int(obj.get("attempt_count")),
+        period_start=min((line.period_start for line, _ in recurring), default=None),
+        period_end=max((line.period_end for line, _ in recurring), default=None),
+        price_ids=tuple(price for _, price in recurring if price),
     )
 
 
@@ -184,6 +231,22 @@ def refund_from(obj: dict[str, Any]) -> ProviderRefund:
         status=status,
         metadata=metadata,
         failure_reason=obj.get("failure_reason") or None,
+        created=_ts(obj.get("created")),
+    )
+
+
+def dispute_from(obj: dict[str, Any]) -> ProviderDispute:
+    """A Stripe ``dispute``: it names the charge, not the customer."""
+    evidence = obj.get("evidence_details")
+    due_by = _ts(evidence.get("due_by")) if isinstance(evidence, dict) else None
+    return ProviderDispute(
+        id=str(obj["id"]),
+        amount=_int(obj.get("amount")),
+        currency=str(obj.get("currency") or ""),
+        status=str(obj.get("status") or "unknown"),
+        reason=obj.get("reason") or None,
+        created=_ts(obj.get("created")) or datetime.now(UTC),
+        due_by=due_by,
     )
 
 
@@ -254,5 +317,6 @@ def event_from(payload: dict[str, Any]) -> ProviderEvent:
         checkout=checkout_from(obj) if kind == "checkout.session" else None,
         refund=refund_from(obj) if kind == "refund" else None,
         charge=charge_from(obj) if kind == "charge" else None,
+        dispute=dispute_from(obj) if kind == "dispute" else None,
         livemode=bool(payload.get("livemode")),
     )

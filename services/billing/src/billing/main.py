@@ -11,7 +11,8 @@ Billing runs only where billing is enabled (Compose profile ``billing``); there 
 inside. Startup: read the price file, subscribe ``identity.account.created``, answer
 ``account.erase.billing`` (ADR 0082) and start the sweep of the manual refunds (every
 ``SWEEP_SECONDS``: settled records past their retention are deleted, the gauge
-``mowdeck_billing_manual_refunds_open`` is refreshed). Readiness: the bus (kit), the database
+``mowdeck_billing_manual_refunds_open`` is refreshed, and the payments ledger's keyed hashes
+past their horizon are cleared, ADR 0083). Readiness: the bus (kit), the database
 and OpenFGA.
 
 The container refuses to start where Identity was not told that Billing runs
@@ -23,6 +24,7 @@ import asyncio
 import contextlib
 from collections.abc import Mapping
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from mowdeck_auth import principal_resolver_from_env
@@ -48,6 +50,7 @@ from billing.adapters.providers.fake import FakeProvider
 from billing.adapters.providers.stripe import StripeProvider
 from billing.application.billing import BillingConfig, BillingService
 from billing.application.erasure import account_erasure
+from billing.application.ledger import PaymentLedger
 from billing.application.manual_refunds import SWEEP_SECONDS, ManualRefunds
 from billing.application.ports import (
     Clock,
@@ -78,6 +81,26 @@ def load_prices(settings: Settings) -> PriceTable:
     table = table.with_overrides(settings.billing_price_ids)
     _log.info("prices loaded", currency=table.currency, plans=sorted(table.sold))
     return table
+
+
+LEDGER_KEY_MIN_LENGTH = 32
+"""The shortest ledger key Billing accepts (``openssl rand -base64 32`` gives 44 characters)."""
+
+
+def ledger_key(settings: Settings) -> bytes:
+    """The key of the payments ledger's keyed hashes (ADR 0083). Required: without it Billing
+    refuses to start, like without the Stripe secret key."""
+    secret = settings.billing_ledger_key
+    key = secret.get_secret_value().strip() if secret else ""
+    if len(key) < LEDGER_KEY_MIN_LENGTH:
+        msg = (
+            "MOWDECK_BILLING_LEDGER_KEY (or _FILE) is required: at least "
+            f"{LEDGER_KEY_MIN_LENGTH} random characters, e.g. `openssl rand -base64 32` "
+            "(Compose: BILLING_LEDGER_KEY in infra/compose/.env; Helm: "
+            "secrets.BILLING_LEDGER_KEY). It keys the payments ledger (ADR 0083); keep it."
+        )
+        raise ValueError(msg)
+    return key.encode()
 
 
 def build_provider(settings: Settings) -> PaymentProvider:
@@ -115,6 +138,7 @@ def build_app(
     clock: Clock | None = None,
 ) -> FastAPI:
     """Build the app. Without overrides it uses PostgreSQL, OpenFGA, NATS and the provider."""
+    key = ledger_key(settings)  # refuses before anything is opened
     engine = None
     if store is None:
         if settings.database_url is None:
@@ -138,13 +162,20 @@ def build_app(
     catalog_ref: PlanCatalog = plan_catalog
     tasks: list[asyncio.Task[None]] = []
 
-    async def sweep_loop(manual: ManualRefunds, metrics: BillingMetrics) -> None:
-        """Delete settled manual refunds after their retention and report the open ones."""
+    async def sweep_loop(
+        manual: ManualRefunds, ledger: PaymentLedger, metrics: BillingMetrics
+    ) -> None:
+        """Delete settled manual refunds after their retention and report the open ones; clear
+        the keyed hashes of the payments ledger after theirs."""
         while True:
             try:
                 metrics.manual_refunds_open(await manual.sweep())
             except Exception:
                 _log.exception("sweeping the manual refunds failed")
+            try:
+                await ledger.forget_old_refs()
+            except Exception:
+                _log.exception("clearing the payment fact references failed")
             await asyncio.sleep(SWEEP_SECONDS)
 
     async def startup(app: FastAPI) -> None:
@@ -164,6 +195,8 @@ def build_app(
                 automatic_tax=settings.billing_automatic_tax,
                 app_url=settings.billing_app_url,
                 price_cache_seconds=settings.billing_price_cache_seconds,
+                ledger_key=key,
+                report_timezone=ZoneInfo(settings.billing_report_timezone),
             ),
             clock=clock or utc_now,
         )
@@ -182,7 +215,8 @@ def build_app(
         app.state.billing_metrics = metrics
         tasks.append(
             asyncio.create_task(
-                sweep_loop(service.manual_refunds, metrics), name="billing-manual-refunds"
+                sweep_loop(service.manual_refunds, service.ledger, metrics),
+                name="billing-manual-refunds",
             )
         )
         _log.info("billing started", provider=active_provider.name, plans=sorted(table.sold))

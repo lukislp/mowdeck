@@ -65,6 +65,31 @@ Mark a manual refund as paid back. Settling again keeps the first time; 404 for 
 | 200 | Successful Response | `application/json` [ManualRefundOut](#manualrefundout) |
 | 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
 
+#### GET /api/v1/billing/operator/payments
+
+**Payments**
+
+The payments dashboard: revenue per month and currency (gross, refunds, net), the subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by reason, failed payments, open and overdue invoices and disputes. Months are calendar months in the installation's report zone (`time_zone`: MOWDECK_BILLING_REPORT_TIMEZONE), amounts in the smallest currency unit and never added across currencies. Built from Billing's own data (the payments ledger written from webhooks since the deploy that added it, the subscription and invoice rows); Stripe is not asked. No answer names an account.
+
+| Parameter | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `months` | query | integer | no | min 1; max 36; default `12` |
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [PaymentsSummaryOut](#paymentssummaryout) |
+| 422 | Validation Error | `application/json` [HTTPValidationError](#httpvalidationerror) |
+
+#### GET /api/v1/billing/operator/prices
+
+**Prices**
+
+Every price of the price file as Stripe has it (the same cache as `GET /status`), also for plans Entitlements does not offer. Read only: prices are maintained in Stripe.
+
+| Status | Meaning | Body |
+| --- | --- | --- |
+| 200 | Successful Response | `application/json` [OperatorPricesOut](#operatorpricesout) |
+
 #### POST /api/v1/billing/portal
 
 **Portal**
@@ -140,11 +165,103 @@ Body of `POST /checkout`.
 | --- | --- | --- | --- |
 | `plan` | string | yes | pattern `^[a-z][a-z0-9_-]{0,63}$` |
 
+### CurrencyOut
+
+A currency the dashboard shows amounts in.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `code` | string | yes | ISO 4217, lower case. |
+| `exponent` | integer | yes | Decimals of the provider amount: 2 for EUR (990 is 9.90), 0 for JPY, 3 for KWD (Stripe's rules). |
+
+### CurrencyRevenueOut
+
+The revenue months of one currency (oldest first) and the window's totals.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currency` | string | yes |  |
+| `gross` | integer | yes |  |
+| `months` | array of [RevenueMonthOut](#revenuemonthout) | yes |  |
+| `net` | integer | yes |  |
+| `refunded` | integer | yes |  |
+
+### DisputeMonthOut
+
+Disputes opened in a month, per currency, and how many of them were lost.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes |  |
+| `currency` | string | yes |  |
+| `lost` | integer | yes |  |
+| `month` | string | yes |  |
+| `opened` | integer | yes |  |
+
+### DisputeOut
+
+One dispute (no charge, no customer).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes |  |
+| `closed_at` | string (date-time) or null | yes |  |
+| `currency` | string or null | yes |  |
+| `due_by` | string (date-time) or null | yes | End of the time to submit evidence. |
+| `opened_at` | string (date-time) | yes |  |
+| `reason` | string or null | yes | The card network's reason code. |
+| `status` | string or null | yes | Stripe's dispute status. |
+
+### FailedPaymentOut
+
+One failed attempt (no invoice, no customer).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes |  |
+| `at` | string (date-time) | yes |  |
+| `attempt` | integer or null | yes |  |
+| `currency` | string or null | yes |  |
+| `plan` | string or null | yes |  |
+
+### FailureMonthOut
+
+Failed payment attempts per month and currency.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes |  |
+| `count` | integer | yes |  |
+| `currency` | string | yes |  |
+| `month` | string | yes |  |
+
+### FlowMonthOut
+
+Subscriptions started and ended in a month.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `ended` | integer | yes |  |
+| `month` | string | yes |  |
+| `started` | integer | yes |  |
+
 ### HTTPValidationError
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `detail` | array of [ValidationError](#validationerror) | no |  |
+
+### InvoiceBacklogOut
+
+Open invoices of one currency; overdue ones are open after their due time.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currency` | string | yes |  |
+| `open_amount` | integer | yes |  |
+| `open_count` | integer | yes |  |
+| `overdue_amount` | integer | yes |  |
+| `overdue_count` | integer | yes |  |
 
 ### InvoiceOut
 
@@ -176,6 +293,81 @@ A refund of an erased account that the operator pays back by hand (ADR 0082). It
 | `reason` | string | yes | Why the refund could not be made at the provider. |
 | `settled_at` | string (date-time) or null | yes | When the operator marked it paid back. |
 
+### MrrOut
+
+Monthly recurring revenue of one currency (ADR 0083: list prices of active and past-due subscriptions normalised to a month, yearly divided by 12).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes | Smallest unit, rounded half up. |
+| `currency` | string | yes |  |
+| `subscriptions` | integer | yes |  |
+
+### OperatorPriceOut
+
+A configured price as Stripe has it (read only: prices are maintained in Stripe).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currency` | string or null | yes | Null when the price could not be read. |
+| `exponent` | integer or null | yes | Decimals of the amount (see CurrencyOut). |
+| `interval` | string or null | yes |  |
+| `interval_count` | integer or null | yes |  |
+| `monthly_amount` | integer or null | yes | Normalised to a month as in the MRR. |
+| `plan` | string | yes | The plan key in the price file. |
+| `price_id` | string | yes |  |
+| `unit_amount` | integer or null | yes |  |
+
+### OperatorPricesOut
+
+`GET /operator/prices`: every price of the price file, also of plans Entitlements does not offer (the plans page warns about those).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currency` | string | yes | The display currency of the price file. |
+| `prices` | array of [OperatorPriceOut](#operatorpriceout) | yes |  |
+
+### PaymentProblemsOut
+
+Failed payments, open and overdue invoices, past-due subscriptions and disputes.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `closed_disputes` | array of [DisputeOut](#disputeout) | yes |  |
+| `disputes` | array of [DisputeMonthOut](#disputemonthout) | yes |  |
+| `failures` | array of [FailureMonthOut](#failuremonthout) | yes |  |
+| `invoices` | array of [InvoiceBacklogOut](#invoicebacklogout) | yes |  |
+| `open_disputes` | array of [DisputeOut](#disputeout) | yes |  |
+| `past_due_subscriptions` | integer | yes |  |
+| `recent_failures` | array of [FailedPaymentOut](#failedpaymentout) | yes |  |
+
+### PaymentsSummaryOut
+
+`GET /operator/payments`: the operator's payments dashboard (ADR 0083). Aggregates of Billing's own data; no account, customer or provider object id.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `currencies` | array of [CurrencyOut](#currencyout) | yes |  |
+| `generated_at` | string (date-time) | yes |  |
+| `months` | array of string | yes | The window, oldest first (YYYY-MM). |
+| `problems` | [PaymentProblemsOut](#paymentproblemsout) | yes |  |
+| `refunds` | array of [RefundMonthOut](#refundmonthout) | yes |  |
+| `revenue` | array of [CurrencyRevenueOut](#currencyrevenueout) | yes |  |
+| `since` | string (date-time) or null | yes | The oldest fact of the ledger: the statistics start with the deploy that added it; null while there is none. |
+| `subscriptions` | [SubscriptionStatsOut](#subscriptionstatsout) | yes |  |
+| `time_zone` | string | yes | IANA time zone of the month buckets (MOWDECK_BILLING_REPORT_TIMEZONE), e.g. Europe/Berlin; the web app passes it to Identity's deletion statistics. |
+
+### PlanCountOut
+
+Subscriptions of one plan now (null plan: not known).
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `active` | integer | yes |  |
+| `past_due` | integer | yes |  |
+| `plan` | string or null | yes |  |
+| `trialing` | integer | yes |  |
+
 ### PlanStatus
 
 Status of an account's plan.
@@ -201,6 +393,32 @@ A provider page to send the browser to.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `url` | string | yes |  |
+
+### RefundMonthOut
+
+Refunds that take money back, per month, currency and reason.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `amount` | integer | yes |  |
+| `count` | integer | yes |  |
+| `currency` | string | yes |  |
+| `month` | string | yes |  |
+| `reason` | string | yes | erasure (an account erasure, ADR 0082) or other. |
+
+### RevenueMonthOut
+
+One month of one currency, amounts in the smallest unit.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `gross` | integer | yes | Paid invoices, tax included. |
+| `invoices` | integer | yes |  |
+| `month` | string | yes | YYYY-MM, a calendar month in the report zone. |
+| `net` | integer | yes | Gross minus refunded. |
+| `refunded` | integer | yes | Refunds created this month that take money back. |
+| `refunds` | integer | yes |  |
+| `tax` | integer | yes | Tax in the paid invoices (0 without Stripe Tax). |
 
 ### StatusPlanOut
 
@@ -228,6 +446,17 @@ A subscription as the provider last reported it.
 | `status` | [SubscriptionStatus](#subscriptionstatus) | yes |  |
 | `trial_end` | string (date-time) or null | yes |  |
 | `updated_at` | string (date-time) | yes |  |
+
+### SubscriptionStatsOut
+
+Subscriptions: live counts per plan, MRR and the monthly flow.
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `flow` | array of [FlowMonthOut](#flowmonthout) | yes |  |
+| `mrr` | array of [MrrOut](#mrrout) | yes |  |
+| `plans` | array of [PlanCountOut](#plancountout) | yes |  |
+| `unpriced` | integer | yes | Billed subscriptions whose plan has no known price. |
 
 ### SubscriptionStatus
 

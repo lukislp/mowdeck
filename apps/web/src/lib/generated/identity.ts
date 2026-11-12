@@ -1215,6 +1215,30 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity/platform/deletions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Platform Deletions
+         * @description Account deletions of the last ``months`` months (operator admins): scheduled, restored
+         *     and completed per local calendar month in the IANA zone ``tz`` (the web app passes the
+         *     ``time_zone`` of Billing's payments dashboard, so both count the same months; 422 for an
+         *     unknown zone), and how many are in the grace period or being erased now. No account id, no
+         *     name.
+         */
+        get: operations["platform_deletions_api_v1_identity_platform_deletions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity/register": {
         parameters: {
             query?: never;
@@ -1588,6 +1612,55 @@ export type components = {
             target_id: string | null;
             /** Target Type */
             target_type: string | null;
+        };
+        /**
+         * DeletionMonthOut
+         * @description Account deletions of one month of the asked zone.
+         */
+        DeletionMonthOut: {
+            /**
+             * Completed
+             * @description Erasures every service confirmed (ADR 0082).
+             */
+            completed: number;
+            /**
+             * Month
+             * @description YYYY-MM, a calendar month in ``time_zone``.
+             */
+            month: string;
+            /**
+             * Restored
+             * @description Requests the owner took back within the grace period.
+             */
+            restored: number;
+            /**
+             * Scheduled
+             * @description Deletions an owner requested.
+             */
+            scheduled: number;
+        };
+        /**
+         * DeletionStatsOut
+         * @description Account deletions per month for the payments dashboard (ADR 0083): counts only.
+         */
+        DeletionStatsOut: {
+            /**
+             * In Grace
+             * @description Requested now, still restorable by the owner.
+             */
+            in_grace: number;
+            /** Months */
+            months: components["schemas"]["DeletionMonthOut"][];
+            /**
+             * Purging
+             * @description Erasures waiting for a service to confirm.
+             */
+            purging: number;
+            /**
+             * Time Zone
+             * @description IANA zone of the month buckets (the ``tz`` asked for).
+             */
+            time_zone: string;
         };
         /**
          * EventDef
@@ -4945,6 +5018,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformAccountPageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    platform_deletions_api_v1_identity_platform_deletions_get: {
+        parameters: {
+            query?: {
+                months?: number;
+                tz?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionStatsOut"];
                 };
             };
             /** @description Validation Error */

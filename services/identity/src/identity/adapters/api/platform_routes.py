@@ -15,10 +15,11 @@ from fastapi import APIRouter, Depends, Query, Request
 from mowdeck_authz import PLATFORM_OBJECT, ObjectRef, Relation
 from mowdeck_authz.fastapi import require
 from mowdeck_contracts.v1 import Principal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from identity.adapters.api.deps import ServicesDep
 from identity.application.platform import PlatformAccount
+from identity.domain.deletion_stats import DEFAULT_ZONE
 
 router = APIRouter(prefix="/identity/platform", tags=["identity: platform"])
 
@@ -66,6 +67,50 @@ class PlatformAccountPageOut(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class DeletionMonthOut(BaseModel):
+    """Account deletions of one month of the asked zone."""
+
+    month: str = Field(description="YYYY-MM, a calendar month in ``time_zone``.")
+    scheduled: int = Field(description="Deletions an owner requested.")
+    restored: int = Field(description="Requests the owner took back within the grace period.")
+    completed: int = Field(description="Erasures every service confirmed (ADR 0082).")
+
+
+class DeletionStatsOut(BaseModel):
+    """Account deletions per month for the payments dashboard (ADR 0083): counts only."""
+
+    time_zone: str = Field(description="IANA zone of the month buckets (the ``tz`` asked for).")
+    months: list[DeletionMonthOut]
+    in_grace: int = Field(description="Requested now, still restorable by the owner.")
+    purging: int = Field(description="Erasures waiting for a service to confirm.")
+
+
+@router.get("/deletions")
+async def platform_deletions(
+    _: OperatorAdmin,
+    services: ServicesDep,
+    months: Annotated[int, Query(ge=1, le=36)] = 12,
+    tz: Annotated[str, Query(min_length=1, max_length=64)] = DEFAULT_ZONE,
+) -> DeletionStatsOut:
+    """Account deletions of the last ``months`` months (operator admins): scheduled, restored
+    and completed per local calendar month in the IANA zone ``tz`` (the web app passes the
+    ``time_zone`` of Billing's payments dashboard, so both count the same months; 422 for an
+    unknown zone), and how many are in the grace period or being erased now. No account id, no
+    name."""
+    stats = await services.platform.deletion_stats(months, tz)
+    return DeletionStatsOut(
+        months=[
+            DeletionMonthOut(
+                month=m.month, scheduled=m.scheduled, restored=m.restored, completed=m.completed
+            )
+            for m in stats.months
+        ],
+        time_zone=stats.time_zone,
+        in_grace=stats.in_grace,
+        purging=stats.purging,
+    )
 
 
 @router.get("/accounts")

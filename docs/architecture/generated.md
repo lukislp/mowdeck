@@ -469,7 +469,7 @@ flowchart LR
   end
   subgraph billing["billing"]
     direction TB
-    billing_billing["billing<br/>8 operations"]
+    billing_billing["billing<br/>10 operations"]
   end
   subgraph device_gateway["device-gateway"]
     direction TB
@@ -494,7 +494,7 @@ flowchart LR
     identity_identity__login_providers["identity: login providers<br/>5 operations"]
     identity_identity__passkeys["identity: passkeys<br/>11 operations"]
     identity_identity__personal_access_tokens["identity: personal access tokens<br/>3 operations"]
-    identity_identity__platform["identity: platform<br/>1 operation"]
+    identity_identity__platform["identity: platform<br/>2 operations"]
     identity_identity__security["identity: security<br/>6 operations"]
     identity_identity__sessions["identity: sessions<br/>24 operations"]
   end
@@ -530,7 +530,7 @@ flowchart LR
 |---|---|---|---|
 | `assistant` | `assistant` | 2 | 2 |
 | `assistant` | `operations` | 1 | 1 |
-| `billing` | `billing` | 8 | 8 |
+| `billing` | `billing` | 10 | 10 |
 | `billing` | `operations` | 1 | 1 |
 | `device-gateway` | `device-gateway` | 1 | 1 |
 | `device-gateway` | `operations` | 1 | 1 |
@@ -547,7 +547,7 @@ flowchart LR
 | `identity` | `identity: login providers` | 5 | 5 |
 | `identity` | `identity: passkeys` | 11 | 9 |
 | `identity` | `identity: personal access tokens` | 3 | 2 |
-| `identity` | `identity: platform` | 1 | 1 |
+| `identity` | `identity: platform` | 2 | 2 |
 | `identity` | `identity: security` | 6 | 6 |
 | `identity` | `identity: sessions` | 24 | 20 |
 | `identity` | `operations` | 1 | 1 |
@@ -586,7 +586,7 @@ flowchart LR
     vision["vision"]
   end
   subgraph pg[PostgreSQL]
-    db_billing[("billing<br/>3 migrations")]
+    db_billing[("billing<br/>4 migrations")]
     db_entitlements[("entitlements<br/>2 migrations")]
     db_fleet[("fleet<br/>14 migrations")]
     db_identity[("identity<br/>13 migrations")]

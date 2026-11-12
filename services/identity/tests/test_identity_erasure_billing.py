@@ -179,6 +179,7 @@ async def stack(
                 **COMMON,
                 "billing_provider": "fake",
                 "billing_stripe_webhook_secret": SECRET,
+                "billing_ledger_key": "ledger-key-for-tests-only-0123456789",
                 "billing_entitlements_url": "",
                 "billing_optional_services": optional_services,
             }

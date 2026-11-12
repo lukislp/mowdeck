@@ -129,6 +129,7 @@ nav:
       - adr/0080-codespaces-dev-container.md
       - adr/0081-explicit-consent-before-cloud-ai.md
       - adr/0082-account-deletion-inside-the-app.md
+      - adr/0083-payments-ledger-and-operator-dashboard.md
   - Development:
       - dev/getting-started.md
       - dev/service-template.md

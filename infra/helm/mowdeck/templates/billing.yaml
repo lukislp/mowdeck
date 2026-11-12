@@ -18,6 +18,7 @@ erase a deleted account (ADR 0082). */ -}}
   "MOWDECK_BILLING_AUTOMATIC_TAX" (toString $c.BILLING_AUTOMATIC_TAX)
   "MOWDECK_BILLING_PRICE_IDS" $c.BILLING_PRICE_IDS
   "MOWDECK_BILLING_GRACE_DAYS" (toString $c.BILLING_GRACE_DAYS)
+  "MOWDECK_BILLING_REPORT_TIMEZONE" $c.BILLING_REPORT_TIMEZONE
   "MOWDECK_BILLING_APP_URL" (default (include "mowdeck.publicOrigin" .) $c.BILLING_APP_URL)
   "MOWDECK_BILLING_ENTITLEMENTS_URL" (include "mowdeck.serviceUrl" (dict "ctx" . "component" "entitlements"))
   "MOWDECK_BILLING_OPTIONAL_SERVICES" "billing") }}
@@ -40,6 +41,7 @@ data:
     (dict "key" "database-url-billing" "file" "database-url" "env" "MOWDECK_DATABASE_URL_FILE")
     (dict "key" "openfga-api-token" "file" "openfga-api-token" "env" "MOWDECK_OPENFGA_API_TOKEN_FILE")
     (dict "key" "billing-stripe-secret-key" "file" "billing-stripe-secret-key" "env" "MOWDECK_BILLING_STRIPE_SECRET_KEY_FILE")
-    (dict "key" "billing-stripe-webhook-secret" "file" "billing-stripe-webhook-secret" "env" "MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET_FILE"))
+    (dict "key" "billing-stripe-webhook-secret" "file" "billing-stripe-webhook-secret" "env" "MOWDECK_BILLING_STRIPE_WEBHOOK_SECRET_FILE")
+    (dict "key" "billing-ledger-key" "file" "billing-ledger-key" "env" "MOWDECK_BILLING_LEDGER_KEY_FILE"))
   "volumes" (list (dict "name" "prices" "configMap" (dict "name" (printf "%s-billing-prices" (include "mowdeck.fullname" .)))))
   "volumeMounts" (list (dict "name" "prices" "mountPath" "/etc/mowdeck/billing" "readOnly" true))) }}

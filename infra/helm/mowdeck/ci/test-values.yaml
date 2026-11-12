@@ -10,6 +10,7 @@ secrets:
   NOTIFICATIONS_VAPID_PRIVATE_KEY: ci-placeholder-vapid-key
   BILLING_STRIPE_SECRET_KEY: sk_test_ci_placeholder
   BILLING_STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+  BILLING_LEDGER_KEY: ci-placeholder-billing-ledger-key-0123456789
   RELAY_FRAMES_TOKEN: ci-placeholder-relay-frames-token
   MATTER_API_TOKENS: ci-placeholder-matter-api-token
   NATS_PASSWORD_BILLING: ci-placeholder-nats-billing-password

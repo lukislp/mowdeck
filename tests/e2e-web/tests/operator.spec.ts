@@ -7,7 +7,8 @@
  * identity container, see `grantPlatformAdmin`) sees the operator module, a normal owner does not
  * and gets the "operators only" notice on /operator. The operator finds the owner's account in the
  * list, assigns the plan `fleet` with a reason and sees it in the history; the plans page lists
- * `home` and `fleet`. With the stack's default (billing disabled) the owner's account page shows
+ * `home` and `fleet`, and without Billing the console has no Payments tab. With the stack's
+ * default (billing disabled) the owner's account page shows
  * the plan `unlimited` with the "no subscription limits" note and no billing element, and the
  * sign-in page has no links to legal pages. Screenshots:
  * `operator-accounts-desktop`, `operator-plan-sheet-phone`, `account-plan-phone`.
@@ -155,6 +156,9 @@ test('operator console: module for operator admins only, plan assignment with hi
   // System: every probed service answers through the gateway.
   await page.getByTestId('operator-tab-system').click();
   await expect(page.getByTestId('system-billing')).toHaveAttribute('data-value', 'false');
+  // Billing is off, so the console has no Payments tab (ADR 0083).
+  await expect(page.getByTestId('operator-tab-system')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('operator-tab-payments')).toHaveCount(0);
   for (const service of ['identity', 'entitlements', 'fleet']) {
     await expect(page.getByTestId(`system-service-${service}`)).toHaveAttribute(
       'data-verdict',

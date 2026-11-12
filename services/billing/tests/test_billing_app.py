@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from billing_support import SECRET, harness, make_settings
+from billing_support import LEDGER_KEY, SECRET, harness, make_settings
 from mowdeck_auth.testing import TestKeys
 from mowdeck_authz.testing import InMemoryAuthorizer
 from mowdeck_contracts.v1 import (
@@ -26,6 +26,7 @@ from mowdeck_contracts.v1 import (
 from mowdeck_contracts.v1.subjects import event_subject_for_type
 from mowdeck_service_kit.bus import InMemoryBus, publish_event
 from mowdeck_service_kit.testing import lifespan_client
+from pydantic import ValidationError
 
 from billing import cli
 from billing.adapters.bus.entitlements import BusEntitlementsGateway
@@ -35,7 +36,14 @@ from billing.adapters.plans import HttpPlanCatalog, StaticPlanCatalog
 from billing.adapters.providers.fake import FakeProvider, fake_customer_id
 from billing.adapters.providers.stripe import StripeProvider, verify_stripe_payload
 from billing.domain.errors import InvalidInput, NotFoundError, ProviderError
-from billing.main import build_app, build_provider, default_principal_resolver, load_prices
+from billing.main import (
+    build_app,
+    build_provider,
+    default_principal_resolver,
+    ledger_key,
+    load_prices,
+)
+from billing.settings import Settings
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -104,6 +112,32 @@ def test_billing_repository_plans_have_price_entries() -> None:
 def test_billing_build_app_needs_a_database() -> None:
     with pytest.raises(ValueError, match="DATABASE_URL"):
         build_app(make_settings(), provider=FakeProvider(), authorizer=InMemoryAuthorizer())
+
+
+@pytest.mark.parametrize("key", [None, "", "   ", "too-short-for-a-ledger-key"])
+def test_billing_refuses_to_start_without_a_ledger_key(key: str | None) -> None:
+    settings = make_settings(billing_ledger_key=key)
+    with pytest.raises(ValueError, match=r"MOWDECK_BILLING_LEDGER_KEY \(or _FILE\) is required"):
+        ledger_key(settings)
+    with pytest.raises(ValueError, match="MOWDECK_BILLING_LEDGER_KEY"):
+        build_app(settings, store=MemoryStore(), provider=FakeProvider())
+
+
+def test_billing_ledger_key_from_a_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = tmp_path / "billing-ledger-key"
+    secret.write_text("k" * 44 + "\n", encoding="utf-8")
+    monkeypatch.setenv("MOWDECK_BILLING_LEDGER_KEY_FILE", str(secret))
+    monkeypatch.setenv("MOWDECK_ENVIRONMENT", "test")
+    assert ledger_key(Settings.from_env()) == b"k" * 44
+    assert ledger_key(make_settings()) == LEDGER_KEY.encode()
+
+
+def test_billing_report_timezone_is_validated() -> None:
+    assert make_settings().billing_report_timezone == "Europe/Berlin"
+    assert make_settings(billing_report_timezone="UTC").billing_report_timezone == "UTC"
+    for bad in ("Mars/Olympus_Mons", "Europe/../etc", ""):
+        with pytest.raises(ValidationError, match="REPORT_TIMEZONE"):
+            make_settings(billing_report_timezone=bad)
 
 
 def test_billing_build_app_with_database_url_and_http_catalog() -> None:

@@ -14,6 +14,7 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import PlanSetReply, PlanSetRequest, SubscriptionChanged
 
+from billing.domain.ledger import PaymentFact
 from billing.domain.models import (
     BillingAccount,
     CreditBalance,
@@ -31,6 +32,7 @@ from billing.domain.models import (
     Subscription,
     WebhookEvent,
 )
+from billing.domain.statistics import OpenInvoice, SubscriptionTally
 
 
 class Clock(Protocol):
@@ -282,6 +284,36 @@ class Tx(Protocol):
         """The rows the store still holds of the account, per table: counted over every table
         with an ``account_id`` column, not over the list :meth:`purge_account` deletes. Empty
         when it holds none."""
+        ...
+
+    # --- the payments ledger (ADR 0083): no account id anywhere ---------------------------
+
+    async def record_fact(self, fact: PaymentFact) -> bool:
+        """Insert the fact unless one of its kind with its ``ref`` exists; an existing one takes
+        the updatable fields of ``fact`` when ``fact`` is not older
+        (:func:`billing.domain.ledger.apply_update`). True when something was written."""
+        ...
+
+    async def payment_facts(self, since: datetime) -> list[PaymentFact]:
+        """The facts that occurred at or after ``since``, plus every dispute still open or
+        closed at or after ``since``."""
+        ...
+
+    async def first_fact_at(self) -> datetime | None:
+        """When the oldest fact was recorded (the statistics start there); None without any."""
+        ...
+
+    async def forget_fact_refs(self, before: datetime) -> int:
+        """Clear the keyed hash of the facts last changed before ``before``; how many."""
+        ...
+
+    async def subscription_tally(self) -> list[SubscriptionTally]:
+        """How many subscriptions there are per plan and status (no account ids)."""
+        ...
+
+    async def open_invoices(self) -> list[OpenInvoice]:
+        """Every invoice whose status is ``open``: currency, amount still due, due time (the
+        issue time: MowDeck's subscriptions charge automatically)."""
         ...
 
 

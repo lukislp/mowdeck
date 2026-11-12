@@ -24,6 +24,7 @@ from uuid import UUID
 
 from mowdeck_service_kit import get_logger
 
+from billing.application.ledger import PaymentLedger
 from billing.application.ports import Clock, PaymentProvider, Store
 from billing.domain.models import ManualRefund, ProviderRefund
 from billing.domain.refunds import erasure_refund_lost, lost_refund_record, settled_before
@@ -37,9 +38,10 @@ SWEEP_SECONDS = 300.0
 class ManualRefunds:
     """The record of refunds to pay by hand: written, listed, settled and swept."""
 
-    def __init__(self, store: Store, clock: Clock) -> None:
+    def __init__(self, store: Store, clock: Clock, ledger: PaymentLedger | None = None) -> None:
         self._store = store
         self._clock = clock
+        self._ledger = ledger
 
     async def listing(self, *, settled: bool = False) -> list[ManualRefund]:
         """The open records, oldest first; with ``settled`` the settled ones too."""
@@ -48,9 +50,12 @@ class ManualRefunds:
 
     async def settle(self, refund_id: UUID) -> ManualRefund | None:
         """Mark a record as paid back; None for an unknown id. Settling twice keeps the first
-        time."""
+        time. The payments ledger counts the money as refunded (ADR 0083), in the same
+        transaction and once."""
         async with self._store.transaction() as tx:
             settled = await tx.settle_manual_refund(refund_id, self._clock())
+            if settled is not None and self._ledger is not None:
+                await self._ledger.manual_refund(tx, settled)
         if settled is not None:
             _log.info(
                 "manual refund settled",

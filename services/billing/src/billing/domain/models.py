@@ -107,6 +107,9 @@ class EventOutcome(StrEnum):
     """Entitlements refused the plan (e.g. an unknown plan key); not retried."""
     FAILED = "failed"
     """Handling raised; the provider retries the delivery."""
+    RECORDED = "recorded"
+    """Only an anonymous fact of the payments ledger was written (a dispute): no row of an
+    account."""
 
 
 @dataclass(slots=True)
@@ -139,6 +142,9 @@ class ProviderSubscription:
     ended_at: datetime | None = None
     trial_end: datetime | None = None
     cancel_at_period_end: bool = False
+    started_at: datetime | None = None
+    """When the subscription began (Stripe's ``start_date``)."""
+    canceled_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +162,16 @@ class ProviderInvoice:
     number: str | None = None
     hosted_url: str | None = None
     pdf_url: str | None = None
+    tax: int | None = None
+    """The tax the provider calculated (Stripe Tax), None when it reports none."""
+    paid_at: datetime | None = None
+    attempt_count: int = 0
+    """How many times the provider tried to collect the payment."""
+    period_start: datetime | None = None
+    """The billing period of the subscription lines (None without such a line)."""
+    period_end: datetime | None = None
+    price_ids: tuple[str, ...] = ()
+    """The prices of the subscription lines, in line order."""
 
 
 class LineKind(StrEnum):
@@ -222,6 +238,7 @@ class ProviderRefund:
     status: RefundStatus
     metadata: dict[str, str] = field(default_factory=dict)
     failure_reason: str | None = None
+    created: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +306,24 @@ class ProviderCharge:
 
 
 @dataclass(frozen=True, slots=True)
+class ProviderDispute:
+    """A dispute (chargeback) of a payment as the provider describes it: it names the charge,
+    never the customer."""
+
+    id: str
+    amount: int
+    currency: str
+    status: str
+    """Stripe's names: ``warning_needs_response``, ``needs_response``, ``under_review``,
+    ``won``, ``lost``, ``warning_closed``, ``prevented`` and the like."""
+    reason: str | None
+    """The card network's reason code (``fraudulent``, ``product_not_received``, ...)."""
+    created: datetime
+    due_by: datetime | None = None
+    """The end of the time to submit evidence."""
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderCheckout:
     """A completed Checkout session."""
 
@@ -311,6 +346,7 @@ class ProviderEvent:
     checkout: ProviderCheckout | None = None
     refund: ProviderRefund | None = None
     charge: ProviderCharge | None = None
+    dispute: ProviderDispute | None = None
     livemode: bool = False
 
 

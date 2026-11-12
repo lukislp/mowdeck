@@ -501,6 +501,7 @@ dependencies = [
     { name = "mowdeck-service-kit", extra = ["db"] },
     { name = "pyyaml" },
     { name = "stripe" },
+    { name = "tzdata" },
 ]
 
 [package.metadata]
@@ -513,6 +514,7 @@ requires-dist = [
     { name = "mowdeck-service-kit", extras = ["db"], editable = "libs/mowdeck-service-kit" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "stripe", specifier = ">=16.0.0,<17" },
+    { name = "tzdata", specifier = ">=2025.2" },
 ]
 
 [[package]]
@@ -1404,6 +1406,7 @@ dependencies = [
     { name = "mowdeck-contracts" },
     { name = "mowdeck-service-kit", extra = ["certs", "db"] },
     { name = "pyjwt", extra = ["crypto"] },
+    { name = "tzdata" },
     { name = "webauthn" },
 ]
 
@@ -1418,6 +1421,7 @@ requires-dist = [
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-service-kit", extras = ["certs", "db"], editable = "libs/mowdeck-service-kit" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
+    { name = "tzdata", specifier = ">=2025.2" },
     { name = "webauthn", specifier = ">=3.0.1" },
 ]
 

@@ -105,6 +105,53 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/operator/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Payments
+         * @description The payments dashboard: revenue per month and currency (gross, refunds, net), the
+         *     subscriptions per plan and status with the MRR, new and ended subscriptions, refunds by
+         *     reason, failed payments, open and overdue invoices and disputes. Months are calendar months
+         *     in the installation's report zone (``time_zone``: MOWDECK_BILLING_REPORT_TIMEZONE), amounts
+         *     in the smallest currency unit and never added across currencies. Built from
+         *     Billing's own data (the payments ledger written from webhooks since the deploy that added
+         *     it, the subscription and invoice rows); Stripe is not asked. No answer names an account.
+         */
+        get: operations["payments_api_v1_billing_operator_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/operator/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prices
+         * @description Every price of the price file as Stripe has it (the same cache as ``GET /status``), also
+         *     for plans Entitlements does not offer. Read only: prices are maintained in Stripe.
+         */
+        get: operations["prices_api_v1_billing_operator_prices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/portal": {
         parameters: {
             query?: never;
@@ -231,6 +278,86 @@ export type components = {
             plan: string;
         };
         /**
+         * CurrencyOut
+         * @description A currency the dashboard shows amounts in.
+         */
+        CurrencyOut: {
+            /**
+             * Code
+             * @description ISO 4217, lower case.
+             */
+            code: string;
+            /**
+             * Exponent
+             * @description Decimals of the provider amount: 2 for EUR (990 is 9.90), 0 for JPY, 3 for KWD (Stripe's rules).
+             */
+            exponent: number;
+        };
+        /**
+         * CurrencyRevenueOut
+         * @description The revenue months of one currency (oldest first) and the window's totals.
+         */
+        CurrencyRevenueOut: {
+            /** Currency */
+            currency: string;
+            /** Gross */
+            gross: number;
+            /** Months */
+            months: components["schemas"]["RevenueMonthOut"][];
+            /** Net */
+            net: number;
+            /** Refunded */
+            refunded: number;
+        };
+        /**
+         * DisputeMonthOut
+         * @description Disputes opened in a month, per currency, and how many of them were lost.
+         */
+        DisputeMonthOut: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /** Lost */
+            lost: number;
+            /** Month */
+            month: string;
+            /** Opened */
+            opened: number;
+        };
+        /**
+         * DisputeOut
+         * @description One dispute (no charge, no customer).
+         */
+        DisputeOut: {
+            /** Amount */
+            amount: number;
+            /** Closed At */
+            closed_at: string | null;
+            /** Currency */
+            currency: string | null;
+            /**
+             * Due By
+             * @description End of the time to submit evidence.
+             */
+            due_by: string | null;
+            /**
+             * Opened At
+             * Format: date-time
+             */
+            opened_at: string;
+            /**
+             * Reason
+             * @description The card network's reason code.
+             */
+            reason: string | null;
+            /**
+             * Status
+             * @description Stripe's dispute status.
+             */
+            status: string | null;
+        };
+        /**
          * EventDef
          * @description An event type a module publishes.
          */
@@ -249,6 +376,39 @@ export type components = {
             version: number;
         };
         /**
+         * FailedPaymentOut
+         * @description One failed attempt (no invoice, no customer).
+         */
+        FailedPaymentOut: {
+            /** Amount */
+            amount: number;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Attempt */
+            attempt: number | null;
+            /** Currency */
+            currency: string | null;
+            /** Plan */
+            plan: string | null;
+        };
+        /**
+         * FailureMonthOut
+         * @description Failed payment attempts per month and currency.
+         */
+        FailureMonthOut: {
+            /** Amount */
+            amount: number;
+            /** Count */
+            count: number;
+            /** Currency */
+            currency: string;
+            /** Month */
+            month: string;
+        };
+        /**
          * FeatureDef
          * @description A plan feature a module offers, e.g. ``reports``.
          */
@@ -258,10 +418,38 @@ export type components = {
             /** Key */
             key: string;
         };
+        /**
+         * FlowMonthOut
+         * @description Subscriptions started and ended in a month.
+         */
+        FlowMonthOut: {
+            /** Ended */
+            ended: number;
+            /** Month */
+            month: string;
+            /** Started */
+            started: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * InvoiceBacklogOut
+         * @description Open invoices of one currency; overdue ones are open after their due time.
+         */
+        InvoiceBacklogOut: {
+            /** Currency */
+            currency: string;
+            /** Open Amount */
+            open_amount: number;
+            /** Open Count */
+            open_count: number;
+            /** Overdue Amount */
+            overdue_amount: number;
+            /** Overdue Count */
+            overdue_count: number;
         };
         /**
          * InvoiceOut
@@ -357,6 +545,125 @@ export type components = {
             version: string;
         };
         /**
+         * MrrOut
+         * @description Monthly recurring revenue of one currency (ADR 0083: list prices of active and past-due
+         *     subscriptions normalised to a month, yearly divided by 12).
+         */
+        MrrOut: {
+            /**
+             * Amount
+             * @description Smallest unit, rounded half up.
+             */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /** Subscriptions */
+            subscriptions: number;
+        };
+        /**
+         * OperatorPriceOut
+         * @description A configured price as Stripe has it (read only: prices are maintained in Stripe).
+         */
+        OperatorPriceOut: {
+            /**
+             * Currency
+             * @description Null when the price could not be read.
+             */
+            currency: string | null;
+            /**
+             * Exponent
+             * @description Decimals of the amount (see CurrencyOut).
+             */
+            exponent: number | null;
+            /** Interval */
+            interval: string | null;
+            /** Interval Count */
+            interval_count: number | null;
+            /**
+             * Monthly Amount
+             * @description Normalised to a month as in the MRR.
+             */
+            monthly_amount: number | null;
+            /**
+             * Plan
+             * @description The plan key in the price file.
+             */
+            plan: string;
+            /** Price Id */
+            price_id: string;
+            /** Unit Amount */
+            unit_amount: number | null;
+        };
+        /**
+         * OperatorPricesOut
+         * @description ``GET /operator/prices``: every price of the price file, also of plans Entitlements does
+         *     not offer (the plans page warns about those).
+         */
+        OperatorPricesOut: {
+            /**
+             * Currency
+             * @description The display currency of the price file.
+             */
+            currency: string;
+            /** Prices */
+            prices: components["schemas"]["OperatorPriceOut"][];
+        };
+        /**
+         * PaymentProblemsOut
+         * @description Failed payments, open and overdue invoices, past-due subscriptions and disputes.
+         */
+        PaymentProblemsOut: {
+            /** Closed Disputes */
+            closed_disputes: components["schemas"]["DisputeOut"][];
+            /** Disputes */
+            disputes: components["schemas"]["DisputeMonthOut"][];
+            /** Failures */
+            failures: components["schemas"]["FailureMonthOut"][];
+            /** Invoices */
+            invoices: components["schemas"]["InvoiceBacklogOut"][];
+            /** Open Disputes */
+            open_disputes: components["schemas"]["DisputeOut"][];
+            /** Past Due Subscriptions */
+            past_due_subscriptions: number;
+            /** Recent Failures */
+            recent_failures: components["schemas"]["FailedPaymentOut"][];
+        };
+        /**
+         * PaymentsSummaryOut
+         * @description ``GET /operator/payments``: the operator's payments dashboard (ADR 0083). Aggregates of
+         *     Billing's own data; no account, customer or provider object id.
+         */
+        PaymentsSummaryOut: {
+            /** Currencies */
+            currencies: components["schemas"]["CurrencyOut"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Months
+             * @description The window, oldest first (YYYY-MM).
+             */
+            months: string[];
+            problems: components["schemas"]["PaymentProblemsOut"];
+            /** Refunds */
+            refunds: components["schemas"]["RefundMonthOut"][];
+            /** Revenue */
+            revenue: components["schemas"]["CurrencyRevenueOut"][];
+            /**
+             * Since
+             * @description The oldest fact of the ledger: the statistics start with the deploy that added it; null while there is none.
+             */
+            since: string | null;
+            subscriptions: components["schemas"]["SubscriptionStatsOut"];
+            /**
+             * Time Zone
+             * @description IANA time zone of the month buckets (MOWDECK_BILLING_REPORT_TIMEZONE), e.g. Europe/Berlin; the web app passes it to Identity's deletion statistics.
+             */
+            time_zone: string;
+        };
+        /**
          * PermissionDef
          * @description A permission a module defines, e.g. ``mower.control``.
          *
@@ -375,6 +682,20 @@ export type components = {
             implied_by?: string[];
             /** Key */
             key: string;
+        };
+        /**
+         * PlanCountOut
+         * @description Subscriptions of one plan now (null plan: not known).
+         */
+        PlanCountOut: {
+            /** Active */
+            active: number;
+            /** Past Due */
+            past_due: number;
+            /** Plan */
+            plan: string | null;
+            /** Trialing */
+            trialing: number;
         };
         /**
          * PlanStatus
@@ -414,6 +735,60 @@ export type components = {
         RedirectOut: {
             /** Url */
             url: string;
+        };
+        /**
+         * RefundMonthOut
+         * @description Refunds that take money back, per month, currency and reason.
+         */
+        RefundMonthOut: {
+            /** Amount */
+            amount: number;
+            /** Count */
+            count: number;
+            /** Currency */
+            currency: string;
+            /** Month */
+            month: string;
+            /**
+             * Reason
+             * @description erasure (an account erasure, ADR 0082) or other.
+             */
+            reason: string;
+        };
+        /**
+         * RevenueMonthOut
+         * @description One month of one currency, amounts in the smallest unit.
+         */
+        RevenueMonthOut: {
+            /**
+             * Gross
+             * @description Paid invoices, tax included.
+             */
+            gross: number;
+            /** Invoices */
+            invoices: number;
+            /**
+             * Month
+             * @description YYYY-MM, a calendar month in the report zone.
+             */
+            month: string;
+            /**
+             * Net
+             * @description Gross minus refunded.
+             */
+            net: number;
+            /**
+             * Refunded
+             * @description Refunds created this month that take money back.
+             */
+            refunded: number;
+            /** Refunds */
+            refunds: number;
+            /**
+             * Tax
+             * @description Tax in the paid invoices (0 without Stripe Tax).
+             */
+            tax: number;
         };
         /**
          * StatusPlanOut
@@ -459,6 +834,23 @@ export type components = {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SubscriptionStatsOut
+         * @description Subscriptions: live counts per plan, MRR and the monthly flow.
+         */
+        SubscriptionStatsOut: {
+            /** Flow */
+            flow: components["schemas"]["FlowMonthOut"][];
+            /** Mrr */
+            mrr: components["schemas"]["MrrOut"][];
+            /** Plans */
+            plans: components["schemas"]["PlanCountOut"][];
+            /**
+             * Unpriced
+             * @description Billed subscriptions whose plan has no known price.
+             */
+            unpriced: number;
         };
         /**
          * SubscriptionStatus
@@ -669,6 +1061,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    payments_api_v1_billing_operator_payments_get: {
+        parameters: {
+            query?: {
+                months?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentsSummaryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prices_api_v1_billing_operator_prices_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorPricesOut"];
                 };
             };
         };

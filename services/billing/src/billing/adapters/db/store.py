@@ -15,6 +15,7 @@ it wrote, and an event that comes later finds no customer (ADR 0082).
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import fields
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -26,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from billing.adapters.db import tables
+from billing.domain.ledger import UPDATABLE, FactKind, PaymentFact, apply_update
 from billing.domain.models import (
     BillingAccount,
     Customer,
@@ -35,6 +37,7 @@ from billing.domain.models import (
     Subscription,
     WebhookEvent,
 )
+from billing.domain.statistics import OpenInvoice, SubscriptionTally
 
 
 def _subscription(row: Any) -> Subscription:
@@ -67,6 +70,18 @@ def _event(row: Any) -> WebhookEvent:
     values = dict(row._mapping)
     values["outcome"] = EventOutcome(values["outcome"]) if values["outcome"] else None
     return WebhookEvent(**values)
+
+
+def _fact(row: Any) -> PaymentFact:
+    values = dict(row._mapping)
+    values["kind"] = FactKind(values["kind"])
+    return PaymentFact(**values)
+
+
+def _fact_values(fact: PaymentFact) -> dict[str, Any]:
+    values = {item.name: getattr(fact, item.name) for item in fields(fact)}
+    values["kind"] = fact.kind.value
+    return values
 
 
 class SqlTx:
@@ -349,6 +364,84 @@ class SqlTx:
     async def account_rows(self, account_id: UUID) -> dict[str, int]:
         """Counted over every table of the schema that has an ``account_id`` column."""
         return await account_row_counts(self._conn, account_tables(tables.metadata), account_id)
+
+    async def record_fact(self, fact: PaymentFact) -> bool:
+        """Insert, or update the stored fact under its row lock (a concurrent delivery of
+        another event of the same object waits and then compares with what this one wrote)."""
+        p = tables.payment_facts
+        values = _fact_values(fact)
+        inserted = await self._conn.execute(
+            pg_insert(p).values(**values).on_conflict_do_nothing(index_elements=["kind", "ref"])
+        )
+        if inserted.rowcount or fact.ref is None:
+            return True
+        row = (
+            await self._conn.execute(
+                sa.select(p)
+                .where(p.c.kind == fact.kind.value, p.c.ref == fact.ref)
+                .with_for_update()
+            )
+        ).first()
+        if row is None:  # pragma: no cover - the conflict says it exists
+            return False
+        updated = apply_update(_fact(row), fact)
+        if updated is None:
+            return False
+        await self._conn.execute(
+            sa.update(p)
+            .where(p.c.id == updated.id)
+            .values(**{name: _fact_values(updated)[name] for name in UPDATABLE})
+        )
+        return True
+
+    async def payment_facts(self, since: datetime) -> list[PaymentFact]:
+        p = tables.payment_facts
+        disputes = sa.and_(
+            p.c.kind == FactKind.DISPUTE.value,
+            sa.or_(p.c.closed_at.is_(None), p.c.closed_at >= since),
+        )
+        rows = await self._conn.execute(
+            sa.select(p)
+            .where(sa.or_(p.c.occurred_at >= since, disputes))
+            .order_by(p.c.occurred_at, p.c.id)
+        )
+        return [_fact(row) for row in rows]
+
+    async def first_fact_at(self) -> datetime | None:
+        p = tables.payment_facts
+        found = (await self._conn.execute(sa.select(sa.func.min(p.c.recorded_at)))).scalar()
+        return found if isinstance(found, datetime) else None
+
+    async def forget_fact_refs(self, before: datetime) -> int:
+        p = tables.payment_facts
+        result = await self._conn.execute(
+            sa.update(p).where(p.c.ref.is_not(None), p.c.updated_at < before).values(ref=None)
+        )
+        return int(result.rowcount or 0)
+
+    async def subscription_tally(self) -> list[SubscriptionTally]:
+        s = tables.subscriptions
+        rows = await self._conn.execute(
+            sa.select(s.c.plan_key, s.c.status, sa.func.count())
+            .group_by(s.c.plan_key, s.c.status)
+            .order_by(s.c.plan_key, s.c.status)
+        )
+        return [
+            SubscriptionTally(plan, SubscriptionStatus(status), int(count))
+            for plan, status, count in rows
+        ]
+
+    async def open_invoices(self) -> list[OpenInvoice]:
+        i = tables.invoices
+        rows = await self._conn.execute(
+            sa.select(i.c.currency, i.c.amount_due, i.c.amount_paid, i.c.issued_at)
+            .where(i.c.status == "open")
+            .order_by(i.c.issued_at, i.c.id)
+        )
+        return [
+            OpenInvoice(currency, max(int(due) - int(paid), 0), issued)
+            for currency, due, paid, issued in rows
+        ]
 
 
 class SqlStore:
