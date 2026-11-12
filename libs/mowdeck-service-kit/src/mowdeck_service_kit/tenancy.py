@@ -16,7 +16,7 @@ on ``app.state.permission_checker`` when one is installed (``mowdeck_authz.fasta
 installs an OpenFGA backed one); without it the token level ``Principal.permissions`` are used.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Annotated, Protocol, runtime_checkable
 from uuid import UUID
 
@@ -26,6 +26,7 @@ from mowdeck_contracts.v1 import Principal
 
 from mowdeck_service_kit.bus import EventBus
 from mowdeck_service_kit.errors import Forbidden, Unauthorized
+from mowdeck_service_kit.health import ReadinessCheck
 
 _PRINCIPAL_STATE_KEY = "mowdeck_principal"
 
@@ -47,13 +48,23 @@ class PrincipalResolver(Protocol):
 class BusAware(Protocol):
     """A :class:`PrincipalResolver` that also listens on the event bus.
 
-    ``create_app`` calls :meth:`attach` once the bus is connected, before the start-up hooks.
-    The resolver of ``mowdeck-auth`` uses it to keep the short-lived deny list of deleted users
-    and erased accounts (ADR 0082), so no service has code for it.
+    ``create_app`` calls :meth:`attach` once the bus is connected, before the start-up hooks,
+    registers the resolver's :meth:`readiness_checks`, and calls :meth:`detach` on shutdown,
+    before the bus is closed. The resolver of ``mowdeck-auth`` uses it to keep the short-lived
+    deny list of deleted users and erased accounts (ADR 0082), so no service has code for it.
     """
 
     async def attach(self, bus: EventBus) -> None:
-        """Subscribe to what the resolver needs from ``bus``."""
+        """Subscribe to what the resolver needs from ``bus``. Whether a refused subscription
+        stops the start is the resolver's decision (the deny list fails open)."""
+        ...
+
+    async def detach(self) -> None:
+        """Stop listening (and stop any retry the resolver runs)."""
+        ...
+
+    def readiness_checks(self) -> Sequence[ReadinessCheck]:
+        """What the resolver reports in ``/readyz`` (typically not ``required``)."""
         ...
 
 

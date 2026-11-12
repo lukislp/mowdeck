@@ -5,9 +5,10 @@
 
 from collections.abc import Mapping
 
-from mowdeck_auth import AuthSettings, JwtVerifier, TokenError, subscribe_revocations
+from mowdeck_auth import AuthSettings, JwtVerifier, RevocationFeed, TokenError
 from mowdeck_service_kit import get_logger
-from mowdeck_service_kit.bus import EventBus, Subscription
+from mowdeck_service_kit.bus import EventBus
+from mowdeck_service_kit.health import ReadinessCheck
 
 from realtime.domain.errors import InvalidTokenError
 from realtime.domain.models import Authenticated
@@ -24,12 +25,22 @@ class JwtTokenVerifier:
 
     def __init__(self, verifier: JwtVerifier) -> None:
         self.verifier = verifier
+        self.revocation_feed = RevocationFeed(verifier.revocations)
 
-    async def attach(self, bus: EventBus) -> Subscription:
+    async def attach(self, bus: EventBus) -> None:
         """Keep the verifier's deny list of deleted users and erased accounts current from the
         bus (ADR 0082). The HTTP services get this from the kit; Realtime verifies the token of
-        a WebSocket itself, so it attaches itself."""
-        return await subscribe_revocations(bus, self.verifier.revocations)
+        a WebSocket itself, so it attaches itself. A refused subscription fails open (logged,
+        retried, ``token-deny-list`` degraded), it does not stop the service."""
+        await self.revocation_feed.start(bus)
+
+    async def detach(self) -> None:
+        """Stop feeding the deny list (shutdown)."""
+        await self.revocation_feed.stop()
+
+    def readiness_check(self) -> ReadinessCheck:
+        """``token-deny-list`` of the feed (degraded, never not ready)."""
+        return self.revocation_feed.readiness_check()
 
     async def verify(self, token: str) -> Authenticated:
         """The principal and expiry, or :class:`InvalidTokenError` (reason logged only)."""

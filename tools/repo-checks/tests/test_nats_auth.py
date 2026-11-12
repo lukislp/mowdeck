@@ -12,6 +12,7 @@
   a value.
 """
 
+import hashlib
 import importlib.util
 import os
 import re
@@ -53,6 +54,23 @@ def _password_names(repo_root: Path) -> set[str]:
 def test_the_committed_configuration_is_fresh(gen: ModuleType, repo_root: Path) -> None:
     assert gen.stale(repo_root) == [], "run `uv run poe nats-auth`"
     assert gen.main(["--check", "--root", str(repo_root)]) == 0
+
+
+def test_a_changed_file_restarts_the_charts_nats(gen: ModuleType, repo_root: Path) -> None:
+    """NATS reads its users and permissions only at its start: the chart's NATS pods carry the
+    file's checksum, so `helm upgrade` restarts them when the file changes (the Compose stack
+    reloads NATS in deploy.sh instead)."""
+    text = gen.render()
+    values = (repo_root / gen.CHART_VALUES).read_text("utf-8")
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    assert f'checksum/mowdeck-nats-auth: "{digest}"' in values
+    chart = yaml.safe_load(values)["nats"]["podTemplate"]["merge"]["metadata"]["annotations"]
+    assert chart == {"checksum/mowdeck-nats-auth": digest}
+
+    changed = gen.with_checksum(values, text + "# another user\n")
+    assert changed != values and digest not in changed
+    with pytest.raises(ValueError, match="found 0"):
+        gen.with_checksum("nats: {}\n", text)
 
 
 def test_the_map_is_valid(gen: ModuleType) -> None:

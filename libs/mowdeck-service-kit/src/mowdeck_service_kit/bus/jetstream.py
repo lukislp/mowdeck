@@ -156,6 +156,21 @@ class _BatchSubscriptionHandle:
         self.on_close(self)
 
 
+def _consumer_error(stream: StreamSpec, subject: str, exc: nats.errors.Error) -> BusError:
+    """The :class:`BusError` of a consumer the server did not create.
+
+    A request the server's permissions refuse is never answered: the client sees a timeout, and
+    the reason (``permissions violation for publish to "$JS.API.CONSUMER.CREATE..."``) arrives
+    separately, in the error callback's log line.
+    """
+    hint = (
+        " (no answer: a NATS permissions violation, logged as 'nats error', looks like this)"
+        if isinstance(exc, nats.errors.TimeoutError)
+        else ""
+    )
+    return BusError(f"consumer of {subject!r} on stream {stream.name} not created: {exc!r}{hint}")
+
+
 def _bus_message(msg: Msg) -> BusMessage:
     try:
         attempt = msg.metadata.num_delivered or 1
@@ -490,16 +505,19 @@ class JetStreamBus:
                 _log.warning("ack failed", subject=msg.subject, error=repr(exc))
 
         deliver_policy = DeliverPolicy.LAST_PER_SUBJECT if last_per_subject else DeliverPolicy.NEW
-        config = await self._consumer(
-            stream, subject, durable, queue, deliver_policy, acknowledge=acknowledge
-        )
-        name = config.name or durable
-        if name is None:  # pragma: no cover - the server always names a consumer
-            msg = "the server returned a consumer without a name"
-            raise BusError(msg)
-        subscription = await self._jetstream().subscribe_bind(
-            stream=stream.name, config=config, consumer=name, cb=callback, manual_ack=True
-        )
+        try:
+            config = await self._consumer(
+                stream, subject, durable, queue, deliver_policy, acknowledge=acknowledge
+            )
+            name = config.name or durable
+            if name is None:  # pragma: no cover - the server always names a consumer
+                msg = "the server returned a consumer without a name"
+                raise BusError(msg)
+            subscription = await self._jetstream().subscribe_bind(
+                stream=stream.name, config=config, consumer=name, cb=callback, manual_ack=True
+            )
+        except nats.errors.Error as exc:
+            raise _consumer_error(stream, subject, exc) from exc
         return _NatsSubscriptionHandle(subscription)
 
     async def _settle(self, msg: Msg, message: BusMessage, outcome: Outcome) -> None:
@@ -550,7 +568,10 @@ class JetStreamBus:
         async def callback(msg: Msg) -> None:
             worker.put(msg)
 
-        config = await self._consumer(stream, subject, durable, queue, DeliverPolicy.NEW)
+        try:
+            config = await self._consumer(stream, subject, durable, queue, DeliverPolicy.NEW)
+        except nats.errors.Error as exc:
+            raise _consumer_error(stream, subject, exc) from exc
         name = config.name or durable
         if name is None:  # pragma: no cover - the server always names a consumer
             msg = "the server returned a consumer without a name"

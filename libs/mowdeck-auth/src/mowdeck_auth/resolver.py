@@ -15,18 +15,21 @@ reason is logged, never returned.
 
 The resolver is :class:`~mowdeck_service_kit.tenancy.BusAware`: the kit attaches it to the event
 bus at start-up and it keeps the verifier's deny list of deleted users and erased accounts
-current (:mod:`mowdeck_auth.revocation`, ADR 0082). A service writes no code for that.
+current (:mod:`mowdeck_auth.revocation`, ADR 0082). A service writes no code for that. When the
+bus refuses the subscription the service still starts (the list fails open); the readiness
+check ``token-deny-list`` reports it as degraded until a retry succeeds.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from fastapi import FastAPI, Request
 from mowdeck_contracts.v1 import Principal
 from mowdeck_service_kit.bus import EventBus, Subscription
 from mowdeck_service_kit.errors import Unauthorized
+from mowdeck_service_kit.health import ReadinessCheck
 
-from mowdeck_auth.revocation import subscribe_revocations
+from mowdeck_auth.revocation import RevocationFeed
 from mowdeck_auth.settings import AuthSettings
 from mowdeck_auth.verifier import JwtVerifier, TokenError
 
@@ -52,13 +55,27 @@ class JwtPrincipalResolver:
 
     def __init__(self, verifier: JwtVerifier) -> None:
         self.verifier = verifier
-        self.revocation_events: Subscription | None = None
-        """The subscription that feeds the verifier's deny list, once attached to a bus."""
+        self.revocation_feed = RevocationFeed(verifier.revocations)
+        """Feeds the verifier's deny list from the bus, failing open (ADR 0082)."""
+
+    @property
+    def revocation_events(self) -> Subscription | None:
+        """The subscription that feeds the verifier's deny list, once it is established."""
+        return self.revocation_feed.subscription
 
     async def attach(self, bus: EventBus) -> None:
         """Keep the verifier's deny list current from ``bus`` (called by the kit's
-        ``create_app`` when the bus is connected)."""
-        self.revocation_events = await subscribe_revocations(bus, self.verifier.revocations)
+        ``create_app`` when the bus is connected). A refused subscription does not stop the
+        service: :class:`~mowdeck_auth.revocation.RevocationFeed` logs it and retries."""
+        await self.revocation_feed.start(bus)
+
+    async def detach(self) -> None:
+        """Stop feeding the deny list (called by the kit on shutdown)."""
+        await self.revocation_feed.stop()
+
+    def readiness_checks(self) -> Sequence[ReadinessCheck]:
+        """``token-deny-list``, reported as degraded while the list is not fed."""
+        return (self.revocation_feed.readiness_check(),)
 
     async def resolve(self, request: Request) -> Principal:
         """The verified principal, or :class:`Unauthorized` (401)."""
