@@ -1002,6 +1002,14 @@ nats:
         path: /volumeMounts/-
         value: {name: mowdeck-nats-auth, mountPath: /etc/nats-mowdeck, readOnly: true}
   podTemplate:
+    # NATS reads files/nats-auth.conf only when it starts (or reloads; the config reloader is
+    # off): the checksum restarts it on `helm upgrade` when the users or permissions change, so
+    # the new services are not refused what the new release allows them. Generated with the
+    # file (tools/repo-checks/scripts/nats_auth.py, `poe nats-auth`); do not edit.
+    merge:
+      metadata:
+        annotations:
+          checksum/mowdeck-nats-auth: "9655a43f39fcbfcc76a07a004ec401d2d9e9164a5f9a4e69e804a1efddd87100"
     patch:
       - op: add
         path: /spec/volumes/-

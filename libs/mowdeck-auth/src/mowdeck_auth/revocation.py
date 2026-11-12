@@ -30,9 +30,15 @@ signature and the claims were checked.
   sign everybody out of every service, and with it take the emergency stop away. The account
   erasure does not rely on the list for this reason: Identity waits until every token of the
   account has expired before it asks a service to delete
-  (``identity.domain.erasure.tokens_expired_at``).
+  (``identity.domain.erasure.tokens_expired_at``). The same holds when the server refuses the
+  subscription itself (a NATS server that still runs the permissions of an older release):
+  :class:`RevocationFeed` logs an error, reports the readiness check ``token-deny-list`` as
+  degraded (``/readyz``, ``mowdeck_readiness_check_up``) and tries again in the background; the
+  service starts and serves.
 """
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -40,7 +46,15 @@ from uuid import UUID
 
 from mowdeck_contracts.v1 import AccessRevoked, AccessScope, EventEnvelope, Principal
 from mowdeck_contracts.v1.subjects import ALL_ACCESS_REVOKED
-from mowdeck_service_kit.bus import BusMessage, DropMessage, EventBus, Subscription
+from mowdeck_service_kit.bus import (
+    BusError,
+    BusMessage,
+    BusNotConnectedError,
+    DropMessage,
+    EventBus,
+    Subscription,
+)
+from mowdeck_service_kit.health import ReadinessCheck
 from pydantic import ValidationError
 
 _log = logging.getLogger("mowdeck_auth.revocation")
@@ -140,3 +154,104 @@ async def subscribe_revocations(bus: EventBus, revocations: RevocationList) -> S
     return await bus.subscribe(
         ALL_ACCESS_REVOKED, on_revoked, last_per_subject=True, acknowledge=False
     )
+
+
+READINESS_CHECK = "token-deny-list"
+"""Name of the readiness check of :class:`RevocationFeed` (not required: it fails open)."""
+
+
+class RevocationFeed:
+    """Keeps a :class:`RevocationList` fed from the bus and fails open when it cannot.
+
+    :meth:`start` subscribes once. When the bus refuses (a :class:`BusError`: the server's
+    permissions do not allow the consumer, JetStream does not answer), it logs an error that
+    says what this means, does not raise, and subscribes again in the background, every
+    ``retry_seconds`` up to ``max_retry_seconds``, until it succeeds or :meth:`stop` is
+    called. Meanwhile :meth:`readiness_check` reports the feed as degraded.
+
+    A bus that is not connected at all is not hidden here: the kit's ``nats`` readiness check
+    reports it, and a bus that is closed ends the retries.
+    """
+
+    def __init__(
+        self,
+        revocations: RevocationList,
+        *,
+        retry_seconds: float = 5.0,
+        max_retry_seconds: float = 60.0,
+    ) -> None:
+        self.revocations = revocations
+        self.retry_seconds = retry_seconds
+        self.max_retry_seconds = max_retry_seconds
+        self.subscription: Subscription | None = None
+        self._retry: asyncio.Task[None] | None = None
+
+    @property
+    def subscribed(self) -> bool:
+        """True once the deny list is fed from the bus."""
+        return self.subscription is not None
+
+    async def start(self, bus: EventBus) -> None:
+        """Subscribe, or log the refusal and keep trying in the background. Raises only
+        :class:`BusNotConnectedError` (a closed bus: a fault of the caller, not a refusal)."""
+        if self.subscription is not None or self._retry is not None:
+            return
+        if await self._try(bus, first=True):
+            return
+        self._retry = asyncio.create_task(self._retry_until_subscribed(bus), name=READINESS_CHECK)
+
+    async def stop(self) -> None:
+        """Stop the retries and unsubscribe. Idempotent."""
+        retry, self._retry = self._retry, None
+        if retry is not None:
+            retry.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await retry
+        subscription, self.subscription = self.subscription, None
+        if subscription is not None:
+            await subscription.unsubscribe()
+
+    def readiness_check(self) -> ReadinessCheck:
+        """``token-deny-list``: fails (as degraded, never as not ready) while unsubscribed."""
+
+        async def token_deny_list() -> bool:
+            return self.subscribed
+
+        return ReadinessCheck(name=READINESS_CHECK, check=token_deny_list, required=False)
+
+    async def _try(self, bus: EventBus, *, first: bool) -> bool:
+        try:
+            self.subscription = await subscribe_revocations(bus, self.revocations)
+        except BusNotConnectedError:
+            raise
+        except BusError as exc:
+            if first:
+                _log.error(
+                    "token deny list unavailable: the bus refused its subscription; tokens of "
+                    "deleted users and erased accounts are accepted until they expire (fail "
+                    "open, ADR 0082). Retrying in the background. On a NATS server that still "
+                    "runs older permissions, reload it (docs/ops/compose.md, 'NATS permissions "
+                    "after an upgrade')",
+                    extra={"subject": ALL_ACCESS_REVOKED, "error": str(exc)},
+                )
+            else:
+                _log.debug("token deny list still unavailable", extra={"error": str(exc)})
+            return False
+        if not first:
+            _log.info("token deny list subscribed; revoked tokens are refused again")
+        return True
+
+    async def _retry_until_subscribed(self, bus: EventBus) -> None:
+        delay = self.retry_seconds
+        while True:
+            await asyncio.sleep(delay)
+            try:
+                if await self._try(bus, first=False):
+                    return
+            except BusNotConnectedError:
+                _log.info("token deny list: the bus is closed, no more retries")
+                return
+            delay = min(delay * 2, self.max_retry_seconds)
+
+    def __repr__(self) -> str:
+        return f"RevocationFeed(subscribed={self.subscribed}, entries={len(self.revocations)})"

@@ -153,6 +153,49 @@ async def test_evaluate_readiness_logs_only_changes(capsys: pytest.CaptureFixtur
     assert failing["failing"] == ["dependency: check returned false"]
 
 
+async def test_a_check_that_is_not_required_degrades_but_never_blocks(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A degraded mode the service runs on by design (the token deny list fails open): visible
+    in /readyz, the metric and the log, but the service starts and stays in routing."""
+    settings = make_test_settings(log_format="json", readiness_interval_seconds=0)
+    optional, required = Switch(ok=False), Switch(ok=True)
+    app = make_test_app(
+        settings=settings,
+        readiness_checks=[
+            ReadinessCheck(name="deny-list", check=optional, required=False),
+            ReadinessCheck(name="dependency", check=required),
+        ],
+    )
+    async with lifespan_client(app) as client:
+        capsys.readouterr()
+        assert (await client.get("/startupz")).status_code == 200
+        degraded = await client.get("/readyz")
+        assert degraded.status_code == 200
+        assert degraded.json()["status"] == "degraded"
+        assert degraded.json()["checks"]["deny-list"] == {
+            "status": "degraded",
+            "duration_ms": degraded.json()["checks"]["deny-list"]["duration_ms"],
+            "error": "check returned false",
+        }
+        assert degraded.json()["checks"]["dependency"]["status"] == "ok"
+        metrics = (await client.get("/metrics")).text
+        assert 'mowdeck_readiness_check_up{check="deny-list"} 0.0' in metrics
+
+        required.ok = False  # a required check still fails the readiness
+        failing = await client.get("/readyz")
+        assert failing.status_code == 503 and failing.json()["status"] == "fail"
+
+        required.ok = optional.ok = True
+        assert (await client.get("/readyz")).json()["status"] == "ok"
+        lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line]
+    events = [line["event"] for line in lines if "degraded" in line["event"]]
+    assert events == ["service degraded", "service no longer degraded"]
+    first = next(line for line in lines if line["event"] == "service degraded")
+    assert first["degraded"] == ["deny-list: check returned false"]
+    assert first["level"] == "error"
+
+
 async def test_database_readiness_does_not_use_the_request_pool() -> None:
     """Without a server it fails like before; the probe never touches the request pool."""
     settings = make_test_settings(

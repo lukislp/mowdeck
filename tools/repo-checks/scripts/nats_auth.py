@@ -5,7 +5,8 @@
 
 Usage (from the repository root)::
 
-    uv run poe nats-auth          # writes infra/compose/nats/auth.conf and the chart's copy
+    uv run poe nats-auth          # writes infra/compose/nats/auth.conf, the chart's copy and
+                                  # its checksum on the chart's NATS pods (values.yaml)
     uv run poe nats-auth-check    # exit 1 when a committed file is stale
     python tools/repo-checks/scripts/nats_auth.py --summary   # the map as a Markdown table
 
@@ -48,6 +49,7 @@ every allowed subject must be used by the code.
 
 import argparse
 import ast
+import hashlib
 import importlib.util
 import re
 import sys
@@ -65,6 +67,11 @@ AUTH_CONF = Path("infra/compose/nats/auth.conf")
 """The generated server configuration (included by the NATS server of Compose)."""
 CHART_AUTH_CONF = Path("infra/helm/mowdeck/files/nats-auth.conf")
 """Identical copy for the Helm chart (a chart cannot read files outside its directory)."""
+CHART_VALUES = Path("infra/helm/mowdeck/values.yaml")
+"""Holds the checksum of the file on the NATS pod template: NATS reads its users and
+permissions only when it starts, so a changed file must restart it on ``helm upgrade``."""
+
+_CHECKSUM = re.compile(r'^(?P<key>\s*checksum/mowdeck-nats-auth: )"[0-9a-f]{64}"$', re.MULTILINE)
 
 STREAMS_USER = "streams"
 """The user of the one-shot job ``nats-streams`` (``python -m mowdeck_service_kit.bus.streams``)."""
@@ -467,8 +474,9 @@ LIB_ENTRY_POINTS: Mapping[str, tuple[tuple[Kind, str], ...]] = {
     "subscribe_cache_invalidation": (("consume", "GRANTS_CHANGED_SUBJECT"),),
     # mowdeck_auth.revocation: the deny list of the token verifier (ADR 0082). The kit attaches
     # a JwtPrincipalResolver to the bus (create_app); Realtime, which verifies the token of a
-    # WebSocket itself, subscribes directly.
+    # WebSocket itself, runs a RevocationFeed of its own.
     "JwtPrincipalResolver": (("consume", "ALL_ACCESS_REVOKED"),),
+    "RevocationFeed": (("consume", "ALL_ACCESS_REVOKED"),),
     "subscribe_revocations": (("consume", "ALL_ACCESS_REVOKED"),),
 }
 """Library functions that use the bus on the caller's behalf, by name: (kind, constant)."""
@@ -649,10 +657,24 @@ def drift(
 # --- Command line -----------------------------------------------------------------------------
 
 
+def with_checksum(values: str, text: str) -> str:
+    """``values`` (the chart's values.yaml) with the checksum of ``text`` on the NATS pods."""
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    updated, count = _CHECKSUM.subn(lambda m: f'{m["key"]}"{digest}"', values)
+    if count != 1:
+        msg = f"{CHART_VALUES}: expected one 'checksum/mowdeck-nats-auth' annotation, found {count}"
+        raise ValueError(msg)
+    return updated
+
+
 def stale(root: Path) -> list[Path]:
     """The committed files that differ from a fresh generation."""
     text = render()
-    return [p for p in (AUTH_CONF, CHART_AUTH_CONF) if _read(root / p) != text]
+    outdated = [p for p in (AUTH_CONF, CHART_AUTH_CONF) if _read(root / p) != text]
+    values = _read(root / CHART_VALUES) or ""
+    if with_checksum(values, text) != values:
+        outdated.append(CHART_VALUES)
+    return outdated
 
 
 def _read(path: Path) -> str | None:
@@ -681,6 +703,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {path}")
+    values = root / CHART_VALUES
+    values.write_text(with_checksum(values.read_text("utf-8"), text), "utf-8", newline="\n")
+    print(f"wrote the checksum in {CHART_VALUES}")
     return 0
 
 
