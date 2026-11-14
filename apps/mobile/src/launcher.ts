@@ -13,9 +13,13 @@ import { checkServer, type ConnectResult } from './connect';
 import { DEMO_SERVER_URL } from './demo-server';
 import { fill, startLanguage } from './i18n';
 import { languageStorage } from './language-storage';
+import { applyPrivacyLink } from './project-links';
 import { MowDeckShell } from './shell';
 
-const page = startLanguage(document, languageStorage(), navigator.language);
+const privacyLink = document.querySelector<HTMLAnchorElement>('#privacy');
+const page = startLanguage(document, languageStorage(), navigator.language, (_, language) => {
+  applyPrivacyLink(privacyLink, language);
+});
 
 const form = document.querySelector<HTMLFormElement>('#connect')!;
 const input = document.querySelector<HTMLInputElement>('#server')!;

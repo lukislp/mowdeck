@@ -64,6 +64,8 @@ const de = {
   aboutNoticesLoading: 'Hinweise werden geladen …',
   aboutNoticesError: 'Die Hinweise konnten nicht geladen werden.',
   aboutLicenceText: 'Lizenztext',
+  aboutPrivacyTitle: 'Datenschutz',
+  aboutPrivacyPolicy: 'Datenschutzerklärung',
 } as const;
 
 const en: Record<keyof typeof de, string> = {
@@ -122,6 +124,8 @@ const en: Record<keyof typeof de, string> = {
   aboutNoticesLoading: 'Loading notices …',
   aboutNoticesError: 'The notices could not be loaded.',
   aboutLicenceText: 'Licence text',
+  aboutPrivacyTitle: 'Privacy',
+  aboutPrivacyPolicy: 'Privacy policy',
 };
 
 export type TextKey = keyof typeof de;
@@ -202,7 +206,7 @@ export function startLanguage(
   root: Document,
   storage: LanguageStorage | null,
   system: string | undefined,
-  onShow?: (t: Record<TextKey, string>) => void,
+  onShow?: (t: Record<TextKey, string>, language: Language) => void,
 ): PageLanguage {
   let current = resolveLanguage(readLanguage(storage), system);
   const buttons = [...root.querySelectorAll<HTMLElement>('[data-language]')];
@@ -211,7 +215,7 @@ export function startLanguage(
     for (const button of buttons) {
       button.setAttribute('aria-pressed', String(button.dataset.language === current));
     }
-    onShow?.(texts(current));
+    onShow?.(texts(current), current);
   };
   for (const button of buttons) {
     button.addEventListener('click', () => {
