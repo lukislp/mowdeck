@@ -387,9 +387,12 @@ class SessionService:
                 found.display_name,
             )
             await tx.audit.add(entry)
-            # The public demo (ADR 0068): every visitor would be a "new device" of the one shared
-            # user, so demo sign-ins remember no device and raise no new-login alert.
-            seen = None if method == "demo" else await remember_device(tx, found, ctx, now, method)
+            # The public demo (ADR 0068) remembers no device (no cookie, no new-login alert).
+            seen = (
+                await remember_device(tx, found, ctx, now, method)
+                if self.deps.config.remembers_devices
+                else None
+            )
             if seen is not None and seen.new_device:
                 await self._new_device(work, ctx, found, acct, session, seen, method, entry)
             if method == "passkey" and details and "via" not in details:

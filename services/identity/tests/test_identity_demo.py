@@ -251,3 +251,21 @@ def test_demo_mode_closes_registration_and_the_other_sign_in_methods() -> None:
     assert settings.github_login() is None
     assert settings.apple_login() is None
     assert make_settings().to_config().demo_username is None
+
+
+async def test_the_demo_never_sets_the_device_cookie_and_expires_an_old_one() -> None:
+    async with harness(**DEMO) as h:
+        await _seed(h.client)
+        h.client.cookies.set("mowdeck_device", "old-device-id", path="/api/v1/identity")
+        signed_in = await h.client.post(f"{API}/demo/session")
+        refreshed = await h.client.post(
+            f"{API}/session/refresh", json={"refresh_token": signed_in.json()["refresh_token"]}
+        )
+        headers = bearer(refreshed.json()["access_token"])
+        overview = await h.client.get(f"{API}/me/security", headers=headers)
+    for response in (signed_in, refreshed):
+        cookies = [v for k, v in response.headers.multi_items() if k == "set-cookie"]
+        device = [c for c in cookies if c.startswith("mowdeck_device=")]
+        assert all("Max-Age=0" in c for c in device), cookies  # only ever an expiry
+    assert any(c.startswith("mowdeck_device=") for c in cookies)
+    assert overview.json()["known_devices"] == 0
