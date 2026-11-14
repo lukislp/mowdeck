@@ -296,7 +296,7 @@ The AI assist approval asks in `AssistStore.approve` (`assist_drive` for a maneu
 
 Questions of different kinds that arrive while the sheet is open (it is non-modal) queue, each with its own wording and answer; only the same kind asked again shares one answer. Leaving the page (`SafetySheet` watches the path) cancels every pending question, so a start cannot fire later on another screen.
 
-Not covered: the Siri intents, widgets and Watch app start a mower with one tap and need native changes.
+The native surfaces ask the same question with the same wording: the widget's Start opens the app's confirmation, Siri and Shortcuts use the system confirmation, the Apple Watch a confirmation dialog ([ADR 0084](../adr/0084-area-clear-confirmation-on-native-surfaces.md); policy and wording in `apps/mobile/ios/MowerWidgetKit`, `MotionSafety.swift`). Keep the native `Localizable.strings` in step when `safety_title`, `safety_statement` or `safety_confirm` change.
 
 ## Manual drive
 

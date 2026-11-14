@@ -16,7 +16,7 @@ Long-press the home screen, tap **+**, search for **MowDeck**, and pick one:
 | Widget | Size | Shows |
 | --- | --- | --- |
 | Mower status | small | Icon and state (Mäht, Station, Fehler, Regenpause, ...), battery ring, progress while mowing; on an error what happened in plain words ("Angehoben", "Steckt fest") |
-| Mower status | medium | The same plus area, next run, and the buttons **Start** (all areas with the mower's saved mowing defaults), **Pause** and **Station** |
+| Mower status | medium | The same plus area, next run, and the buttons **Start** (opens MowDeck, which asks whether the area is clear, then starts all areas with the mower's saved mowing defaults), **Pause** and **Station** |
 | Mower on the lock screen | circular, rectangular, inline | Battery ring with the state glyph; "Mäht · 42 % · Großer Garten" or the error in plain words; "Nächster Lauf 14:00" or "Regenpause bis 16:00" |
 | Map | large | The map with the mower, the mowed path and the dock, plus state, progress and battery |
 | Schedule and weather | medium | The next three runs, whether the rain pause lets them start (will run, rain pause, uncertain) and the rain status |
@@ -40,5 +40,6 @@ If the activity was started by a schedule while the app was closed, its progress
 
 - **Errors in plain words.** Widgets, the Live Activity and the Apple Watch show an error the way the mower page does: the title from the error code lexicon of your mower's maker ([Error codes in plain words](../dev/error-lexicon.md)), in the app's language (German or English). The server sends it with the state, so the widget also shows it from its last stored state while offline. For a code nobody has explained yet you see the general kind of problem ("Der Mäher steckt fest") or the maker's own message.
 - Widgets show the last known data when the server cannot be reached ("Last known state"). The system decides how often widgets reload; the server also sends a silent hint when the mower's state changes, which iOS honours a few times an hour.
-- **Start** from a widget is the same as Start in the app with the saved defaults. It does not ask for confirmation: use it when you would also tap Start.
+- **Start** from a widget opens MowDeck and asks first, like Start in the app: "Bevor der Mäher fährt" with the statement that the area must be clear of people, children and animals. Only **Bestätigen** sends the start (all areas with the saved defaults); **Abbrechen** sends nothing. **Pause** and **Station** work straight from the widget, without a question: stopping is never delayed.
+- **Siri and Shortcuts.** The action "Start mowing" (in the Shortcuts app) asks the same question before it starts the mower; cancel it and nothing is sent.
 - Widgets need iOS 17; on iOS 16 only the Live Activity is available.
