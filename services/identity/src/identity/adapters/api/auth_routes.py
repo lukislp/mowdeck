@@ -18,6 +18,7 @@ from identity.adapters.api.deps import (
     FreshAuth,
     PublicCtx,
     ServicesDep,
+    get_services,
 )
 from identity.adapters.api.schemas import (
     AppCodeIn,
@@ -87,7 +88,10 @@ def set_refresh_cookie(request: Request, response: Response, pair: TokenPair) ->
     """The refresh cookie of a login or refresh with its readable companion
     (:data:`SESSION_HINT_COOKIE`), and after a login the device cookie."""
     secure = getattr(request.app.state, "refresh_cookie_secure", True)
-    if pair.device_token is not None:
+    if not get_services(request).deps.config.remembers_devices:
+        if DEVICE_COOKIE in request.cookies:  # left over from before: the demo keeps none
+            response.delete_cookie(DEVICE_COOKIE, path=DEVICE_COOKIE_PATH)
+    elif pair.device_token is not None:
         response.set_cookie(
             DEVICE_COOKIE,
             pair.device_token,

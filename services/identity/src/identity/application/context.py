@@ -61,6 +61,13 @@ class IdentityConfig:
         """Public demo mode: the one predicate for "this is the public demo" in Identity."""
         return self.demo_username is not None
 
+    @property
+    def remembers_devices(self) -> bool:
+        """Whether sign-ins may be tied to a device (the ``mowdeck_device`` cookie, known devices,
+        new-login alerts; ADR 0065). The one place that decides it: the public demo never does
+        (ADR 0068), its sandboxes are throw-away and the visitor's device stores nothing."""
+        return not self.demo
+
     def request_context(
         self,
         *,
