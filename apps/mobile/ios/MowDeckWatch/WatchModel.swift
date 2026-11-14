@@ -58,7 +58,9 @@ final class WatchModel: NSObject, ObservableObject {
     /// Send a command through the iPhone and show the outcome. The emergency stop is tried
     /// three times within about two seconds when the iPhone does not answer (stopping twice is
     /// harmless); the other commands are sent once, and never queued for later.
-    func send(_ command: WatchCommand, to mowerId: String) async {
+    /// `areaClearConfirmed`: the user answered the area-clear question (ADR 0084); a start
+    /// without it is refused by the iPhone (MotionCommandPolicy).
+    func send(_ command: WatchCommand, to mowerId: String, areaClearConfirmed: Bool = false) async {
         sending = command
         defer { sending = nil }
         let attempts = command.isEmergency ? 3 : 1
@@ -68,7 +70,8 @@ final class WatchModel: NSObject, ObservableObject {
                 activate()
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
-            failure = await deliver(.command(command, mowerId: mowerId))
+            failure = await deliver(
+                .command(command, mowerId: mowerId, areaClearConfirmed: areaClearConfirmed))
             if failure != .phoneUnreachable && failure != .noAnswer { break }
         }
         outcome = CommandOutcome(command: command, failure: failure, at: Date())

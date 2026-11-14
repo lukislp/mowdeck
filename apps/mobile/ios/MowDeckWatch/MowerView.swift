@@ -6,11 +6,15 @@ import SwiftUI
 
 /// One mower: state, battery, progress, error, and the commands. The emergency stop asks once
 /// more before it is sent; it is never step-up protected and never needs more than seeing the
-/// mower (ADR 0060).
+/// mower (ADR 0060). A command that makes the mower move (Start) asks first whether the area is
+/// clear of people, children and animals (ADR 0084, MotionCommandPolicy); Pause and Station are
+/// one tap.
 struct MowerView: View {
     @EnvironmentObject private var model: WatchModel
     let mowerId: String
     @State private var confirmStop = false
+    /// The command waiting for the area-clear confirmation.
+    @State private var awaitingAreaClear: WatchCommand?
 
     private var snapshot: MowerSnapshot? { model.state?.snapshot(for: mowerId) }
 
@@ -65,15 +69,16 @@ struct MowerView: View {
                     title: "Start", symbol: "play.fill", running: model.sending == .start,
                     disabled: blocked
                 ) {
-                    Task { await model.send(.start, to: mowerId) }
+                    request(.start)
                 }
+                .accessibilityHint(Text(AreaClearWording.startHint))
             }
             if display == .mowing {
                 CommandButton(
                     title: "Pause", symbol: "pause.fill", running: model.sending == .pause,
                     disabled: blocked
                 ) {
-                    Task { await model.send(.pause, to: mowerId) }
+                    request(.pause)
                 }
             }
             if Self.canDock(display) {
@@ -81,7 +86,7 @@ struct MowerView: View {
                     title: "Station", symbol: "house.fill", running: model.sending == .dock,
                     disabled: blocked
                 ) {
-                    Task { await model.send(.dock, to: mowerId) }
+                    request(.dock)
                 }
             }
             // Always offered, also when the iPhone looks unreachable: the watch then says so
@@ -104,6 +109,30 @@ struct MowerView: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.sending == .emergencyStop)
             .accessibilityHint(Text("Asks for confirmation, then stops blades and wheels."))
+        }
+        .confirmationDialog(
+            AreaClearWording.title,
+            isPresented: Binding(
+                get: { awaitingAreaClear != nil },
+                set: { if !$0 { awaitingAreaClear = nil } }),
+            titleVisibility: .visible,
+            presenting: awaitingAreaClear
+        ) { command in
+            Button(AreaClearWording.confirm) {
+                Task { await model.send(command, to: mowerId, areaClearConfirmed: true) }
+            }
+            Button(AreaClearWording.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(AreaClearWording.message(mowerName: snapshot?.mower.name))
+        }
+    }
+
+    /// Sends a command, after the area-clear confirmation when MotionCommandPolicy asks for it.
+    private func request(_ command: WatchCommand) {
+        if command.needsAreaClearConfirmation {
+            awaitingAreaClear = command
+        } else {
+            Task { await model.send(command, to: mowerId) }
         }
     }
 

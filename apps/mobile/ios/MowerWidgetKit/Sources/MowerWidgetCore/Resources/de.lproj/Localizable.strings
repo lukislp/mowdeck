@@ -1,0 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Lukas Körber
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* Die Sicherheitsabfrage der nativen Oberflächen (ADR 0084). Der Text ist die Sicherheitsabfrage
+   der Web-App (apps/web/messages/de.json: safety_title, safety_statement, safety_confirm,
+   safety_go); beide gleich halten. */
+"area_clear.title" = "Bevor der Mäher fährt";
+"area_clear.statement" = "Der Bereich muss frei von Menschen, Kindern und Tieren sein. Du bist dafür verantwortlich, den Mäher zu beaufsichtigen, wie es die Anleitung des Herstellers beschreibt.";
+"area_clear.acknowledgement" = "Bestätige nur, wenn du geprüft hast, dass sich keine Menschen, Kinder oder Tiere im Bereich befinden, und du in Reichweite der Stopp-Taste bleibst.";
+"area_clear.confirm" = "Bestätigen";
+"area_clear.cancel" = "Abbrechen";
+"area_clear.start_hint" = "Fragt, ob der Bereich frei von Menschen, Kindern und Tieren ist, und startet dann den Mäher.";
+"area_clear.widget_start_hint" = "Öffnet MowDeck, um vor dem Start zu bestätigen, dass der Bereich frei ist.";
+"area_clear.sent" = "Start gesendet.";
+"area_clear.failed_title" = "Nicht gestartet";
+"area_clear.failed_not_set_up" = "Schalte unter Einstellungen, Diese App, die Widgets ein, um aus einem Widget zu starten.";
+"area_clear.failed_not_allowed" = "Du darfst diesen Mäher nicht steuern.";
+"area_clear.failed" = "Der Befehl konnte nicht gesendet werden.";

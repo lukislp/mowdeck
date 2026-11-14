@@ -189,7 +189,8 @@ struct StatusWidgetView: View {
         }
     }
 
-    /// iOS 17 interactive buttons. Start is offered when nothing runs, Pause while mowing.
+    /// iOS 17 interactive buttons. Start is offered when nothing runs (a link to the app's
+    /// area-clear confirmation), Pause while mowing.
     @ViewBuilder private var buttons: some View {
         if let mower = entry.mower {
             VStack(spacing: 6) {
@@ -197,10 +198,21 @@ struct StatusWidgetView: View {
                     Button(intent: PauseMowingIntent(mowerId: mower.id)) {
                         Label("Pause", systemImage: "pause.fill")
                     }
-                } else if entry.state.isJob == false, entry.state != .error, entry.state != .offline {
-                    Button(intent: StartMowingIntent(mowerId: mower.id)) {
+                } else if entry.state.isJob == false, entry.state != .error, entry.state != .offline,
+                          let confirm = AreaClearLink.url(mowerId: mower.id)
+                {
+                    // Not an intent button: the start needs the area-clear confirmation, which
+                    // an intent run in the widget extension cannot show. The link opens the app,
+                    // which asks and only then sends the start (ADR 0084). Pause and Station
+                    // stay one tap.
+                    Link(destination: confirm) {
                         Label("Start", systemImage: "play.fill")
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
                     }
+                    .foregroundStyle(.tint)
+                    .accessibilityHint(Text(AreaClearWording.widgetStartHint))
                 }
                 if entry.state != .docked, entry.state != .charging, entry.state != .rainPause,
                    entry.state != .offline, entry.state != .unknown

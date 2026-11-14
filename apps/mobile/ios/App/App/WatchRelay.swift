@@ -109,7 +109,9 @@ final class WatchRelay: NSObject, WCSessionDelegate, @unchecked Sendable {
     // MARK: Commands
 
     func handle(_ request: WatchRequest) async -> WatchReply {
-        guard case .command(let command, let mowerId) = request else { return .success }
+        // A start without the watch's area-clear confirmation never gets here: WatchRequest
+        // refuses it while parsing (bad_request, ADR 0084).
+        guard case .command(let command, let mowerId, _) = request else { return .success }
         guard let credential = try? WidgetBridge.vault.load() else {
             return WatchReply(failure: .notSetUp)
         }
