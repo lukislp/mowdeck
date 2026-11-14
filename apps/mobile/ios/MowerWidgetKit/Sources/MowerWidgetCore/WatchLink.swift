@@ -29,6 +29,7 @@ public enum WatchLink {
         static let ok = "ok"
         static let failure = "failure"
         static let state = "state"
+        static let areaClear = "areaClear"
     }
 
     static let commandOp = "command"
@@ -37,7 +38,8 @@ public enum WatchLink {
 
 /// What the watch can ask the iPhone to send to a mower.
 public enum WatchCommand: String, CaseIterable, Sendable {
-    /// All areas with the mower's saved mowing defaults (like the widget's Start button).
+    /// All areas with the mower's saved mowing defaults (like the widget's Start button); only
+    /// after the area-clear confirmation on the watch (ADR 0084).
     case start
     case pause
     /// Back to the station, keeping the job (`return_to_dock` with `end_job: false`).
@@ -50,26 +52,31 @@ public enum WatchCommand: String, CaseIterable, Sendable {
 
 /// A message from the watch to the iPhone.
 public enum WatchRequest: Equatable, Sendable {
-    case command(WatchCommand, mowerId: String)
+    /// `areaClearConfirmed`: the user confirmed on the watch that the area is clear (ADR 0084).
+    /// The iPhone refuses a command that needs the confirmation without it.
+    case command(WatchCommand, mowerId: String, areaClearConfirmed: Bool = false)
     /// Send the current state now (the watch app came to the foreground).
     case refresh
 
     public var message: [String: Any] {
         switch self {
-        case .command(let command, let mowerId):
-            return [
+        case .command(let command, let mowerId, let areaClearConfirmed):
+            var message: [String: Any] = [
                 WatchLink.Key.version: WatchLink.version,
                 WatchLink.Key.op: WatchLink.commandOp,
                 WatchLink.Key.command: command.rawValue,
                 WatchLink.Key.mowerId: mowerId,
             ]
+            if areaClearConfirmed { message[WatchLink.Key.areaClear] = true }
+            return message
         case .refresh:
             return [WatchLink.Key.version: WatchLink.version, WatchLink.Key.op: WatchLink.refreshOp]
         }
     }
 
     /// Nil for anything the iPhone must not act on: another version, an unknown operation or
-    /// command, a mower id that is not a UUID (it ends up in a URL path).
+    /// command, a mower id that is not a UUID (it ends up in a URL path), a command that makes
+    /// the mower move without the area-clear confirmation (MotionCommandPolicy).
     public init?(message: [String: Any]) {
         guard message[WatchLink.Key.version] as? Int == WatchLink.version,
               let op = message[WatchLink.Key.op] as? String
@@ -83,7 +90,9 @@ public enum WatchRequest: Equatable, Sendable {
                   let mowerId = message[WatchLink.Key.mowerId] as? String,
                   UUID(uuidString: mowerId) != nil
             else { return nil }
-            self = .command(command, mowerId: mowerId)
+            let confirmed = message[WatchLink.Key.areaClear] as? Bool == true
+            guard confirmed || !command.needsAreaClearConfirmation else { return nil }
+            self = .command(command, mowerId: mowerId, areaClearConfirmed: confirmed)
         default:
             return nil
         }

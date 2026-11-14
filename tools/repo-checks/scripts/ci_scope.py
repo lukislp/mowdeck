@@ -39,6 +39,7 @@ JOBS = (
     "web",
     "compose",
     "gradle_wrapper",
+    "ios",
     "helm",
     "docker",
     "camera_relay_media",
@@ -53,8 +54,17 @@ ALL = frozenset(JOBS)
 NONE: frozenset[str] = frozenset()
 STACK = frozenset({"docker", "camera_relay_media", "e2e", "e2e_web", "e2e_demo"})
 """The image builds and every job that starts the Compose stack from them."""
-SHARED = ALL - {"web", "gradle_wrapper"}
+SHARED = ALL - {"web", "gradle_wrapper", "ios"}
 """Inputs every Python, image and stack job reads (lock file, Compose, base images)."""
+IOS = (
+    "apps/mobile/ios/*",
+    "apps/mobile/scripts/*",
+    "apps/mobile/capacitor.config.ts",
+    "apps/mobile/package.json",
+)
+"""What the macOS job ``ios`` compiles and tests: the Swift sources and the Xcode project, the
+scripts it builds with, and the shell's Capacitor plugins (``cap sync`` writes the Swift package
+list). Nothing else needs a macOS runner."""
 
 WORKFLOW = ".github/workflows/ci.yml"
 
@@ -68,6 +78,7 @@ WORKFLOW_JOBS: dict[str, str | None] = {
     "web-node26": "web",
     "compose": "compose",
     "gradle-wrapper": "gradle_wrapper",
+    "ios": "ios",
     "helm": "helm",
     "docker": "docker",
     "camera-relay-media": "camera_relay_media",
@@ -159,6 +170,7 @@ RULES: tuple[tuple[tuple[str, ...], frozenset[str]], ...] = (
         ("apps/mobile/android/gradle/*", "apps/mobile/android/gradlew*"),
         frozenset({"web", "gradle_wrapper"}),
     ),
+    (IOS, frozenset({"web", "ios"})),
     (("apps/*",), frozenset({"web"})),
     (("tests/e2e/*",), frozenset({"python", "e2e"})),
     # stack.env and demo.env also configure the Compose checks.

@@ -1,0 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Lukas Körber
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* The area-clear confirmation of the native surfaces (ADR 0084). The statement is the web app's
+   safety check (apps/web/messages/en.json: safety_title, safety_statement, safety_confirm,
+   safety_go); keep both in step. */
+"area_clear.title" = "Before the mower moves";
+"area_clear.statement" = "The area must be clear of people, children and animals. You are responsible for supervising the mower, as its manufacturer's manual describes.";
+"area_clear.acknowledgement" = "Confirm only if you have checked that no people, children or animals are in the area, and you stay within reach of the stop button.";
+"area_clear.confirm" = "Confirm";
+"area_clear.cancel" = "Cancel";
+"area_clear.start_hint" = "Asks whether the area is clear of people, children and animals, then starts the mower.";
+"area_clear.widget_start_hint" = "Opens MowDeck to confirm that the area is clear before the mower starts.";
+"area_clear.sent" = "Start sent.";
+"area_clear.failed_title" = "Not started";
+"area_clear.failed_not_set_up" = "Turn on widgets in Settings, This app, to start from a widget.";
+"area_clear.failed_not_allowed" = "You are not allowed to control this mower.";
+"area_clear.failed" = "The command could not be sent.";

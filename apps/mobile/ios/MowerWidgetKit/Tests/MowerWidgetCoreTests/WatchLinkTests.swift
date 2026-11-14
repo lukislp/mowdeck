@@ -23,7 +23,8 @@ final class WatchLinkTests: XCTestCase {
 
     func testCommandRequestsRoundTrip() {
         for command in WatchCommand.allCases {
-            let request = WatchRequest.command(command, mowerId: mowerId)
+            let request = WatchRequest.command(
+                command, mowerId: mowerId, areaClearConfirmed: command.needsAreaClearConfirmation)
             XCTAssertEqual(WatchRequest(message: request.message), request)
         }
         XCTAssertEqual(WatchRequest(message: WatchRequest.refresh.message), .refresh)

@@ -11,12 +11,14 @@ import PackageDescription
 // MowerWidgetCore as a local package. Nothing in here imports SwiftUI or WidgetKit (ActivityKit only behind canImport).
 let package = Package(
     name: "MowerWidgetKit",
+    defaultLocalization: "en",
     platforms: [.iOS(.v15), .macOS(.v12), .watchOS(.v10)],
     products: [
         .library(name: "MowerWidgetCore", targets: ["MowerWidgetCore"])
     ],
     targets: [
-        .target(name: "MowerWidgetCore"),
+        // Resources: the English and German wording of the area-clear confirmation (ADR 0084).
+        .target(name: "MowerWidgetCore", resources: [.process("Resources")]),
         .testTarget(name: "MowerWidgetCoreTests", dependencies: ["MowerWidgetCore"]),
     ]
 )

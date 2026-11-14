@@ -625,18 +625,18 @@
         }
       }
     },
-    "Starts all areas with the mower's saved mowing defaults.": {
+    "Asks whether the area is clear, then starts all areas with the mower's saved mowing defaults.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Starts all areas with the mower's saved mowing defaults."
+            "value": "Asks whether the area is clear, then starts all areas with the mower's saved mowing defaults."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Startet alle Bereiche mit den gespeicherten Mäh-Standards des Mähers."
+            "value": "Fragt, ob der Bereich frei ist, und startet dann alle Bereiche mit den gespeicherten Mäh-Standards des Mähers."
           }
         }
       }

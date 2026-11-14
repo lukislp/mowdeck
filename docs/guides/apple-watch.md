@@ -27,7 +27,7 @@ The watch has no login of its own and never talks to the MowDeck server. Every c
 | Red text | The mower's error |
 | "Stand vor ..." | The values are older than 15 minutes: the iPhone has not sent anything new |
 
-The buttons depend on the state: **Start** at the station (all areas with the mower's saved mowing defaults, like Start in the app), **Pause** while mowing, **Station** while mowing, paused, idle or in an error. Under the buttons the watch says what happened: "Start gesendet", or why not (for example "Du darfst diesen Mäher nicht steuern"). "Gesendet" means the server accepted the command; the next state shows what the mower did.
+The buttons depend on the state: **Start** at the station (all areas with the mower's saved mowing defaults, like Start in the app; the watch first asks "Bevor der Mäher fährt": the area must be clear of people, children and animals, and only **Bestätigen** sends the start), **Pause** while mowing, **Station** while mowing, paused, idle or in an error. Under the buttons the watch says what happened: "Start gesendet", or why not (for example "Du darfst diesen Mäher nicht steuern"). "Gesendet" means the server accepted the command; the next state shows what the mower did.
 
 ## Emergency stop
 

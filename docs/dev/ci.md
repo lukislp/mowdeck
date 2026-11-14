@@ -12,10 +12,10 @@ The first job, `changes`, lists the files the pull request changes (the diff bet
 | `docs/**`, `mkdocs.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `ROADMAP.md` | docs |
 | `infra/helm/**` | helm |
 | `tests/load/**` | compose |
-| `apps/mobile/**` | web (+ gradle-wrapper for the Gradle wrapper) |
+| `apps/mobile/**` | web (+ gradle-wrapper for the Gradle wrapper; + ios for `apps/mobile/ios/**`, `apps/mobile/scripts/**`, `apps/mobile/capacitor.config.ts` and `apps/mobile/package.json`) |
 | `apps/web/**`, `libs/mowdeck-ui/**`, `tools/ts-codegen/**`, `services/matter-server/**`, `package.json`, `pnpm-lock.yaml`, `.node-version`, `.corepack-version`, ESLint/Stylelint/Prettier configuration | web, docker, camera-relay-media, e2e, e2e-web, e2e-demo (`apps/web/openapi/**` also python and docs) |
 | `services/**`, `libs/**` | python, docs, docker, camera-relay-media, e2e, e2e-web, e2e-demo (`libs/**` also openfga-model) |
-| `pyproject.toml`, `uv.lock`, `.python-version`, `infra/compose/**`, `infra/mirror-env.sh`, `infra/openfga/**`, `infra/billing/**`, `infra/entitlements/**` | every job except web and gradle-wrapper |
+| `pyproject.toml`, `uv.lock`, `.python-version`, `infra/compose/**`, `infra/mirror-env.sh`, `infra/openfga/**`, `infra/billing/**`, `infra/entitlements/**` | every job except web, gradle-wrapper and ios |
 | `tests/e2e/**` | python, e2e |
 | `tests/e2e-web/**` | web, compose, e2e-web, e2e-demo |
 | `LICENSE`, `LICENSING.md`, `LICENSES/**` (copied into every image) | docs and the image and stack jobs |
