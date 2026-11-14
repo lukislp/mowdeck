@@ -98,6 +98,10 @@ def test_ci_configuration_needs_no_scoped_job(ci_scope: ModuleType, path: str) -
         ("infra/helm/mowdeck/values.yaml", {"helm"}),
         ("tests/load/report.mjs", {"compose"}),
         ("apps/mobile/src/main.ts", {"web"}),
+        ("apps/mobile/ios/MowDeckWatch/MowerView.swift", {"web", "ios"}),
+        ("apps/mobile/ios/App/App.xcodeproj/project.pbxproj", {"web", "ios"}),
+        ("apps/mobile/scripts/common.sh", {"web", "ios"}),
+        ("apps/mobile/package.json", {"web", "ios"}),
         ("apps/mobile/android/gradle/wrapper/gradle-wrapper.jar", {"web", "gradle_wrapper"}),
         ("tests/e2e/test_phase1.py", {"python", "e2e"}),
         ("tests/e2e-web/demo.env", {"web", "compose", "e2e_web", "e2e_demo"}),
@@ -143,7 +147,7 @@ def test_python_sources_and_dockerfiles_run_python_and_the_stack(
     ],
 )
 def test_shared_inputs_run_every_dependent_job(ci_scope: ModuleType, path: str) -> None:
-    assert ci_scope.jobs_for_path(path) == ci_scope.ALL - {"web", "gradle_wrapper"}
+    assert ci_scope.jobs_for_path(path) == ci_scope.ALL - {"web", "gradle_wrapper", "ios"}
 
 
 @pytest.mark.parametrize(
