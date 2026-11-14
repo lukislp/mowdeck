@@ -6,9 +6,11 @@
   exactly this version (AGPL-3.0 section 13). Always the last section, for every user.
 -->
 <script lang="ts">
+  import PrivacyPolicyLink from '#lib/legal/PrivacyPolicyLink.svelte';
   import SourceCode from '#lib/components/SourceCode.svelte';
   import ReportProblem from '#lib/support/ReportProblem.svelte';
 </script>
 
 <SourceCode variant="sheet" />
+<PrivacyPolicyLink />
 <ReportProblem />
