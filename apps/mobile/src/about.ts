@@ -17,6 +17,7 @@ import { describeApp, readAppInfo, UNKNOWN_APP, type AppInfo } from './app-info'
 import { startLanguage, type TextKey } from './i18n';
 import { languageStorage } from './language-storage';
 import { loadNotices, NOTICES_PATH, type Notices } from './notices';
+import { applyPrivacyLink } from './project-links';
 
 type Texts = Record<TextKey, string>;
 
@@ -25,6 +26,7 @@ const build = document.querySelector<HTMLElement>('#build')!;
 const sourceLead = document.querySelector<HTMLElement>('#source-lead')!;
 const source = document.querySelector<HTMLAnchorElement>('#source')!;
 const container = document.querySelector<HTMLElement>('#notices')!;
+const privacyPolicy = document.querySelector<HTMLAnchorElement>('#privacy-policy');
 
 let info: AppInfo = UNKNOWN_APP;
 let notices: Notices | null | undefined;
@@ -77,7 +79,8 @@ function renderNotices(t: Texts): void {
   }
 }
 
-const page = startLanguage(document, languageStorage(), navigator.language, (t) => {
+const page = startLanguage(document, languageStorage(), navigator.language, (t, language) => {
+  applyPrivacyLink(privacyPolicy, language);
   renderApp(t);
   renderNotices(t);
 });
