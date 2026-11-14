@@ -2,12 +2,12 @@
 
 The MowDeck apps (`apps/mobile`, [ADR 0036](../adr/0036-native-app-shells-with-capacitor.md)) are Capacitor shells around the web app. They do not contain a copy of it: on first start they ask for your MowDeck server's address and from then on load the web app from that server. A server update reaches the apps at once, and login works exactly like in the browser.
 
-|                                            | iPhone                                                                                                                                                              | Android                                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Install                                    | TestFlight (internal testing, uploaded from GitHub Actions on demand), or built and installed from your Mac; iPhone and iPad, and Apple silicon Macs as an iPad app | APK from the GitHub release                                                         |
-| Notifications, app open                    | yes (local notifications from the inbox, icon badge)                                                                                                                | yes (local notifications from the inbox, icon badge where the launcher supports it) |
-| Notifications, app in background or closed | Apple Push (APNs) straight from your server, needs your APNs key on the server                                                                                      | ntfy app (no Firebase)                                                              |
-| Deep links                                 | `mowdeck://mowers/<id>`                                                                                                                                             | `mowdeck://mowers/<id>`                                                             |
+| | iPhone | Android |
+| --- | --- | --- |
+| Install | TestFlight (internal testing, uploaded from GitHub Actions on demand), or built and installed from your Mac; iPhone and iPad, and Apple silicon Macs as an iPad app | APK from the GitHub release |
+| Notifications, app open | yes (local notifications from the inbox, icon badge) | yes (local notifications from the inbox, icon badge where the launcher supports it) |
+| Notifications, app in background or closed | Apple Push (APNs) straight from your server, needs your APNs key on the server | ntfy app (no Firebase) |
+| Deep links | `mowdeck://mowers/<id>` | `mowdeck://mowers/<id>` |
 
 ## What the server needs
 
@@ -33,16 +33,16 @@ What it does, in order:
 
 GitHub Environment `release` of the repository (required reviewer: the owner; deployment branches: `main` only). The Apple secrets live only there, never as repository secrets, and only the TestFlight job reads them, after the approval.
 
-| Secret                                                             | Content                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `APPLE_TEAM_ID`                                                    | 10-character team id                                                                                                                                                                                                                                                                                                                    |
-| `APPLE_DISTRIBUTION_P12_BASE64`, `APPLE_DISTRIBUTION_P12_PASSWORD` | "Apple Distribution" certificate with its private key, `.p12` (legacy encryption: Keychain Access or `openssl pkcs12 -export -legacy`), base64                                                                                                                                                                                          |
-| `APPLE_PROFILE_IOS_BASE64`                                         | App Store provisioning profile for `app.mowdeck.mobile` (Distribution -> App Store Connect), base64. A development profile from `provision.sh` does not work                                                                                                                                                                            |
-| `APPLE_PROFILE_IOS_NOTIFICATION_BASE64`                            | App Store provisioning profile for `app.mowdeck.mobile.NotificationService` (the extension that adds the camera photo to error and theft notifications, [ADR 0056](../adr/0056-camera-photo-in-push-notifications.md)), base64. See [Camera photo in notifications](#camera-photo-in-notifications) for the one-time Apple portal steps |
-| `APPLE_PROFILE_IOS_WIDGETS_BASE64`                                 | App Store provisioning profile for `app.mowdeck.mobile.Widgets` (the widget extension with the Live Activity, [ADR 0059](../adr/0059-ios-widgets-and-live-activity.md)), base64. See [Widgets and the Live Activity](#widgets-and-the-live-activity) for the one-time Apple portal steps                                                |
-| `APPLE_PROFILE_WATCH_BASE64`                                       | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp` (the Apple Watch app, [ADR 0060](../adr/0060-apple-watch-app.md)), base64. See [Apple Watch](#apple-watch) for the one-time Apple portal steps                                                                                                                      |
-| `APPLE_PROFILE_WATCH_WIDGETS_BASE64`                               | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp.Widgets` (the watch complication), base64                                                                                                                                                                                                                            |
-| `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID`     | App Store Connect API key (Users and Access -> Integrations, role Developer or higher), base64 of the `.p8`                                                                                                                                                                                                                             |
+| Secret | Content |
+| --- | --- |
+| `APPLE_TEAM_ID` | 10-character team id |
+| `APPLE_DISTRIBUTION_P12_BASE64`, `APPLE_DISTRIBUTION_P12_PASSWORD` | "Apple Distribution" certificate with its private key, `.p12` (legacy encryption: Keychain Access or `openssl pkcs12 -export -legacy`), base64 |
+| `APPLE_PROFILE_IOS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile` (Distribution -> App Store Connect), base64. A development profile from `provision.sh` does not work |
+| `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.NotificationService` (the extension that adds the camera photo to error and theft notifications, [ADR 0056](../adr/0056-camera-photo-in-push-notifications.md)), base64. See [Camera photo in notifications](#camera-photo-in-notifications) for the one-time Apple portal steps |
+| `APPLE_PROFILE_IOS_WIDGETS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.Widgets` (the widget extension with the Live Activity, [ADR 0059](../adr/0059-ios-widgets-and-live-activity.md)), base64. See [Widgets and the Live Activity](#widgets-and-the-live-activity) for the one-time Apple portal steps |
+| `APPLE_PROFILE_WATCH_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp` (the Apple Watch app, [ADR 0060](../adr/0060-apple-watch-app.md)), base64. See [Apple Watch](#apple-watch) for the one-time Apple portal steps |
+| `APPLE_PROFILE_WATCH_WIDGETS_BASE64` | App Store provisioning profile for `app.mowdeck.mobile.watchkitapp.Widgets` (the watch complication), base64 |
+| `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` | App Store Connect API key (Users and Access -> Integrations, role Developer or higher), base64 of the `.p8` |
 
 Optional variable `APPLE_RELEASE_EGRESS_POLICY=audit`: the job's network egress is blocked except for an allow-list (Apple's upload and signing hosts, GitHub, the npm registry). If Apple or GitHub move a host, a step fails or altool hangs until its time limit; set the variable, re-run the job, read the new host from the Harden Runner insights, add it to `allowed-endpoints` and delete the variable again.
 
@@ -65,25 +65,24 @@ Prerequisites on the Mac: Xcode (from the App Store, opened once, `sudo xcode-se
 1. **Apple ID of the paid team in Xcode**: Xcode → Settings → Accounts → "+" → Apple ID. Note the **Team ID** (Xcode → Settings → Accounts → your team, or developer.apple.com → Membership details).
 2. **Settings file on the Mac** (not in the repository):
 
-   ```bash
-   cat > ~/.mowdeck-ios.env <<'EOF'
-   MOWDECK_APPLE_TEAM_ID=ABCDE12345
-   EOF
-   ```
+    ```bash
+    cat > ~/.mowdeck-ios.env <<'EOF'
+    MOWDECK_APPLE_TEAM_ID=ABCDE12345
+    EOF
+    ```
 
-   Optional: `MOWDECK_DEVICE_ID=<udid>` when more than one iPhone is paired, `MOWDECK_VERSION=1.2.3` to override the version (default: the newest `v*` tag).
-
+    Optional: `MOWDECK_DEVICE_ID=<udid>` when more than one iPhone is paired, `MOWDECK_VERSION=1.2.3` to override the version (default: the newest `v*` tag).
 3. **Keychain password for SSH sessions** (stays on the Mac): `printf '%s' 'MAC-LOGIN-PASSWORD' > ~/.mowdeck-sign-pass && chmod 600 ~/.mowdeck-sign-pass`. SSH sessions get a locked keychain; the scripts unlock it with this file.
 4. **iPhone**: connect it by USB once, unlock it and tap "Trust this computer". Switch on Developer Mode: Settings → Privacy & Security → Developer Mode → on, restart, confirm. For later installs over Wi-Fi, keep the iPhone on the same network as the Mac (Xcode → Window → Devices and Simulators → "Connect via network" if it does not show up).
 5. **Provision** (creates the Apple Development certificate, registers the iPhone, creates the development profile for `app.mowdeck.mobile` with Push Notifications and Time Sensitive Notifications):
 
-   ```bash
-   bash apps/mobile/scripts/provision.sh
-   ```
+    ```bash
+    bash apps/mobile/scripts/provision.sh
+    ```
 
-   It ends with the profile's expiry date and `APNs: development`. If it says `MISSING`, the team is not a paid account or the capability could not be added; open `apps/mobile/ios/App/App.xcodeproj` in Xcode once, select the team under Signing & Capabilities and run the script again.
+    It ends with the profile's expiry date and `APNs: development`. If it says `MISSING`, the team is not a paid account or the capability could not be added; open `apps/mobile/ios/App/App.xcodeproj` in Xcode once, select the team under Signing & Capabilities and run the script again.
 
-   The bundle id `app.mowdeck.mobile` must be free in Apple's developer portal. If another team already uses it, change `appId` in `apps/mobile/capacitor.config.ts`, `PRODUCT_BUNDLE_IDENTIFIER` in the Xcode project, `BUNDLE_ID` in `apps/mobile/scripts/common.sh` and `MOWDECK_APNS_BUNDLE_ID` on the server to one of your own.
+    The bundle id `app.mowdeck.mobile` must be free in Apple's developer portal. If another team already uses it, change `appId` in `apps/mobile/capacitor.config.ts`, `PRODUCT_BUNDLE_IDENTIFIER` in the Xcode project, `BUNDLE_ID` in `apps/mobile/scripts/common.sh` and `MOWDECK_APNS_BUNDLE_ID` on the server to one of your own.
 
 ### Build and install (any time after)
 
@@ -99,17 +98,16 @@ bash apps/mobile/scripts/sign-and-install.sh # signature check + devicectl insta
 1. If iOS says "Untrusted Developer": Settings → General → VPN & Device Management → your developer certificate → Trust. (With a paid team and a development profile this usually is not needed; it is needed once per team on a new phone.)
 2. The app asks for the **server address**, for example `mowdeck.home.lan` or `https://mowdeck.example.org`. The app opens **only MowDeck servers**: it requests `<address>/manifest.webmanifest` and opens the address when the web app manifest names MowDeck (every MowDeck release serves it, so older servers need no update). The result decides:
 
-   | The address                                                                                     | What the app does                                                                                                                                                                                  |
-   | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | answers with the MowDeck manifest                                                               | connects                                                                                                                                                                                           |
-   | answers, but is not MowDeck (another website, a login or Wi-Fi sign-in page, an error page)     | refuses with a text; there is no way around it                                                                                                                                                     |
+   | The address | What the app does |
+   | --- | --- |
+   | answers with the MowDeck manifest | connects |
+   | answers, but is not MowDeck (another website, a login or Wi-Fi sign-in page, an error page) | refuses with a text; there is no way around it |
    | cannot be reached (no connection, DNS, TLS, timeout, a proxy's 502/503/504, a CDN's 521 to 524) | explains, and "Use anyway" asks for a confirmation that names the host before it opens the address (for a server on the home network or behind a VPN while you are away, or a server that is down) |
-   | redirects to another host that answers with the MowDeck manifest                                | tells you the new host and connects to it only after you confirm                                                                                                                                   |
-   | redirects to another host without the manifest, or from https to http                           | refuses                                                                                                                                                                                            |
-   | `http://` that redirects to `https://` on the same host                                         | probes the https address once                                                                                                                                                                      |
+   | redirects to another host that answers with the MowDeck manifest | tells you the new host and connects to it only after you confirm |
+   | redirects to another host without the manifest, or from https to http | refuses |
+   | `http://` that redirects to `https://` on the same host | probes the https address once |
 
    Only `http://` and `https://` addresses are accepted; plain `http://` (except localhost) is flagged because login needs HTTPS. The check runs when an address is entered or changed. A stored server address is not checked again at start, so updating the app never locks out an existing installation. Without a server of your own, "Try the demo" on the same screen connects to the [public demo](../adr/0068-public-demo-mode.md) (`https://mowdeck-demo.lktec.org`) through the same address check and the same error display; the screen also says in two sentences what the app needs and links to the project page and to [Privacy](#privacy). The demo address is the constant `DEMO_SERVER_URL` in `apps/mobile/src/demo-server.ts`. The "Server not reachable" page has no demo action. It needs an app build with this change.
-
 3. Log in as in the browser. The app asks once for permission to send notifications; allow it.
 4. To switch servers later: "Change server" on the sign-in and registration pages (under the form), or Settings → Notifications → "Server" when signed in. Both ask for confirmation, then sign out of the old server (push token, widget credential, session; best effort, an unreachable server does not block it) and return to the first-launch screen. The public demo does not lock it. If the server is unreachable at start, the app shows "Server not reachable" with "Try again" and "Choose another server".
 5. The language: the web app has a German/English switch in the footer of the sign-in and registration pages and under Settings → Account. The two bundled pages (first-launch and "Server not reachable") have their own German/English toggle that remembers the choice on the device and otherwise follows the system language; it needs an app build with this change, everything else arrives with a server update.
@@ -124,19 +122,18 @@ The Notifications service sends straight to Apple with your APNs auth key (token
 
 1. developer.apple.com → Certificates, Identifiers & Profiles → Keys → "+" → name it, tick **Apple Push Notifications service (APNs)**, choose "Sandbox & Production", Continue, Register, **Download** `AuthKey_<KEYID>.p8` (only once possible). Note the **Key ID**.
 2. Give it to the server:
-   - Compose: copy the file to `infra/compose/secrets/apns/AuthKey_<KEYID>.p8` and set in `infra/compose/.env`:
+    - Compose: copy the file to `infra/compose/secrets/apns/AuthKey_<KEYID>.p8` and set in `infra/compose/.env`:
 
-     ```bash
-     APNS_KEY_FILE=/run/secrets/apns/AuthKey_<KEYID>.p8
-     APNS_KEY_ID=<KEYID>
-     APNS_TEAM_ID=<TEAMID>
-     APNS_BUNDLE_ID=app.mowdeck.mobile
-     APNS_ENVIRONMENT=development
-     ```
+        ```bash
+        APNS_KEY_FILE=/run/secrets/apns/AuthKey_<KEYID>.p8
+        APNS_KEY_ID=<KEYID>
+        APNS_TEAM_ID=<TEAMID>
+        APNS_BUNDLE_ID=app.mowdeck.mobile
+        APNS_ENVIRONMENT=development
+        ```
 
-     then `docker compose up -d notifications`.
-
-   - Helm: create a Secret with the key (`kubectl -n mowdeck create secret generic mowdeck-apns --from-file=AuthKey.p8=AuthKey_<KEYID>.p8`) and set `services.notifications.apns.enabled=true`, `existingSecret=mowdeck-apns`, `keyId`, `teamId` (and `bundleId`, `environment` if they differ).
+        then `docker compose up -d notifications`.
+    - Helm: create a Secret with the key (`kubectl -n mowdeck create secret generic mowdeck-apns --from-file=AuthKey.p8=AuthKey_<KEYID>.p8`) and set `services.notifications.apns.enabled=true`, `existingSecret=mowdeck-apns`, `keyId`, `teamId` (and `bundleId`, `environment` if they differ).
 3. **The environment follows the build on the phones**: a build installed from the Mac with a development profile registers with the APNs sandbox (`development`), a TestFlight build with production APNs (`production`). One server talks to one environment, so a phone with the other kind of build gets no background push (Apple answers `BadDeviceToken` and the server drops that token). The key needs "Sandbox & Production"; a team key for all topics works for every app of the team.
 4. Check: the notifications log says `notification channels ... apns`; Settings → Notifications in the app shows "Apple Push: on"; "Send test notification" arrives with the app closed.
 
@@ -167,7 +164,7 @@ Installing from the Mac (`build-ios.sh`) uses automatic signing: Xcode creates t
 
 Home and lock screen widgets (status, lock screen, map, schedule and weather) and a Live Activity for a mowing job on the Lock Screen and in the Dynamic Island ([ADR 0059](../adr/0059-ios-widgets-and-live-activity.md), [user guide](../guides/ios-widgets.md)). They need iOS 17 (the Live Activity iOS 16.2, started by push 17.2).
 
-**How the widgets get their data.** The widget extension cannot use the app's login. In the app: Settings -> "This app" -> **Turn on widgets** creates a _widget credential_ on the server: an API token `iOS widgets: <device>` that can only see and control mowers, valid 90 days, renewed by the app when 30 days remain. It sits in the Keychain (this device only, readable while the phone is locked after the first unlock) and is exchanged for 10 minute access tokens. You see and can revoke it under Settings -> API tokens; logging out or turning widgets off revokes it and removes it from the phone. The account's users need `mower.view` on the whole account (owner, admin, manager, operator, viewer roles do).
+**How the widgets get their data.** The widget extension cannot use the app's login. In the app: Settings -> "This app" -> **Turn on widgets** creates a *widget credential* on the server: an API token `iOS widgets: <device>` that can only see and control mowers, valid 90 days, renewed by the app when 30 days remain. It sits in the Keychain (this device only, readable while the phone is locked after the first unlock) and is exchanged for 10 minute access tokens. You see and can revoke it under Settings -> API tokens; logging out or turning widgets off revokes it and removes it from the phone. The account's users need `mower.view` on the whole account (owner, admin, manager, operator, viewer roles do).
 
 **Server.** Nothing to configure: the same APNs key and `MOWDECK_APNS_ENVIRONMENT` as for notifications. The Notifications service sends Live Activity pushes (`liveactivity`) and silent reload pushes (`background`) with them; new tables come with its migration. Telemetry draws the map picture (about 100-300 ms of CPU per picture, cached 30 seconds). Reverse proxy: nothing new (`/api/v1/telemetry`, `/api/v1/scheduler`, `/api/v1/identity/token` are routed already).
 
@@ -184,13 +181,13 @@ Installing from the Mac (`build-ios.sh`) uses automatic signing and creates the 
 
 **Try it on the phone (safely).** After the TestFlight build: open the app, Settings -> This app -> Turn on widgets. Long-press the home screen -> "+" -> MowDeck -> add "Mower status" (medium), long-press it -> Edit Widget -> choose the mower. With the mower docked the Start button opens MowDeck, which asks whether the area is clear ([ADR 0084](../adr/0084-area-clear-confirmation-on-native-surfaces.md)); **Cancel** sends nothing, **Confirm** starts all areas with the saved mow defaults: **only confirm when the lawn is clear and the mower may mow**, or test Pause and Station (no question) while a job runs. Start a job from the app, and the Live Activity appears on the Lock Screen; start one from a schedule ("Run now" on a schedule) with the app closed, and it appears by push (see the ADR for the limit: its updates start once the app has reported the activity's token).
 
-| Symptom                                        | Likely cause                                                                                                                                                                      |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Widget says "Open MowDeck and turn on widgets" | Not turned on, the credential expired or was revoked (Settings -> API tokens); turn it on again                                                                                   |
-| Turning widgets on fails                       | The role lacks `mower.view` on the whole account (403), or the server is not reachable from the phone                                                                             |
-| Buttons do nothing                             | iOS 16 (needs 17), no `mower.control`, or the credential is revoked; the widget shows nothing special, press and watch the mower's command history                                |
-| Widget shows old data                          | iOS decides when to reload (the budget is a few dozen a day); the data refreshes with every reload and silent push, in the app via the widget gallery                             |
-| No Live Activity                               | Live Activities are off for MowDeck (Settings -> MowDeck), the push-to-start token is not registered yet (open the app once with widgets on), or the build predates the extension |
+| Symptom | Likely cause |
+| --- | --- |
+| Widget says "Open MowDeck and turn on widgets" | Not turned on, the credential expired or was revoked (Settings -> API tokens); turn it on again |
+| Turning widgets on fails | The role lacks `mower.view` on the whole account (403), or the server is not reachable from the phone |
+| Buttons do nothing | iOS 16 (needs 17), no `mower.control`, or the credential is revoked; the widget shows nothing special, press and watch the mower's command history |
+| Widget shows old data | iOS decides when to reload (the budget is a few dozen a day); the data refreshes with every reload and silent push, in the app via the widget gallery |
+| No Live Activity | Live Activities are off for MowDeck (Settings -> MowDeck), the push-to-start token is not registered yet (open the app once with widgets on), or the build predates the extension |
 
 ## Apple Watch
 
@@ -208,12 +205,11 @@ The App Group `group.app.mowdeck.mobile` from the widget steps must exist.
 4. The same for `app.mowdeck.mobile.watchkitapp.Widgets` -> name "MowDeck Watch Complication AppStore" -> Download.
 5. Base64 of each profile, in PowerShell (copies to the clipboard):
 
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\MowDeck_Watch_AppStore.mobileprovision")) | Set-Clipboard
-   ```
+    ```powershell
+    [Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\MowDeck_Watch_AppStore.mobileprovision")) | Set-Clipboard
+    ```
 
-   Paste it as the secret **`APPLE_PROFILE_WATCH_BASE64`** in the GitHub Environment `release` (Settings -> Environments -> release -> Add environment secret). Then the same for `MowDeck_Watch_Complication_AppStore.mobileprovision` as **`APPLE_PROFILE_WATCH_WIDGETS_BASE64`**. (macOS: `base64 -i file | tr -d '\n' | pbcopy`.)
-
+    Paste it as the secret **`APPLE_PROFILE_WATCH_BASE64`** in the GitHub Environment `release` (Settings -> Environments -> release -> Add environment secret). Then the same for `MowDeck_Watch_Complication_AppStore.mobileprovision` as **`APPLE_PROFILE_WATCH_WIDGETS_BASE64`**. (macOS: `base64 -i file | tr -d '\n' | pbcopy`.)
 6. Run **Apple TestFlight** as usual. The job checks first that both secrets are set and that each profile is an App Store profile for its bundle id with the App Group ("does not grant: com.apple.security.application-groups" means step 1 or 2 lacks the App Group: fix it, then regenerate and download the profile again). Pull requests that touch the Swift code compile the watch targets unsigned in the `ci` job `ios`; this run is the first one that signs them.
 7. On the iPhone: install the TestFlight build, then the **Watch** app on the iPhone -> Available Apps -> **MowDeck** -> Install. In MowDeck on the iPhone: Settings -> This app -> widgets on; the panel shows "Apple Watch: ready".
 
@@ -223,14 +219,14 @@ Installing from the Mac (`build-ios.sh`) uses automatic signing, which creates t
 
 **Try it on the watch (safely).** With the mower docked: open MowDeck on the watch, check state and battery against the app. Turn the iPhone's Bluetooth and Wi-Fi off for a moment: the watch says "iPhone nicht erreichbar" and its buttons wait (the emergency stop stays). Start asks whether the area is clear (**Abbrechen** sends nothing); **only confirm when the lawn is clear and the mower may mow**; then Pause, Station, and the emergency stop (confirm) while the job runs, and compare with the mower's command history in the app. Add the complication to a face and watch it follow the state.
 
-| Symptom                                               | Likely cause                                                                                                                         |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Watch: "Auf dem iPhone einrichten"                    | Widgets are off on the iPhone, or the widget credential expired or was revoked: turn widgets on again                                |
-| Watch: "iPhone nicht erreichbar"                      | The iPhone is out of range, in flight mode, or the MowDeck iPhone app was swiped away (open it once)                                 |
-| Watch: "Das iPhone erreicht den MowDeck-Server nicht" | The iPhone is away from home without the VPN                                                                                         |
-| Watch: "Keine Antwort vom iPhone"                     | The iPhone did not answer in time; the command may have been sent: check the state                                                   |
-| Complication shows old values                         | It greys out after 15 minutes without a new state; watchOS allows about 50 complication updates a day, open the watch app to refresh |
-| MowDeck missing under Available Apps                  | The TestFlight build predates the watch app, or the watch runs watchOS 9 or older                                                    |
+| Symptom | Likely cause |
+| --- | --- |
+| Watch: "Auf dem iPhone einrichten" | Widgets are off on the iPhone, or the widget credential expired or was revoked: turn widgets on again |
+| Watch: "iPhone nicht erreichbar" | The iPhone is out of range, in flight mode, or the MowDeck iPhone app was swiped away (open it once) |
+| Watch: "Das iPhone erreicht den MowDeck-Server nicht" | The iPhone is away from home without the VPN |
+| Watch: "Keine Antwort vom iPhone" | The iPhone did not answer in time; the command may have been sent: check the state |
+| Complication shows old values | It greys out after 15 minutes without a new state; watchOS allows about 50 complication updates a day, open the watch app to refresh |
+| MowDeck missing under Available Apps | The TestFlight build predates the watch app, or the watch runs watchOS 9 or older |
 
 ## Android
 
@@ -261,9 +257,9 @@ Without a keystore the APK is debug-signed. Release signing:
 
 1. Create the keystore once and keep it safe (losing it means users must uninstall to update):
 
-   ```bash
-   keytool -genkeypair -v -keystore mowdeck-release.jks -alias mowdeck -keyalg RSA -keysize 4096 -validity 10000
-   ```
+    ```bash
+    keytool -genkeypair -v -keystore mowdeck-release.jks -alias mowdeck -keyalg RSA -keysize 4096 -validity 10000
+    ```
 
 2. Locally: `MOWDECK_ANDROID_KEYSTORE=mowdeck-release.jks MOWDECK_ANDROID_KEYSTORE_PASSWORD=... MOWDECK_ANDROID_KEY_ALIAS=mowdeck bash apps/mobile/scripts/build-android.sh`.
 3. For the release workflow, add repository secrets: `ANDROID_KEYSTORE_BASE64` (`base64 -w0 mowdeck-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, optionally `ANDROID_KEY_PASSWORD` (defaults to the keystore password). The job `android` of `release.yml` builds the APK on ubuntu for every release ([Releases](release.md)) and the release attaches it, with its checksum, Sigstore bundle and build provenance; without the secret the job only warns and the release has no APK. Pull requests never build the native apps (minute budget); the CI job `web` runs the mobile package's lint, `tsc` check and tests, and the CI job `python` the TestFlight readiness checks of the iOS project (`tools/repo-checks/tests/test_ios_release.py`).
@@ -272,9 +268,9 @@ Without a keystore the APK is debug-signed. Release signing:
 
 For an App Store review (guideline 2.1: the reviewer must be able to use the app) the path is: first launch -> **Try the demo** -> the demo's "Try the demo" sign-in, which gives every visitor an own sandbox account with simulated mowers ([ADR 0076](../adr/0076-demo-sandboxes.md)). No account, server or mower is needed. State that in the review notes, together with this: **the app loads only MowDeck servers.** The first-launch screen opens an address only when it answers with MowDeck's web app manifest; a website that answers without it is refused, and the one exception, "Use anyway" after a confirmation naming the host, exists only for an address that cannot be reached from where the phone is (the owner's home network while away), never for one that answers. So the app is no general web browser (guidelines 4.2 and the age rating's unrestricted web access). What the demo cannot show, because [ADR 0068](../adr/0068-public-demo-mode.md) switches it off there: push notifications (no APNs devices, no ntfy), the widgets, the Live Activity and the Apple Watch app (they need a widget credential or a push channel). The demo is reset regularly and may answer `503 demo-full` when its sandbox pool is busy; "Try again" later. See [ADR 0036](../adr/0036-native-app-shells-with-capacitor.md) for the shell itself.
 
-**Safety confirmation before the mower moves (guideline 1.4).** Every user-initiated start of blade movement or remote motion asks first, on every surface: the area must be clear of people, children and animals, and the user supervises the mower as its manufacturer's manual describes. In the web app (start, resume, spot run, manual drive, leave dock, schedules, chat and AI assist; PR #367) and on the native surfaces ([ADR 0084](../adr/0084-area-clear-confirmation-on-native-surfaces.md)): the widget's **Start** opens the app, which asks with a system alert and sends only after **Confirm**; the Siri and Shortcuts action "Start mowing" asks with the system confirmation (`requestConfirmation`); the Apple Watch app asks with a confirmation dialog, and the iPhone refuses a watch start without it. Stopping is never asked: Pause, Station and the emergency stop stay one tap everywhere (the watch's emergency stop keeps its own "Stop the mower now?"). The Live Activity and the complications have no buttons. For the review notes: _MowDeck remotely controls a robotic lawn mower. Before any start of blade movement or remote motion, on the web app, the widgets, Siri and Shortcuts and the Apple Watch, the app asks the user to confirm that the area is clear of people, children and animals; stop and return-to-station are never delayed. The server additionally enforces its own safety rules (manual drive dead-man timer, emergency stop priority)._ The demo shows the web check; the widgets, Siri and the watch need a server that is not the demo (see above).
+**Safety confirmation before the mower moves (guideline 1.4).** Every user-initiated start of blade movement or remote motion asks first, on every surface: the area must be clear of people, children and animals, and the user supervises the mower as its manufacturer's manual describes. In the web app (start, resume, spot run, manual drive, leave dock, schedules, chat and AI assist; PR #367) and on the native surfaces ([ADR 0084](../adr/0084-area-clear-confirmation-on-native-surfaces.md)): the widget's **Start** opens the app, which asks with a system alert and sends only after **Confirm**; the Siri and Shortcuts action "Start mowing" asks with the system confirmation (`requestConfirmation`); the Apple Watch app asks with a confirmation dialog, and the iPhone refuses a watch start without it. Stopping is never asked: Pause, Station and the emergency stop stay one tap everywhere (the watch's emergency stop keeps its own "Stop the mower now?"). The Live Activity and the complications have no buttons. For the review notes: *MowDeck remotely controls a robotic lawn mower. Before any start of blade movement or remote motion, on the web app, the widgets, Siri and Shortcuts and the Apple Watch, the app asks the user to confirm that the area is clear of people, children and animals; stop and return-to-station are never delayed. The server additionally enforces its own safety rules (manual drive dead-man timer, emergency stop priority).* The demo shows the web check; the widgets, Siri and the watch need a server that is not the demo (see above).
 
-**Account deletion (guideline 5.1.1(v)).** Registration is offered in the app, so deletion is too, inside the app ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), [the user guide](../guides/delete-account.md)). For the review notes: _Account deletion is in Settings -> Profile, the last section ("Konto löschen" / "Delete account", for a member "Mich löschen" / "Delete me"). The dialog explains what is deleted, asks the user to type their user name and, unless they signed in within the last few minutes, their password; a member is deleted at once and signed out, an account owner's account is deleted with all its data after a 7-day waiting period that can be cancelled from a banner on every page._ The public demo shows the section but locks it (the demo deletes nothing, ADR 0068), so a reviewer who wants to run the deletion needs an account on a server that is not the demo: give one in the review notes (a review account on a server the developer runs, registered for the review) or register one there in the app. The app itself needs no new build for this: the section is part of the web app the shell loads from the server.
+**Account deletion (guideline 5.1.1(v)).** Registration is offered in the app, so deletion is too, inside the app ([ADR 0082](../adr/0082-account-deletion-inside-the-app.md), [the user guide](../guides/delete-account.md)). For the review notes: *Account deletion is in Settings -> Profile, the last section ("Konto löschen" / "Delete account", for a member "Mich löschen" / "Delete me"). The dialog explains what is deleted, asks the user to type their user name and, unless they signed in within the last few minutes, their password; a member is deleted at once and signed out, an account owner's account is deleted with all its data after a 7-day waiting period that can be cancelled from a banner on every page.* The public demo shows the section but locks it (the demo deletes nothing, ADR 0068), so a reviewer who wants to run the deletion needs an account on a server that is not the demo: give one in the review notes (a review account on a server the developer runs, registered for the review) or register one there in the app. The app itself needs no new build for this: the section is part of the web app the shell loads from the server.
 
 ## Privacy
 
@@ -290,12 +286,12 @@ The first-launch screen also links the project page (`https://github.com/lukislp
 
 App Store Connect rejects an upload whose code uses a "required reason" API without a privacy manifest (ITMS-91053). Every bundle with an executable needs its own `PrivacyInfo.xcprivacy`; the manifest of the app does not cover an extension or the watch app ([Describing use of required reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)). MowDeck ships four, each declaring the same single category:
 
-| Bundle                    | Manifest                                                    | Declared                         | Why                                                                                                                                                                                                                |
-| ------------------------- | ----------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| iPhone app                | `apps/mobile/ios/App/App/PrivacyInfo.xcprivacy`             | user defaults `CA92.1`, `1C8F.1` | the server address (`MainViewController.swift`, key `mowdeck.serverUrl`) and the App Group state (`SharedState`, `WatchLink` in `MowerWidgetKit`); the badge plugin also keeps its count in the app's own defaults |
-| Widgets and Live Activity | `apps/mobile/ios/MowDeckWidgets/PrivacyInfo.xcprivacy`      | the same                         | reads and writes the App Group suite `group.app.mowdeck.mobile` through `MowerWidgetKit`                                                                                                                           |
-| Watch app                 | `apps/mobile/ios/MowDeckWatch/PrivacyInfo.xcprivacy`        | the same                         | `MowerWidgetKit` (`WatchLink`, `SharedState`)                                                                                                                                                                      |
-| Watch complication        | `apps/mobile/ios/MowDeckWatchWidgets/PrivacyInfo.xcprivacy` | the same                         | `MowerWidgetKit`                                                                                                                                                                                                   |
+| Bundle | Manifest | Declared | Why |
+| --- | --- | --- | --- |
+| iPhone app | `apps/mobile/ios/App/App/PrivacyInfo.xcprivacy` | user defaults `CA92.1`, `1C8F.1` | the server address (`MainViewController.swift`, key `mowdeck.serverUrl`) and the App Group state (`SharedState`, `WatchLink` in `MowerWidgetKit`); the badge plugin also keeps its count in the app's own defaults |
+| Widgets and Live Activity | `apps/mobile/ios/MowDeckWidgets/PrivacyInfo.xcprivacy` | the same | reads and writes the App Group suite `group.app.mowdeck.mobile` through `MowerWidgetKit` |
+| Watch app | `apps/mobile/ios/MowDeckWatch/PrivacyInfo.xcprivacy` | the same | `MowerWidgetKit` (`WatchLink`, `SharedState`) |
+| Watch complication | `apps/mobile/ios/MowDeckWatchWidgets/PrivacyInfo.xcprivacy` | the same | `MowerWidgetKit` |
 
 `CA92.1` is reading and writing information only the app itself can access; `1C8F.1` is the same for the apps, extensions and App Clips of one App Group. Both are declared in each bundle because `SharedState` and `WatchLink` open the App Group suite and fall back to the app's own defaults when it is unavailable. The notification extension (`NotificationService`, `PushImage`) uses no required-reason API (it writes one temporary file and reads no timestamps), so it has no manifest. No bundle uses the file timestamp, system boot time, disk space or active keyboard categories.
 
@@ -313,7 +309,7 @@ All manifests say `NSPrivacyTracking` false, no tracking domains and no collecte
 The app shows its own About page, `about.html`, one of the bundled pages: a quiet link "About and licences" ("Über die App und Lizenzen") sits in the links row of the first-launch screen and of the offline page, so it is reachable before any server is configured. It shows
 
 - the **version and build** the native shell reports (`@capacitor/app` `App.getInfo()`: marketing version and `CFBundleVersion` on iOS, `versionName` and `versionCode` on Android); in a plain browser or a development build, where no shell answers, a neutral "shown in the installed app only";
-- the **licence of the app's own code**, AGPL-3.0-only (the shared design styles `@mowdeck/ui` are Apache-2.0), and the pointer that the licence and the source offer of the _server_ are in the About section of the server's own interface (the AGPL section 13 link of the server build, [Source code](source-code.md));
+- the **licence of the app's own code**, AGPL-3.0-only (the shared design styles `@mowdeck/ui` are Apache-2.0), and the pointer that the licence and the source offer of the *server* are in the About section of the server's own interface (the AGPL section 13 link of the server build, [Source code](source-code.md));
 - the **source code of exactly this version**: `https://github.com/lukislp/mowdeck/tree/v<version>`, the same convention as the web app and the services (`apps/web/src/lib/legal/source.ts`, `X-Source-Code`), the project itself when no release version is known;
 - one neutral sentence that MowDeck is not affiliated with the mower manufacturers;
 - the **third-party notices**: per licence the text once, and under it the packages with their copyright statements.
@@ -326,13 +322,13 @@ German and English follow the language toggle of the bundled pages.
 
 What it holds today (names and licences, no versions):
 
-| Package                                                                        | Licence | Holder                | Why it is in the app                                                             |
-| ------------------------------------------------------------------------------ | ------- | --------------------- | -------------------------------------------------------------------------------- |
-| `@capacitor/core`, `@capacitor/ios`, `@capacitor/android`                      | MIT     | Drifty Co.            | the shell itself (JavaScript bridge, iOS and Android runtime)                    |
-| `@capacitor/app`, `local-notifications`, `push-notifications`, `splash-screen` | MIT     | Ionic                 | the plugins                                                                      |
-| `@capawesome/capacitor-badge`                                                  | MIT     | Robin Genz            | icon badge                                                                       |
-| `tslib`                                                                        | 0BSD    | Microsoft Corporation | runtime helper of `@capacitor/core`                                              |
-| `@fontsource-variable/ibm-plex-sans`, `@fontsource/ibm-plex-mono`              | OFL-1.1 | IBM Corp.             | the IBM Plex webfonts of the bundled pages (the OFL text is part of the notices) |
+| Package | Licence | Holder | Why it is in the app |
+| --- | --- | --- | --- |
+| `@capacitor/core`, `@capacitor/ios`, `@capacitor/android` | MIT | Drifty Co. | the shell itself (JavaScript bridge, iOS and Android runtime) |
+| `@capacitor/app`, `local-notifications`, `push-notifications`, `splash-screen` | MIT | Ionic | the plugins |
+| `@capawesome/capacitor-badge` | MIT | Robin Genz | icon badge |
+| `tslib` | 0BSD | Microsoft Corporation | runtime helper of `@capacitor/core` |
+| `@fontsource-variable/ibm-plex-sans`, `@fontsource/ibm-plex-mono` | OFL-1.1 | IBM Corp. | the IBM Plex webfonts of the bundled pages (the OFL text is part of the notices) |
 
 `leaflet` is a dependency of `@mowdeck/ui` for the web app's map and is **not** in the app: the bundled pages import only the `@mowdeck/ui` stylesheets, never its component barrel. The policy lists it under `[[exclude]]` with that reason, and the gate fails when a page starts importing it.
 
@@ -373,22 +369,22 @@ On Windows `@capacitor/assets` can fail with `EBUSY` on `mipmap-anydpi-v26/ic_la
 
 ## Troubleshooting
 
-| Symptom                                                                                                                          | Cause and fix                                                                                                                                                                                                                                                                                                                            |
-| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "No MowDeck server answers at this address"                                                                                      | Wrong address, phone not in the network/VPN, or a certificate the phone does not trust (see [What the server needs](#what-the-server-needs)).                                                                                                                                                                                            |
-| Login page shows, login fails                                                                                                    | The server is on plain HTTP; the session cookie needs HTTPS.                                                                                                                                                                                                                                                                             |
-| "Apple Push: failed"                                                                                                             | No network to Apple, or the build has no `aps-environment` (re-run `provision.sh`, check its `APNs:` line).                                                                                                                                                                                                                              |
-| Every notification arrives twice on one device                                                                                   | Old registrations of the same device from a build without the installation id. Install the current build (it replaces its own older token); a token that is no longer used is removed when Apple reports it unregistered, or delete the device's rows on the server.                                                                     |
-| Apple Push on, but nothing arrives in the background                                                                             | Server without APNs key (the panel says so), `APNS_ENVIRONMENT` does not match the build (`development` for a Mac-installed build, `production` for TestFlight), or a different bundle id on server and app. The notifications log names Apple's reason (`BadDeviceToken`, `TopicDisallowed`, ...).                                      |
-| Notification arrives without the picture                                                                                         | The build has no extension (older than ADR 0056), `NOTIFICATIONS_APP_URL` is empty or not reachable from the phone over HTTPS, the photo was not ready within 14 s, or the mower had no camera frame (Notifications log: `no photo for the notification`, `the gateway delivered no photo`). The inbox shows the picture when it exists. |
-| TestFlight job: `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` missing, or no profile for `...NotificationService`                      | The extension's App ID and profile are not set up: see [Camera photo in notifications](#camera-photo-in-notifications).                                                                                                                                                                                                                  |
-| TestFlight job: `APPLE_PROFILE_WATCH_BASE64` or `APPLE_PROFILE_WATCH_WIDGETS_BASE64` missing, or no profile for `...watchkitapp` | The watch App IDs and profiles are not set up: see [Apple Watch](#apple-watch).                                                                                                                                                                                                                                                          |
-| `errSecInternalComponent` over SSH                                                                                               | `~/.mowdeck-sign-pass` missing or wrong.                                                                                                                                                                                                                                                                                                 |
-| `sign-and-install.sh`: no iPhone found                                                                                           | Unlock the phone; pair by USB once; Wi-Fi install needs the same network.                                                                                                                                                                                                                                                                |
-| iPhone: the top bar can be dragged under the status bar, or the page bounces                                                     | A build from before the edge-to-edge layout (`ios.contentInset: 'always'`, page bounce on). Rebuild with `build-ios.sh` (it runs `cap sync`, which carries `contentInset: 'never'` into the Xcode project) and install again.                                                                                                            |
-| "Mit Passkey anmelden" missing in the app                                                                                        | The build is older than the passkey hand-off (`MowDeckShell.openAuthSession`): install a current build. Or passkeys are off on the server ([Passkeys](passkeys.md)).                                                                                                                                                                     |
-| The browser opens for the passkey but the app does not take over                                                                 | Tap "App öffnen" on the page; if more than a minute passed, sign in again from the app.                                                                                                                                                                                                                                                  |
-| Android: nothing in the background                                                                                               | Expected without ntfy; set up ntfy. Some vendors also kill background apps aggressively ([dontkillmyapp.com](https://dontkillmyapp.com)).                                                                                                                                                                                                |
+| Symptom | Cause and fix |
+| --- | --- |
+| "No MowDeck server answers at this address" | Wrong address, phone not in the network/VPN, or a certificate the phone does not trust (see [What the server needs](#what-the-server-needs)). |
+| Login page shows, login fails | The server is on plain HTTP; the session cookie needs HTTPS. |
+| "Apple Push: failed" | No network to Apple, or the build has no `aps-environment` (re-run `provision.sh`, check its `APNs:` line). |
+| Every notification arrives twice on one device | Old registrations of the same device from a build without the installation id. Install the current build (it replaces its own older token); a token that is no longer used is removed when Apple reports it unregistered, or delete the device's rows on the server. |
+| Apple Push on, but nothing arrives in the background | Server without APNs key (the panel says so), `APNS_ENVIRONMENT` does not match the build (`development` for a Mac-installed build, `production` for TestFlight), or a different bundle id on server and app. The notifications log names Apple's reason (`BadDeviceToken`, `TopicDisallowed`, ...). |
+| Notification arrives without the picture | The build has no extension (older than ADR 0056), `NOTIFICATIONS_APP_URL` is empty or not reachable from the phone over HTTPS, the photo was not ready within 14 s, or the mower had no camera frame (Notifications log: `no photo for the notification`, `the gateway delivered no photo`). The inbox shows the picture when it exists. |
+| TestFlight job: `APPLE_PROFILE_IOS_NOTIFICATION_BASE64` missing, or no profile for `...NotificationService` | The extension's App ID and profile are not set up: see [Camera photo in notifications](#camera-photo-in-notifications). |
+| TestFlight job: `APPLE_PROFILE_WATCH_BASE64` or `APPLE_PROFILE_WATCH_WIDGETS_BASE64` missing, or no profile for `...watchkitapp` | The watch App IDs and profiles are not set up: see [Apple Watch](#apple-watch). |
+| `errSecInternalComponent` over SSH | `~/.mowdeck-sign-pass` missing or wrong. |
+| `sign-and-install.sh`: no iPhone found | Unlock the phone; pair by USB once; Wi-Fi install needs the same network. |
+| iPhone: the top bar can be dragged under the status bar, or the page bounces | A build from before the edge-to-edge layout (`ios.contentInset: 'always'`, page bounce on). Rebuild with `build-ios.sh` (it runs `cap sync`, which carries `contentInset: 'never'` into the Xcode project) and install again. |
+| "Mit Passkey anmelden" missing in the app | The build is older than the passkey hand-off (`MowDeckShell.openAuthSession`): install a current build. Or passkeys are off on the server ([Passkeys](passkeys.md)). |
+| The browser opens for the passkey but the app does not take over | Tap "App öffnen" on the page; if more than a minute passed, sign in again from the app. |
+| Android: nothing in the background | Expected without ntfy; set up ntfy. Some vendors also kill background apps aggressively ([dontkillmyapp.com](https://dontkillmyapp.com)). |
 
 ## App Store notes: payment
 
