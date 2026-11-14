@@ -1545,6 +1545,8 @@
   "whatsnew_empty": "Zu dieser Version gibt es noch keine Neuigkeiten.",
   "source_about_text": "MowDeck ist freie Software unter der GNU Affero General Public License, Version 3. Wer diese Installation über ein Netzwerk nutzt, bekommt den Quellcode genau der Version, die hier läuft.",
   "source_new_tab": "öffnet in neuem Tab",
+  "privacy_policy_text": "Die Datenschutzerklärung des Entwicklers für die MowDeck-App. Wer einen MowDeck-Server betreibt, ist für diesen Server selbst verantwortlich.",
+  "privacy_policy_link": "Datenschutzerklärung der MowDeck-App",
   "report_problem_label": "Problem melden",
   "report_problem_text": "Öffnet das Fehlerformular auf GitHub in einem neuen Tab. Die App trägt Version, Plattform, Browser, Sprache sowie Modell und Verbindung eines Mähers ein. Keine Tokens, Kontonamen, Seriennummern, Positionen oder Logs. Du siehst alles, bevor du es abschickst.",
   "report_problem_button": "Problem melden",
