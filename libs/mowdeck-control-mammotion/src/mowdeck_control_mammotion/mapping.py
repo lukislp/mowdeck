@@ -1135,11 +1135,31 @@ manufacturer's figures: Luba 1, LUBA 2 AWD (``Luba-VS``) and LUBA 2 AWD X (``Lub
 Yuka 320 mm. Other families (minis, newer models) stay unknown."""
 
 
+def _field_upper_bound(model: type[Any], field: str) -> int:
+    """The inclusive upper bound (``le``) the contract declares for ``field``."""
+    for constraint in model.model_fields[field].metadata:
+        bound = getattr(constraint, "le", None)
+        if bound is not None:
+            return int(bound)
+    raise LookupError(f"{model.__name__}.{field} has no upper bound")
+
+
+_MAX_CUTTING_WIDTH_MM: Final = _field_upper_bound(MowerCapabilities, "cutting_width_mm")
+
+
 def reported_cutting_width_mm(device: MowerDevice) -> int | None:
     """The device's own cutting width (``report_data.work.cutter_width``, assumed metres,
-    unverified) in millimetres, None until it reported one (> 0)."""
+    unverified) in millimetres, None until it reported a plausible one: a value that is not
+    finite, not positive or wider than the contract allows (a firmware reporting another unit)
+    is ignored, so the model's width applies instead of failing every capabilities update."""
     width = device.report_data.work.cutter_width
-    return round(width * 1000) if width > 0 else None
+    if not math.isfinite(width) or width <= 0:
+        return None
+    millimetres = round(width * 1000)
+    if not 0 < millimetres <= _MAX_CUTTING_WIDTH_MM:
+        _log.debug("ignoring implausible reported cutting width %r", width)
+        return None
+    return millimetres
 
 
 def cutting_width_of(device_name: str, product_key: str = "") -> int | None:

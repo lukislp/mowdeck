@@ -444,6 +444,41 @@ def test_mammotion_capabilities_prefer_the_reported_cutting_width() -> None:
     assert mapping.reported_cutting_width_mm(device) == 350
 
 
+@pytest.mark.parametrize(
+    ("width", "expected"),
+    [
+        (0.35, 350),
+        (2.0, 2000),  # exactly the contract's upper bound
+        (2.001, None),
+        (151.0, None),  # another unit: 151 m would be 151000 mm
+        (0.0, None),
+        (-0.4, None),
+        (float("nan"), None),
+        (float("inf"), None),
+        (float("-inf"), None),
+    ],
+)
+def test_mammotion_reported_cutting_width_only_accepts_plausible_values(
+    width: float, expected: int | None
+) -> None:
+    device = MowerDevice(name="Luba-VP12345")
+    device.report_data.work.cutter_width = width
+    assert mapping.reported_cutting_width_mm(device) == expected
+
+
+def test_mammotion_capabilities_fall_back_to_the_model_width_for_an_implausible_report() -> None:
+    device = MowerDevice(name="Luba-VP12345")
+    device.report_data.work.cutter_width = 151.0
+    caps = mapping.capabilities_of(
+        device,
+        device_name="Luba-VP12345",
+        product_key="",
+        manual_drive=False,
+        manual_drive_blades=False,
+    )
+    assert caps.cutting_width_mm == 400
+
+
 def test_mammotion_position_heading_is_the_reported_compass_course() -> None:
     """No RTK reference needed: the orientation is a compass course (hardware, 2026-10-10)."""
     device = sample_device()

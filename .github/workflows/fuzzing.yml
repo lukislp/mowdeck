@@ -12,7 +12,8 @@ name: fuzzing
 #   other pull requests skip it, because every run pages through all artifacts of the repository
 #   per target to find the corpus and so costs hundreds of calls of GITHUB_TOKEN's hourly quota;
 # * daily: batch fuzzing for an hour, which grows the corpus;
-# * weekly: corpus pruning and a coverage report.
+# * weekly: corpus pruning (half an hour, about three minutes per target: merging the grown
+#   corpus into the minimized one timed out at ten minutes) and a coverage report.
 #
 # Corpora, crashes and coverage reports live in GitHub Actions artifacts (ClusterFuzzLite's
 # default store without a storage repository), so no extra secret or repository is needed.
@@ -134,7 +135,7 @@ jobs:
       (github.event_name == 'schedule' && github.event.schedule == '47 4 * * 0') ||
       (github.event_name == 'workflow_dispatch' && inputs.task == 'prune')
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: fuzzing-batch
       cancel-in-progress: false
@@ -157,7 +158,7 @@ jobs:
         with:
           language: python
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 600
+          fuzz-seconds: 1800
           mode: prune
           sanitizer: address
 

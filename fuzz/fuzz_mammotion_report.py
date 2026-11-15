@@ -14,6 +14,7 @@ resulting device, which runs on every update of a live mower:
 * a mapped position lies within WGS84 bounds, the battery within 0..100 %.
 """
 
+import base64
 import sys
 from datetime import UTC, datetime
 from uuid import UUID
@@ -109,7 +110,8 @@ def _report(work: RptWork | None = None) -> bytes:
 
 def seeds() -> list[bytes]:
     """A mowing report, a docked report, the RTK origin and dock buffer, and a mowing report with
-    negative packed job fields (signed on the wire; once a JobProgress the contract refused)."""
+    negative packed job fields (signed on the wire; once a JobProgress the contract refused), and
+    the input of a report with a cutting width of 151 (once refused by the capabilities)."""
     mowing = _report()
     negative = _report(RptWork(man_run_speed=40, progress=-1331400, area=-1))
     docked = bytes(
@@ -135,7 +137,10 @@ def seeds() -> list[bytes]:
         body = b"".join(len(f).to_bytes(2, "big") + f for f in frames)
         return b"\x01" + bytes([len(frames) - 1]) + body
 
+    cutting_width_151 = base64.b64decode("TAEBAHRydQoGGAtSSroCDSoqTLgBlwH/")
+
     return [
+        cutting_width_151,
         framed(mowing),
         framed(docked, origin),
         framed(origin, mowing, mowing),
