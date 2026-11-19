@@ -18,7 +18,7 @@ dependencies = [
   "mowdeck-contracts",
   "mowdeck-control",
   # aioautomower (MIT) wraps the official Automower Connect API; exact pin, upgraded deliberately.
-  "aioautomower==3.1.0",
+  "aioautomower==3.2.0",
   # The real HTTP and websocket transport (transport.py); aioautomower depends on it as well.
   "aiohttp>=3.9.3,<4",
 ]

@@ -40,7 +40,7 @@ source = { editable = "integrations/agora-bridge" }
 
 [[package]]
 name = "aioautomower"
-version = "3.1.0"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -51,9 +51,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/71/fbfefaf48398570fee656e6b61f984f818665aa5d1b09fb547a16308c53e/aioautomower-3.1.0.tar.gz", hash = "sha256:1c1ccf747bbeab94d9d1904076e34a1798dee3dd690743baf574b3d2345994e8", size = 177856, upload-time = "2026-10-08T16:38:51.701Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/20/d7928719fc48dfa1ea9103476c31ebdae0ddbae597795a811c096235095e/aioautomower-3.2.0.tar.gz", hash = "sha256:4e9fe87914983681a9c4d1284daeb09fdff657adb7009fec33d6d083d7d2db45", size = 178571, upload-time = "2026-11-15T19:31:27.5Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/11/1c6b56a76b9303ae109c6708adb47b9e067ac2286c9da17ffcb3666c4c3f/aioautomower-3.1.0-py3-none-any.whl", hash = "sha256:e54c523c7e06c8052e5c409cbd769ce5469198428bb001a61b909ff74aa574ac", size = 38215, upload-time = "2026-10-08T16:38:50.335Z" },
+    { url = "https://files.pythonhosted.org/packages/52/1b/f5e83eb805f62636adfa9289d3bfd5c1d3cccb5d45ebdb85207f50a2b55e/aioautomower-3.2.0-py3-none-any.whl", hash = "sha256:371b3e3e5e21349194aa577e253f3648854922328065e2fbc5e5353df6b600f0", size = 38653, upload-time = "2026-11-15T19:31:26.087Z" },
 ]
 
 [[package]]
@@ -1864,7 +1864,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "aioautomower", specifier = "==3.1.0" },
+    { name = "aioautomower", specifier = "==3.2.0" },
     { name = "aiohttp", specifier = ">=3.9.3,<4" },
     { name = "mowdeck-contracts", editable = "libs/mowdeck-contracts" },
     { name = "mowdeck-control", editable = "libs/mowdeck-control" },
