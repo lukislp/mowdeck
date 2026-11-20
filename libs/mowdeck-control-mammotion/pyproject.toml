@@ -28,7 +28,7 @@ dependencies = [
 esphome = [
   "aioesphomeapi==45.0.3",
   "bleak-esphome==3.7.5",
-  "habluetooth==7.1.2",
+  "habluetooth==7.1.3",
   "bluetooth-adapters==2.4.0",
 ]
 
