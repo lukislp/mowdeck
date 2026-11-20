@@ -109,8 +109,8 @@ importers:
         specifier: workspace:*
         version: link:../../libs/mowdeck-ui
       agora-rtc-sdk-ng:
-        specifier: 4.24.9
-        version: 4.24.9
+        specifier: 4.24.10
+        version: 4.24.10
       openapi-fetch:
         specifier: 0.17.0
         version: 0.17.0
@@ -120,7 +120,7 @@ importers:
         version: 3.2.2(eslint@10.15.0(jiti@2.7.0))(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))
       '@scalar/api-reference':
         specifier: 1.78.1
-        version: 1.78.1(@oxc-project/types@0.156.0)(axios@1.20.0)(change-case@5.4.4)(lightningcss@1.33.0)(rolldown@1.2.19)(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(zod@4.6.7)
+        version: 1.78.1(@oxc-project/types@0.156.0)(axios@1.21.1)(change-case@5.4.4)(lightningcss@1.33.0)(rolldown@1.2.19)(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(zod@4.6.7)
       '@sveltejs/adapter-static':
         specifier: 4.0.1
         version: 4.0.1(@sveltejs/kit@3.2.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.3(@typescript-eslint/types@8.72.2))(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))(svelte@5.57.3(@typescript-eslint/types@8.72.2))(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1)))
@@ -264,17 +264,17 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@agora-js/media@4.24.9':
-    resolution: {integrity: sha512-DSgb87xdxJz/8YxqlK0ppV20mzDmfD+wCYiMdDtylq1iWZEC8Dp8MlwkBYepThkgYHINIO3Q03E8SONfc7uEiw==}
+  '@agora-js/media@4.24.10':
+    resolution: {integrity: sha512-dMkPZXJ/zF2mkiXAAEG6LvkGELTXcBnkQUtfZEQGBTC5Kn5G6Lbr65JXkqlVuzMMxUhoKnDhzh8lmOs8yl5Hdw==}
 
-  '@agora-js/protocol@4.24.9':
-    resolution: {integrity: sha512-ittT/FhBsa/vLs2k6S8PhAA4cBGhtCu41jPtgS94wrqzklXzroZcCmGxSk9YjdZLjKI2/1Zgcp2dUOMYzxcxzw==}
+  '@agora-js/protocol@4.24.10':
+    resolution: {integrity: sha512-GjAJyg8tVOUolY5KA+HufCkTOh+ICtY1VHrSJ/y7ovP/N4sNmJgAntkUyh9jVD9wu4tvuB3drVic0LA5q8MHgA==}
 
-  '@agora-js/report@4.24.9':
-    resolution: {integrity: sha512-57OWJ+F56fGYK6baKjW7Jm+QwJ1FS8S7AJ5GFG8s/v0myH5N5Jv7ry5MLAYgNgREMg4pbwy01GrMdVkePxa3Qw==}
+  '@agora-js/report@4.24.10':
+    resolution: {integrity: sha512-aWLFoQreOy/CqNH5Spi5+YaSwLvjHjtYi5xLPZILlXJmUBA4iMiLFIoasbyFk5apghXfdk/6qu8rtg/tF10bfQ==}
 
-  '@agora-js/shared@4.24.9':
-    resolution: {integrity: sha512-LbgD8XfwzRm6RdT/KezwX17gFT9ouiWvDCaPmZJ7Ww3fEUWkuLIYpdNpVmJwDpBjIe/IolhlIzyH/69mxM2tNA==}
+  '@agora-js/shared@4.24.10':
+    resolution: {integrity: sha512-aB3JI/xkJxfV6fm5U6/UOLTL6bSDz8G+JYaQoA4Pmmo+DNUD6mlQ27Wh5aVKlp2+Kw5BRb60TeXWdn+IX6E1eA==}
 
   '@ai-sdk/gateway@4.0.115':
     resolution: {integrity: sha512-Xn+gDWM4Ti2FzYmxhlZtjEuGBGZlOYaQMpwcVRSN4c9qCMUszD5F5TAbkxgLV/tHKeMfEX+WEuTCl6Kkj2r73A==}
@@ -1648,8 +1648,8 @@ packages:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
 
-  agora-rtc-sdk-ng@4.24.9:
-    resolution: {integrity: sha512-lfT0agcbxag3T4mfCam4e195NNJvzdcps2/s+xJadqcoHV8TdLuIxUcFnwHIQ6ZhrlDhQdlLRBRQXNhw98gPtg==}
+  agora-rtc-sdk-ng@4.24.10:
+    resolution: {integrity: sha512-kZLRENYEIDcpfWhy2PdxuafPSNbx12FFZz9H43WoFakEb3iZGCzlC6vkT0wL6ueD1mu57gkt4H/ttJL/9BAGaw==}
 
   agora-rte-extension-ng@1.0.3:
     resolution: {integrity: sha512-Gkh60IomlIrhq7ljDIy4zHgKEhfNx3c0Kto27wKCQp2wCabmHz9ucHT/7u9telUCA6YcNjnFMhenjdJx1JZeEA==}
@@ -1728,8 +1728,8 @@ packages:
     resolution: {integrity: sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==}
     engines: {node: '>= 4.0.0'}
 
-  axios@1.20.0:
-    resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
+  axios@1.21.1:
+    resolution: {integrity: sha512-6eI5Q/Y4u/Um9dDlsRoq5pY2rxnUTv+L4PpLitnbk/i4jb3MxLZ5CsN5Ih3IysbeRYK4pR+P7qfMsOQl9fwwFQ==}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -2212,8 +2212,8 @@ packages:
   focus-trap@8.2.4:
     resolution: {integrity: sha512-oy6dj7WZYgMbbpoOA29K5W++473F1zEzdI1oJgPb6x7yWT36YaWedUe6i6YPWEt5quSh0pRMohVyHLWXUxtdxg==}
 
-  follow-redirects@1.16.2:
-    resolution: {integrity: sha512-/kVP2U8z596Ia0gwFrwyIeo74ta5aVmSeU1FfAUMAmcEP5EP7zydmag3SLiN64NaRKef3lxsq7i/g7ltJQDGow==}
+  follow-redirects@1.16.3:
+    resolution: {integrity: sha512-toOSoqN6d51Wjf1aOFJYcoVv1aND9rj/CwjLU0Vz40oDuSpWDayCeKe4JpL5NL0WdFvoOOCI3BRo69HahjbR1A==}
     engines: {node: '>=4.0'}
     peerDependencies:
       debug: '*'
@@ -3292,8 +3292,8 @@ packages:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
     engines: {node: '>=v12.22.7'}
 
-  sdp@3.2.2:
-    resolution: {integrity: sha512-xZocWwfyp4hkbN4hLWxMjmv2Q8aNa9MhmOZ7L9aCZPT+dZsgRr6wZRrSYE3HTdyk/2pZKPSgqI7ns7Een1xMSA==}
+  sdp@3.2.3:
+    resolution: {integrity: sha512-UYuY3JFaVa7Zc+rxxi8iblwD7mdloGxCzMEQIJPcCLiHKjjqMqLsruMkI+emgnYARkfHk4o7seEETABc4bwokg==}
 
   semver@7.8.6:
     resolution: {integrity: sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==}
@@ -3954,23 +3954,23 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@agora-js/media@4.24.9':
+  '@agora-js/media@4.24.10':
     dependencies:
-      '@agora-js/report': 4.24.9
-      '@agora-js/shared': 4.24.9
+      '@agora-js/report': 4.24.10
+      '@agora-js/shared': 4.24.10
       agora-rte-extension: 1.2.4
       agora-rte-extension-ng: 1.0.3
-      axios: 1.20.0
+      axios: 1.21.1
       webrtc-adapter: 8.2.0
     transitivePeerDependencies:
       - debug
       - supports-color
 
-  '@agora-js/protocol@4.24.9':
+  '@agora-js/protocol@4.24.10':
     dependencies:
-      '@agora-js/media': 4.24.9
-      '@agora-js/report': 4.24.9
-      '@agora-js/shared': 4.24.9
+      '@agora-js/media': 4.24.10
+      '@agora-js/report': 4.24.10
+      '@agora-js/shared': 4.24.10
       '@bufbuild/protobuf': 2.10.1
       '@types/pako': 2.0.4
       pako: 2.2.0
@@ -3978,17 +3978,17 @@ snapshots:
       - debug
       - supports-color
 
-  '@agora-js/report@4.24.9':
+  '@agora-js/report@4.24.10':
     dependencies:
-      '@agora-js/shared': 4.24.9
-      axios: 1.20.0
+      '@agora-js/shared': 4.24.10
+      axios: 1.21.1
     transitivePeerDependencies:
       - debug
       - supports-color
 
-  '@agora-js/shared@4.24.9':
+  '@agora-js/shared@4.24.10':
     dependencies:
-      axios: 1.20.0
+      axios: 1.21.1
       ua-parser-js: 0.7.41
     transitivePeerDependencies:
       - debug
@@ -4875,10 +4875,10 @@ snapshots:
 
   '@rolldown/pluginutils@1.1.0': {}
 
-  '@scalar/agent-chat@0.12.52(axios@1.20.0)(change-case@5.4.4)(typescript@6.0.3)(zod@4.6.7)':
+  '@scalar/agent-chat@0.12.52(axios@1.21.1)(change-case@5.4.4)(typescript@6.0.3)(zod@4.6.7)':
     dependencies:
       '@ai-sdk/vue': 4.0.142(vue@3.5.45(typescript@6.0.3))(zod@4.6.7)
-      '@scalar/api-client': 3.25.1(axios@1.20.0)(change-case@5.4.4)(typescript@6.0.3)
+      '@scalar/api-client': 3.25.1(axios@1.21.1)(change-case@5.4.4)(typescript@6.0.3)
       '@scalar/components': 0.34.1(typescript@6.0.3)
       '@scalar/helpers': 0.18.0
       '@scalar/icons': 0.7.8(typescript@6.0.3)
@@ -4917,7 +4917,7 @@ snapshots:
       - universal-cookie
       - zod
 
-  '@scalar/api-client@3.25.1(axios@1.20.0)(change-case@5.4.4)(typescript@6.0.3)':
+  '@scalar/api-client@3.25.1(axios@1.21.1)(change-case@5.4.4)(typescript@6.0.3)':
     dependencies:
       '@headlessui/tailwindcss': 0.2.2
       '@headlessui/vue': 1.7.23(vue@3.5.45(typescript@6.0.3))
@@ -4938,7 +4938,7 @@ snapshots:
       '@scalar/use-toasts': 0.10.6(typescript@6.0.3)
       '@scalar/workspace-store': 0.71.1(typescript@6.0.3)
       '@vueuse/core': 15.0.0(vue@3.5.45(typescript@6.0.3))
-      '@vueuse/integrations': 15.0.0(axios@1.20.0)(change-case@5.4.4)(focus-trap@8.2.4)(fuse.js@7.5.0)(vue@3.5.45(typescript@6.0.3))
+      '@vueuse/integrations': 15.0.0(axios@1.21.1)(change-case@5.4.4)(focus-trap@8.2.4)(fuse.js@7.5.0)(vue@3.5.45(typescript@6.0.3))
       focus-trap: 8.2.4
       fuse.js: 7.5.0
       js-base64: 3.9.6
@@ -4969,11 +4969,11 @@ snapshots:
       - typescript
       - universal-cookie
 
-  '@scalar/api-reference@1.78.1(@oxc-project/types@0.156.0)(axios@1.20.0)(change-case@5.4.4)(lightningcss@1.33.0)(rolldown@1.2.19)(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(zod@4.6.7)':
+  '@scalar/api-reference@1.78.1(@oxc-project/types@0.156.0)(axios@1.21.1)(change-case@5.4.4)(lightningcss@1.33.0)(rolldown@1.2.19)(typescript@6.0.3)(vite@8.3.8(@types/node@24.19.2)(jiti@2.7.0)(yaml@2.9.1))(zod@4.6.7)':
     dependencies:
       '@headlessui/vue': 1.7.23(vue@3.5.45(typescript@6.0.3))
-      '@scalar/agent-chat': 0.12.52(axios@1.20.0)(change-case@5.4.4)(typescript@6.0.3)(zod@4.6.7)
-      '@scalar/api-client': 3.25.1(axios@1.20.0)(change-case@5.4.4)(typescript@6.0.3)
+      '@scalar/agent-chat': 0.12.52(axios@1.21.1)(change-case@5.4.4)(typescript@6.0.3)(zod@4.6.7)
+      '@scalar/api-client': 3.25.1(axios@1.21.1)(change-case@5.4.4)(typescript@6.0.3)
       '@scalar/asyncapi-to-markdown': 0.2.8(typescript@6.0.3)
       '@scalar/blocks': 0.7.1(typescript@6.0.3)
       '@scalar/code-highlight': 0.4.13
@@ -5692,13 +5692,13 @@ snapshots:
       '@vueuse/shared': 15.0.0(vue@3.5.45(typescript@6.0.3))
       vue: 3.5.45(typescript@6.0.3)
 
-  '@vueuse/integrations@15.0.0(axios@1.20.0)(change-case@5.4.4)(focus-trap@8.2.4)(fuse.js@7.5.0)(vue@3.5.45(typescript@6.0.3))':
+  '@vueuse/integrations@15.0.0(axios@1.21.1)(change-case@5.4.4)(focus-trap@8.2.4)(fuse.js@7.5.0)(vue@3.5.45(typescript@6.0.3))':
     dependencies:
       '@vueuse/core': 15.0.0(vue@3.5.45(typescript@6.0.3))
       '@vueuse/shared': 15.0.0(vue@3.5.45(typescript@6.0.3))
       vue: 3.5.45(typescript@6.0.3)
     optionalDependencies:
-      axios: 1.20.0
+      axios: 1.21.1
       change-case: 5.4.4
       focus-trap: 8.2.4
       fuse.js: 7.5.0
@@ -5736,15 +5736,15 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  agora-rtc-sdk-ng@4.24.9:
+  agora-rtc-sdk-ng@4.24.10:
     dependencies:
-      '@agora-js/media': 4.24.9
-      '@agora-js/protocol': 4.24.9
-      '@agora-js/report': 4.24.9
-      '@agora-js/shared': 4.24.9
+      '@agora-js/media': 4.24.10
+      '@agora-js/protocol': 4.24.10
+      '@agora-js/report': 4.24.10
+      '@agora-js/shared': 4.24.10
       agora-rte-extension: 1.2.4
       agora-rte-extension-ng: 1.0.3
-      axios: 1.20.0
+      axios: 1.21.1
       formdata-polyfill: 4.0.10
       pako: 2.2.0
       ua-parser-js: 0.7.41
@@ -5820,9 +5820,9 @@ snapshots:
 
   at-least-node@1.0.0: {}
 
-  axios@1.20.0:
+  axios@1.21.1:
     dependencies:
-      follow-redirects: 1.16.2
+      follow-redirects: 1.16.3
       form-data: 4.0.6
       https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
@@ -6275,7 +6275,7 @@ snapshots:
     dependencies:
       tabbable: 6.5.1
 
-  follow-redirects@1.16.2: {}
+  follow-redirects@1.16.3: {}
 
   form-data@4.0.6:
     dependencies:
@@ -7613,7 +7613,7 @@ snapshots:
     dependencies:
       xmlchars: 2.2.0
 
-  sdp@3.2.2: {}
+  sdp@3.2.3: {}
 
   semver@7.8.6: {}
 
@@ -8104,7 +8104,7 @@ snapshots:
 
   webrtc-adapter@8.2.0:
     dependencies:
-      sdp: 3.2.2
+      sdp: 3.2.3
 
   whatwg-mimetype@5.0.0: {}
 
