@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Lukas Körber
+# SPDX-License-Identifier: AGPL-3.0-only
+
+
+
+name: Dependabot lock files
+
+# Thin caller of the lockfiles workflow of lukislp/lktec-bot (docs/modules/lockfiles.md there).
+# On a Dependabot pull request it regenerates uv.lock and the hash-locked
+# .clusterfuzzlite/requirements.txt with the tool versions CI uses, and the App commits what
+# changed onto the pull request branch (signed by GitHub). Dependabot's own regeneration of the
+# fuzz requirements dropped the transitive setuptools pin once (#436), which broke the
+# ClusterFuzzLite build. Which files may be committed is set in .github/lktec-bot.yml on main
+# (modules.lockfiles).
+#
+# pull_request_target on purpose: the App id and key are ordinary Actions secrets, which a
+# pull_request run triggered by Dependabot does not see. The reusable workflow runs the pull
+# request's code only in a job without a secret.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: read # the reusable workflow reads which commit of itself the run uses
+
+jobs:
+  lockfiles:
+    uses: lukislp/lktec-bot/.github/workflows/lockfiles.yml@fdeb70dedce46ff4ac74a465d89ea1e8c4a8ba1e # v0.13.0
+    with:
+      # Same uv as CI (.github/workflows/ci.yml); the Python version of the fuzz requirements
+      # comes from --python-version in the file's header.
+      uv-version: "0.12.24"
+    secrets:
+      app-id: ${{ secrets.LKTEC_BOT_APP_ID }}
+      private-key: ${{ secrets.LKTEC_BOT_PRIVATE_KEY }}
