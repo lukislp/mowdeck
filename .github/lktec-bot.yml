@@ -26,6 +26,18 @@ modules:
     # tools/repo-checks/tests/test_dependabot.py.
     exclude: [pymammotion, pyworxcloud, aioautomower]
 
+  # Commits the lock files the lockfiles workflow regenerated for a Dependabot pull request
+  # (.github/workflows/dependabot-lockfiles.yml, docs/modules/lockfiles.md in lukislp/lktec-bot):
+  # uv.lock, and the hash-locked requirements of the ClusterFuzzLite image, recompiled with the
+  # command recorded in its header (docs/dev/fuzzing.md). Needs lktec-bot v0.13.0 or later in
+  # every caller workflow: older releases reject the uv-pip-compile key.
+  lockfiles:
+    enabled: true
+    ecosystems: [uv]
+    uv-pip-compile:
+      - input: .clusterfuzzlite/requirements.in
+        output: .clusterfuzzlite/requirements.txt
+
   # Tags and publishes a release from the Conventional Commits on the default branch (see
   # docs/modules/release.md in lukislp/lktec-bot). MowDeck stays on the 0.x line: a breaking
   # change is a minor release (docs/ops/release.md).

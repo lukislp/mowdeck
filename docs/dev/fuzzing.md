@@ -32,6 +32,8 @@ One module per target in `fuzz/`, each with the properties it checks in its docs
 
 `.clusterfuzzlite/` is the build: `Dockerfile` (the OSS-Fuzz Python builder pinned by digest, plus CPython 3.13 from uv because the workspace needs it; Atheris, PyInstaller and coverage come from `requirements.txt` with hashes), `build.sh` (installs the third-party dependencies of the fuzzed packages exactly as locked in `uv.lock`, builds one PyInstaller binary per target in parallel and zips its seeds) and `project.yaml`.
 
+`requirements.txt` is generated from `requirements.in` with `uv pip compile .clusterfuzzlite/requirements.in --generate-hashes --python-version 3.13 --python-platform x86_64-manylinux_2_28 -o .clusterfuzzlite/requirements.txt`, and its header records exactly that command. Keep it that way: on a Dependabot pull request, lktec-bot (`.github/workflows/dependabot-lockfiles.yml`, `modules.lockfiles.uv-pip-compile` in `.github/lktec-bot.yml`) recompiles the file with the recorded command and commits the result, because Dependabot's own regeneration once dropped the transitive `setuptools` pin (#436) and the hash-checked install failed. The bot only runs a header of the form `uv pip compile <input> [flags] -o <output>` with the configured input and output.
+
 `.github/workflows/fuzzing.yml` runs it:
 
 | Trigger | Mode | Budget |
