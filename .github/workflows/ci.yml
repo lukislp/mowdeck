@@ -72,7 +72,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: false
@@ -122,7 +122,7 @@ jobs:
           "$RUNNER_TEMP/actionlint"
       - name: shellcheck (CI scripts)
         run: shellcheck tools/repo-checks/scripts/*.sh
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -190,7 +190,7 @@ jobs:
       - &mirror-env
         name: Use the image mirror
         run: sh infra/mirror-env.sh | tee -a "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -314,7 +314,7 @@ jobs:
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -515,7 +515,7 @@ jobs:
           tar -xzf kubeconform.tar.gz -C "$RUNNER_TEMP/bin" kubeconform
           rm kubeconform.tar.gz
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -724,7 +724,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - *ghcr-login
       - *mirror-env
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
@@ -768,7 +768,7 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - *free-disk
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.24"
           enable-cache: true
