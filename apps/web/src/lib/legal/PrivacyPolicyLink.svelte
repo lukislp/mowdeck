@@ -17,9 +17,9 @@
 <div class="privacy" data-testid="privacy-policy">
   <p class="note">{m.privacy_policy_text()}</p>
   <a {href} target="_blank" rel="noopener noreferrer" data-testid="privacy-policy-link">
-    {m.privacy_policy_link()}<span class="arrow" aria-hidden="true">↗</span><span class="sr"
-      >({m.source_new_tab()})</span
-    >
+    {m.privacy_policy_link()}<span class="arrow" aria-hidden="true">↗</span><span class="sr">
+      ({m.source_new_tab()})
+    </span>
   </a>
 </div>
 

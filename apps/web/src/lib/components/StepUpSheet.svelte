@@ -43,8 +43,10 @@
       icon="key"
       pending={stepUp.busy}
       testid="stepup-passkey"
-      onclick={() => stepUp.withPasskey()}>{m.stepup_passkey()}</Button
+      onclick={() => stepUp.withPasskey()}
     >
+      {m.stepup_passkey()}
+    </Button>
     {#if stepUp.cancelledPasskey}
       <ProblemNotice tone="info" title={m.stepup_passkey_cancelled()} />
     {/if}
@@ -82,8 +84,10 @@
       icon="check"
       pending={stepUp.busy}
       disabled={!password}
-      testid="stepup-confirm">{m.stepup_confirm()}</Button
+      testid="stepup-confirm"
     >
+      {m.stepup_confirm()}
+    </Button>
   </form>
 </Sheet>
 

@@ -1542,8 +1542,10 @@
                   type="button"
                   class="chosen-act"
                   data-testid="spot-chip-open"
-                  onclick={() => (spotFlow.open = true)}>{m.spot_settings()}</button
+                  onclick={() => (spotFlow.open = true)}
                 >
+                  {m.spot_settings()}
+                </button>
               {/if}
               <button
                 type="button"
@@ -1700,8 +1702,10 @@
               icon="crosshair"
               disabled={spotFlow.active || spotFlow.running}
               onclick={openSpot}
-              testid="spot-open">{m.spot_open()}</Button
+              testid="spot-open"
             >
+              {m.spot_open()}
+            </Button>
             <span class="hint">{m.spot_open_hint()}</span>
           </div>
         {/if}
@@ -1712,12 +1716,14 @@
                 variant="primary"
                 icon="send"
                 onclick={() => openAssist('recover')}
-                testid="assist-open-recover">{m.vision_open_recover()}</Button
+                testid="assist-open-recover"
               >
+                {m.vision_open_recover()}
+              </Button>
             {:else}
-              <Button icon="dock" onclick={() => openAssist('find_dock')} testid="assist-open-dock"
-                >{m.vision_open_find_dock()}</Button
-              >
+              <Button icon="dock" onclick={() => openAssist('find_dock')} testid="assist-open-dock">
+                {m.vision_open_find_dock()}
+              </Button>
             {/if}
           </div>
         {/if}
@@ -1751,9 +1757,9 @@
             testid="readout-rtk"
           >
             {#if isPositionInexact(ms)}
-              <span class="hint inexact" data-testid="readout-rtk-inexact"
-                >{m.detail_rtk_inexact()}</span
-              >
+              <span class="hint inexact" data-testid="readout-rtk-inexact">
+                {m.detail_rtk_inexact()}
+              </span>
             {/if}
           </Readout>
           <Readout
@@ -1986,9 +1992,9 @@
             <div class="next-actions">
               <Button variant="ghost" href="/schedules" icon="calendar">{m.nav_schedules()}</Button>
               {#if canControl && !nextSchedule}
-                <Button variant="ghost" href="/schedules/new?mower={id}" icon="plus"
-                  >{m.sched_new()}</Button
-                >
+                <Button variant="ghost" href="/schedules/new?mower={id}" icon="plus">
+                  {m.sched_new()}
+                </Button>
               {/if}
             </div>
           </Panel>
@@ -2111,13 +2117,13 @@
             <ol class="recent">
               {#each recent as item (item.command_id)}
                 <li data-status={item.status}>
-                  <span class="kind"
-                    >{commandLabel(
+                  <span class="kind">
+                    {commandLabel(
                       item.kind as CommandKind,
                       item.end_job,
                       readPattern(item.pattern),
-                    )}</span
-                  >
+                    )}
+                  </span>
                   <span class="outcome">{outcomeLabel(outcomeOf(item.status))}</span>
                   <span class="when mono">{formatDateTime(item.issued_at)}</span>
                 </li>
@@ -2260,9 +2266,9 @@
             {:else if sheet.previewStale}
               {m.start_preview_outdated()}
             {:else if preview.kind === 'ready'}
-              <span class="mono"
-                >{m.start_preview_ready({ count: formatNumber(preview.path.points_total) })}</span
-              >
+              <span class="mono">
+                {m.start_preview_ready({ count: formatNumber(preview.path.points_total) })}
+              </span>
             {:else if preview.kind === 'error'}
               <span class="bad">{m.start_preview_failed({ reason: preview.reason })}</span>
             {:else}
@@ -2276,10 +2282,11 @@
               pending={preview.kind === 'loading'}
               onclick={() => sheet.computePreview()}
               testid="start-preview-path"
-              >{preview.kind === 'ready' && !sheet.previewStale
-                ? m.start_preview_again()
-                : m.start_preview_path()}</Button
             >
+              {preview.kind === 'ready' && !sheet.previewStale
+                ? m.start_preview_again()
+                : m.start_preview_path()}
+            </Button>
             <div class="start-go">
               <Button
                 variant="primary"
@@ -2289,12 +2296,13 @@
                 pending={sheet.starting}
                 onclick={() => sheet.startClick()}
                 testid="area-start"
-                >{sheet.starting
+              >
+                {sheet.starting
                   ? m.start_sending()
                   : warning && !sheet.rainConfirmed
                     ? m.start_rain_anyway()
-                    : m.area_picker_start({ count: sheet.picked.length })}</Button
-              >
+                    : m.area_picker_start({ count: sheet.picked.length })}
+              </Button>
             </div>
           </div>
         </div>
@@ -2340,8 +2348,10 @@
             variant={index === 0 ? 'primary' : undefined}
             icon="play"
             testid="start-plan-{plan.ref.replace(':', '-')}"
-            onclick={() => startPlan(plan)}>{planLabel(plan)}</Button
+            onclick={() => startPlan(plan)}
           >
+            {planLabel(plan)}
+          </Button>
         {/each}
         <Button variant="ghost" full onclick={() => (planChoice = false)}>{m.cancel()}</Button>
       </div>
@@ -2360,13 +2370,16 @@
           full
           icon="dock"
           testid="dock-choice-end"
-          onclick={() => sheet.dock(true)}>{m.dock_choice_end()}</Button
+          onclick={() => sheet.dock(true)}
         >
-        <Button full icon="dock" testid="dock-choice-keep" onclick={() => sheet.dock(false)}
-          >{m.dock_choice_keep()}</Button
-        >
-        <Button variant="ghost" full onclick={() => (sheet.dockChoice = false)}>{m.cancel()}</Button
-        >
+          {m.dock_choice_end()}
+        </Button>
+        <Button full icon="dock" testid="dock-choice-keep" onclick={() => sheet.dock(false)}>
+          {m.dock_choice_keep()}
+        </Button>
+        <Button variant="ghost" full onclick={() => (sheet.dockChoice = false)}>
+          {m.cancel()}
+        </Button>
       </div>
     </Sheet>
     <Sheet

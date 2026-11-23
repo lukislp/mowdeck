@@ -236,8 +236,10 @@
           type="submit"
           variant={focusPassword ? 'primary' : 'secondary'}
           pending={busy}
-          disabled={!current || !next}>{m.password_save()}</Button
+          disabled={!current || !next}
         >
+          {m.password_save()}
+        </Button>
       </div>
     </form>
   </DemoLock>

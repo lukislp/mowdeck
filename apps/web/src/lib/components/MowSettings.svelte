@@ -87,8 +87,9 @@
       aria-controls="start-settings-body"
       data-testid="start-settings-toggle"
       onclick={() => (expanded = !expanded)}
-      >{expanded ? m.start_settings_less() : m.start_settings_more()}</button
     >
+      {expanded ? m.start_settings_less() : m.start_settings_more()}
+    </button>
   </div>
   <p class="summary mono" data-testid="start-summary">{summary}</p>
 
@@ -107,8 +108,10 @@
               type="button"
               class="adjust"
               onclick={onadjust}
-              data-testid="start-setpoints-adjust">{m.start_setpoints_adjust()}</button
+              data-testid="start-setpoints-adjust"
             >
+              {m.start_setpoints_adjust()}
+            </button>
           {/if}
           <span class="hint small">{m.start_setpoints()}</span>
         </div>

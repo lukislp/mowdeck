@@ -210,34 +210,42 @@
           icon="signal"
           pending={flow.step === 'scanning'}
           testid="bridge-scan"
-          onclick={() => void flow.scan()}>{m.bridge_scan()}</Button
+          onclick={() => void flow.scan()}
         >
+          {m.bridge_scan()}
+        </Button>
       {:else if stage === 1}
         <Button
           variant="ghost"
           icon="back"
           disabled={busy}
           testid="bridge-back"
-          onclick={() => flow.back()}>{m.back()}</Button
+          onclick={() => flow.back()}
         >
+          {m.back()}
+        </Button>
         <Button
           variant="ghost"
           disabled={busy}
           testid="bridge-rescan"
-          onclick={() => void flow.scan()}>{m.bridge_rescan()}</Button
+          onclick={() => void flow.scan()}
         >
+          {m.bridge_rescan()}
+        </Button>
         <Button
           variant="primary"
           icon="check"
           pending={flow.step === 'saving'}
           disabled={flow.chosenDevice === null}
           testid="bridge-save"
-          onclick={() => void flow.save()}>{m.save()}</Button
+          onclick={() => void flow.save()}
         >
+          {m.save()}
+        </Button>
       {:else}
-        <Button variant="primary" testid="bridge-done" onclick={() => flow.close()}
-          >{m.bridge_done()}</Button
-        >
+        <Button variant="primary" testid="bridge-done" onclick={() => flow.close()}>
+          {m.bridge_done()}
+        </Button>
       {/if}
     </div>
   {/snippet}

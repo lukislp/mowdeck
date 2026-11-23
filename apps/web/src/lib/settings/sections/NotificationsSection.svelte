@@ -443,9 +443,9 @@
             referenceLabel={m.problem_reference()}
           />
         {/if}
-        <Button type="submit" variant="primary" pending={saving} testid="notif-save"
-          >{m.save()}</Button
-        >
+        <Button type="submit" variant="primary" pending={saving} testid="notif-save">
+          {m.save()}
+        </Button>
       </div>
     </form>
 
@@ -494,8 +494,10 @@
                       pending={pushBusy}
                       disabled={permission === 'denied'}
                       testid="push-enable"
-                      onclick={enablePush}>{m.notif_push_enable()}</Button
+                      onclick={enablePush}
                     >
+                      {m.notif_push_enable()}
+                    </Button>
                   </div>
                   <p class="quiet small">{m.notif_push_enable_hint()}</p>
                 {/if}
@@ -517,14 +519,14 @@
                       <span class="name">
                         {describeAgent(item.user_agent) ?? m.notif_push_unknown_device()}
                         {#if item.id === thisDevice}
-                          <span class="this" data-testid="push-this-device"
-                            >{m.notif_push_this()}</span
-                          >
+                          <span class="this" data-testid="push-this-device">
+                            {m.notif_push_this()}
+                          </span>
                         {/if}
                       </span>
-                      <span class="meta"
-                        >{item.endpoint_host} · {formatDateTime(item.created_at)}</span
-                      >
+                      <span class="meta">
+                        {item.endpoint_host} · {formatDateTime(item.created_at)}
+                      </span>
                     </span>
                     <Button
                       variant="ghost"
@@ -608,12 +610,14 @@
                   variant="primary"
                   pending={ntfyBusy}
                   disabled={!ntfyServer.trim() || !ntfyTopic.trim()}
-                  testid="ntfy-save">{m.save()}</Button
+                  testid="ntfy-save"
                 >
+                  {m.save()}
+                </Button>
                 {#if ntfy?.has_token}
-                  <Button variant="ghost" pending={ntfyBusy} onclick={() => saveNtfy(true)}
-                    >{m.notif_ntfy_clear_token()}</Button
-                  >
+                  <Button variant="ghost" pending={ntfyBusy} onclick={() => saveNtfy(true)}>
+                    {m.notif_ntfy_clear_token()}
+                  </Button>
                 {/if}
                 {#if ntfy}
                   <Button
@@ -621,8 +625,10 @@
                     icon="trash"
                     pending={ntfyBusy}
                     testid="ntfy-remove"
-                    onclick={removeNtfy}>{m.remove()}</Button
+                    onclick={removeNtfy}
                   >
+                    {m.remove()}
+                  </Button>
                 {/if}
               </div>
             </form>
@@ -638,8 +644,10 @@
                 pending={testBusy}
                 disabled={cooldown > 0}
                 testid="notif-test"
-                onclick={sendTest}>{m.notif_test_send()}</Button
+                onclick={sendTest}
               >
+                {m.notif_test_send()}
+              </Button>
             </div>
             {#if cooldown > 0}
               <p class="status" data-testid="notif-test-cooldown" role="status">

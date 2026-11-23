@@ -75,25 +75,30 @@
   </div>
   <ul class="links">
     <li>
-      <a href={links.apple} target="_blank" rel="noopener noreferrer" data-testid="{testid}-apple"
-        >{m.tracking_open_apple()}</a
-      >
+      <a href={links.apple} target="_blank" rel="noopener noreferrer" data-testid="{testid}-apple">
+        {m.tracking_open_apple()}
+      </a>
     </li>
     <li>
-      <a href={links.google} target="_blank" rel="noopener noreferrer" data-testid="{testid}-google"
-        >{m.tracking_open_google()}</a
+      <a
+        href={links.google}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="{testid}-google"
       >
+        {m.tracking_open_google()}
+      </a>
     </li>
     <li>
-      <a href={links.osm} target="_blank" rel="noopener noreferrer" data-testid="{testid}-osm"
-        >{m.tracking_open_osm()}</a
-      >
+      <a href={links.osm} target="_blank" rel="noopener noreferrer" data-testid="{testid}-osm">
+        {m.tracking_open_osm()}
+      </a>
     </li>
     {#if links.geo}
       <li>
-        <a href={links.geo} rel="noopener noreferrer" data-testid="{testid}-geo"
-          >{m.tracking_open_maps()}</a
-        >
+        <a href={links.geo} rel="noopener noreferrer" data-testid="{testid}-geo">
+          {m.tracking_open_maps()}
+        </a>
       </li>
     {/if}
   </ul>

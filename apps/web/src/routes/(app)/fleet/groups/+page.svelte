@@ -206,8 +206,9 @@
     <h2>{m.groups_empty_title()}</h2>
     <p class="quiet">{m.groups_empty_body()}</p>
     {#if canCreate}
-      <Button variant="primary" icon="plus" onclick={() => openSheet(null)}>{m.groups_add()}</Button
-      >
+      <Button variant="primary" icon="plus" onclick={() => openSheet(null)}>
+        {m.groups_add()}
+      </Button>
     {/if}
   </section>
 {:else}
@@ -226,19 +227,19 @@
                 : m.groups_cross_site()}
             </span>
           </div>
-          <span class="readout"
-            ><span class="value mono">{formatNumber(list.length)}</span>
-            <span class="unit">{m.sites_mowers()}</span></span
-          >
+          <span class="readout">
+            <span class="value mono">{formatNumber(list.length)}</span>
+            <span class="unit">{m.sites_mowers()}</span>
+          </span>
         </div>
         {#if list.length}
           <ul class="chips" aria-label={m.groups_members()} data-testid="group-members-{group.id}">
             {#each list as mower (mower.id)}
               <li>
-                <a href="/mowers/{mower.id}" class="chip"
-                  ><Icon name="mower" size={16} />{mower.name}
-                  <span class="chip-site">{siteName.get(mower.site_id) ?? ''}</span></a
-                >
+                <a href="/mowers/{mower.id}" class="chip">
+                  <Icon name="mower" size={16} />{mower.name}
+                  <span class="chip-site">{siteName.get(mower.site_id) ?? ''}</span>
+                </a>
               </li>
             {/each}
           </ul>
@@ -250,21 +251,27 @@
             <Button
               icon="pause"
               testid="group-pause-{group.id}"
-              onclick={() => (bulk = { kind: 'pause_mow', group })}>{m.bulk_pause_all()}</Button
+              onclick={() => (bulk = { kind: 'pause_mow', group })}
             >
+              {m.bulk_pause_all()}
+            </Button>
             <Button
               icon="dock"
               testid="group-dock-{group.id}"
-              onclick={() => (bulk = { kind: 'return_to_dock', group })}>{m.bulk_dock_all()}</Button
+              onclick={() => (bulk = { kind: 'return_to_dock', group })}
             >
+              {m.bulk_dock_all()}
+            </Button>
           {/if}
           {#if right.manage}
             <Button
               variant="ghost"
               icon="users"
               testid="group-members-edit-{group.id}"
-              onclick={() => (membersOf = group)}>{m.groups_edit_members()}</Button
+              onclick={() => (membersOf = group)}
             >
+              {m.groups_edit_members()}
+            </Button>
             <Button
               variant="ghost"
               icon="settings"
@@ -274,9 +281,9 @@
             />
           {/if}
           {#if canSchedule}
-            <Button variant="ghost" icon="calendar" href="/schedules/new?group={group.id}"
-              >{m.groups_schedule()}</Button
-            >
+            <Button variant="ghost" icon="calendar" href="/schedules/new?group={group.id}">
+              {m.groups_schedule()}
+            </Button>
           {/if}
           {#if right.manage}
             <Button
@@ -284,8 +291,9 @@
               icon="trash"
               testid="group-delete-{group.id}"
               onclick={() => remove(group)}
-              >{confirmDelete === group.id ? m.sites_delete_confirm() : m.sites_delete()}</Button
             >
+              {confirmDelete === group.id ? m.sites_delete_confirm() : m.sites_delete()}
+            </Button>
           {/if}
         </div>
       </li>
@@ -336,8 +344,10 @@
       icon="check"
       pending={saving}
       testid="group-form-save"
-      onclick={save}>{m.save()}</Button
+      onclick={save}
     >
+      {m.save()}
+    </Button>
   {/snippet}
 </Sheet>
 
@@ -362,9 +372,9 @@
             data-testid="member-{mower.id}"
             onclick={() => toggle(mower.id, group, !member)}
           >
-            <span class="box" aria-hidden="true"
-              >{#if member}<Icon name="check" size={16} />{/if}</span
-            >
+            <span class="box" aria-hidden="true">
+              {#if member}<Icon name="check" size={16} />{/if}
+            </span>
             <span class="who">
               <span class="name">{mower.name}</span>
               <span class="meta">{siteName.get(mower.site_id) ?? ''}</span>

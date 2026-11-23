@@ -48,11 +48,11 @@
     <div class="state">
       <PlanStatusBadge status={plan.status} testid="plan-status" />
       {#if until}
-        <span class="until"
-          >{plan.status === 'trial'
+        <span class="until">
+          {plan.status === 'trial'
             ? m.plan_trial_until({ date: formatDate(until) })
-            : m.plan_grace_until({ date: formatDate(until) })}</span
-        >
+            : m.plan_grace_until({ date: formatDate(until) })}
+        </span>
       {:else if plan.since}
         <span class="until">{m.plan_since({ date: formatDate(plan.since) })}</span>
       {/if}

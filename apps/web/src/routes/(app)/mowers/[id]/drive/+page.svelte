@@ -520,9 +520,9 @@
 
   {#snippet sessionButton()}
     {#if live}
-      <Button variant="danger" full icon="stop" testid="drive-stop" onclick={end}
-        >{m.drive_stop()}</Button
-      >
+      <Button variant="danger" full icon="stop" testid="drive-stop" onclick={end}>
+        {m.drive_stop()}
+      </Button>
     {:else}
       <Button
         variant="primary"
@@ -531,8 +531,10 @@
         pending={starting}
         disabled={!canStart}
         testid="drive-start"
-        onclick={() => void start()}>{m.drive_start()}</Button
+        onclick={() => void start()}
       >
+        {m.drive_start()}
+      </Button>
     {/if}
   {/snippet}
 
@@ -704,10 +706,11 @@
                 data-testid="drive-camera-both"
                 aria-label={m.drive_camera_both()}
                 onclick={toggleBoth}
-                ><Icon name="camera" size={16} /><span class="tool-text"
-                  >{m.drive_camera_both()}</span
-                ></button
               >
+                <Icon name="camera" size={16} /><span class="tool-text">
+                  {m.drive_camera_both()}
+                </span>
+              </button>
             {/if}
             {#if lightShown}
               <div class="light-slot">
@@ -758,9 +761,9 @@
             </span>
           {/if}
           {#if armed && bladesOn}
-            <button type="button" class="blades-on" data-testid="drive-hud-blades" onclick={disarm}
-              ><Icon name="blade" size={14} />{m.drive_blades_disarm()}</button
-            >
+            <button type="button" class="blades-on" data-testid="drive-hud-blades" onclick={disarm}>
+              <Icon name="blade" size={14} />{m.drive_blades_disarm()}
+            </button>
           {/if}
         </div>
       {/if}
@@ -852,8 +855,9 @@
                   disabled={!live || session?.bladeOnAllowed !== true || pilotHeld}
                   testid="drive-blades-arm"
                   onclick={() => (armed ? disarm() : (armed = true))}
-                  >{armed ? m.drive_blades_disarm() : m.drive_blades_arm()}</Button
                 >
+                  {armed ? m.drive_blades_disarm() : m.drive_blades_arm()}
+                </Button>
               </div>
               <Switch
                 id="drive-blades"

@@ -108,8 +108,10 @@
         pending={busy}
         disabled={siteId === mower.site_id}
         testid="placement-move"
-        onclick={move}>{m.sites_move()}</Button
+        onclick={move}
       >
+        {m.sites_move()}
+      </Button>
     </div>
   </DemoLock>
   {#if groups.length}
@@ -126,9 +128,9 @@
             data-testid="placement-group-{group.id}"
             onclick={() => toggle(group, !member)}
           >
-            <span class="box" aria-hidden="true"
-              >{#if member}<Icon name="check" size={16} />{/if}</span
-            >
+            <span class="box" aria-hidden="true">
+              {#if member}<Icon name="check" size={16} />{/if}
+            </span>
             <span class="who">
               <span class="name">{group.name}</span>
               <span class="meta">

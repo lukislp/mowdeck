@@ -187,9 +187,9 @@
         </a>
       {/if}
       <a href={SCRIPTING_GUIDE_URL} rel="external noopener" target="_blank" data-testid="pat-guide">
-        <Icon name="route" size={16} /><span>{m.pat_docs_guide()}</span><span aria-hidden="true"
-          >↗</span
-        >
+        <Icon name="route" size={16} /><span>{m.pat_docs_guide()}</span><span aria-hidden="true">
+          ↗
+        </span>
       </a>
       <a
         href={API_REFERENCE_URL}
@@ -197,9 +197,9 @@
         target="_blank"
         data-testid="pat-reference"
       >
-        <Icon name="list" size={16} /><span>{m.pat_docs_reference()}</span><span aria-hidden="true"
-          >↗</span
-        >
+        <Icon name="list" size={16} /><span>{m.pat_docs_reference()}</span><span aria-hidden="true">
+          ↗
+        </span>
       </a>
     </nav>
   </div>
@@ -229,8 +229,10 @@
         variant="primary"
         icon={copied === 'secret' ? 'check' : 'copy'}
         onclick={() => copy(created?.value ?? '', 'secret')}
-        testid="pat-secret-copy">{copied === 'secret' ? m.copied() : m.copy()}</Button
+        testid="pat-secret-copy"
       >
+        {copied === 'secret' ? m.copied() : m.copy()}
+      </Button>
     </div>
     <div class="quick">
       <span class="label">{m.pat_quickstart()}</span>
@@ -239,11 +241,13 @@
         <Button
           variant="ghost"
           icon={copied === 'example' ? 'check' : 'copy'}
-          onclick={() => copy(example, 'example')}>{m.pat_quickstart_copy()}</Button
+          onclick={() => copy(example, 'example')}
         >
-        <Button variant="ghost" icon="close" onclick={dismiss} testid="pat-secret-dismiss"
-          >{m.close()}</Button
-        >
+          {m.pat_quickstart_copy()}
+        </Button>
+        <Button variant="ghost" icon="close" onclick={dismiss} testid="pat-secret-dismiss">
+          {m.close()}
+        </Button>
       </div>
     </div>
   </section>
@@ -276,9 +280,9 @@
               {@render scopeChips(token.scopes)}
             </span>
             <span class="life">
-              <span class="meter" aria-hidden="true"
-                ><span style:inline-size="{left * 100}%"></span></span
-              >
+              <span class="meter" aria-hidden="true">
+                <span style:inline-size="{left * 100}%"></span>
+              </span>
               <span class="mono" data-testid="pat-expiry">{expiryLabel(token)}</span>
               <span class="mono">
                 {m.pat_last_used()}
@@ -289,8 +293,10 @@
               variant="danger"
               testid="pat-revoke"
               label={m.pat_revoke_named({ name: token.name })}
-              onclick={() => revoke(token)}>{m.pat_revoke()}</Button
+              onclick={() => revoke(token)}
             >
+              {m.pat_revoke()}
+            </Button>
           </li>
         {/each}
       </ul>
@@ -348,9 +354,9 @@
                 onchange={(event) =>
                   (scopes = toggleScope(scopes, key, event.currentTarget.checked))}
               />
-              <span class="scope-num mono" aria-hidden="true"
-                >{String(index + 1).padStart(2, '0')}</span
-              >
+              <span class="scope-num mono" aria-hidden="true">
+                {String(index + 1).padStart(2, '0')}
+              </span>
               <span class="scope-name">{scopeName(key)}</span>
               <code class="scope-key">{key}</code>
               <span class="scope-hint">{scopeHint(key)}</span>
@@ -392,8 +398,10 @@
           icon="key"
           pending={busy}
           disabled={!name.trim() || scopes.length === 0}
-          testid="pat-create">{m.pat_create()}</Button
+          testid="pat-create"
         >
+          {m.pat_create()}
+        </Button>
         <span class="hint"><Icon name="shield" size={16} />{m.pat_stepup_note()}</span>
       </div>
     </form>

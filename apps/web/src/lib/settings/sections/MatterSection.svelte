@@ -149,8 +149,10 @@
             expanded={!!open}
             pending={busy === mower.mower_id && confirming !== mower.mower_id}
             onclick={() => toggle(mower)}
-            testid="matter-show-code">{open ? m.matter_hide_code() : m.matter_show_code()}</Button
+            testid="matter-show-code"
           >
+            {open ? m.matter_hide_code() : m.matter_show_code()}
+          </Button>
           <span class="spacer"></span>
           <Button
             variant="danger"
@@ -158,8 +160,9 @@
             pending={busy === mower.mower_id && confirming === mower.mower_id}
             onclick={() => reset(mower)}
             testid={confirming === mower.mower_id ? 'matter-reset-confirm' : 'matter-reset'}
-            >{confirming === mower.mower_id ? m.matter_reset_confirm() : m.matter_reset()}</Button
           >
+            {confirming === mower.mower_id ? m.matter_reset_confirm() : m.matter_reset()}
+          </Button>
           {#if confirming === mower.mower_id && busy !== mower.mower_id}
             <Button variant="ghost" onclick={() => (confirming = null)}>{m.cancel()}</Button>
           {/if}
@@ -190,9 +193,9 @@
             <div class="code">
               <span class="label">{m.matter_manual_code()}</span>
               <span class="digits" data-testid="matter-code">{open.manual_code}</span>
-              <Button variant="ghost" icon="copy" onclick={() => copy(open.manual_code)}
-                >{m.matter_copy()}</Button
-              >
+              <Button variant="ghost" icon="copy" onclick={() => copy(open.manual_code)}>
+                {m.matter_copy()}
+              </Button>
               <ol class="steps">
                 <li>{m.matter_step_add()}</li>
                 <li>{m.matter_step_scan()}</li>

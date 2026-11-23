@@ -138,14 +138,15 @@
           {/if}
         </span>
         <!-- The server's English detail only where the badge alone does not explain the run. -->
-        <span class="details" role="cell"
-          >{#if run.outcome === 'failed'}{run.details ?? ''}{:else if run.angle_deg != null}<span
+        <span class="details" role="cell">
+          {#if run.outcome === 'failed'}{run.details ?? ''}{:else if run.angle_deg != null}<span
               class="run-angle"
               data-testid="run-angle"
-              ><span class="stripes" style:transform="rotate({-run.angle_deg}deg)"
-              ></span>{m.sched_run_angle({ angle: angleText(run.angle_deg, formatNumber) })}</span
-            >{/if}</span
-        >
+            >
+              <span class="stripes" style:transform="rotate({-run.angle_deg}deg)"
+              ></span>{m.sched_run_angle({ angle: angleText(run.angle_deg, formatNumber) })}
+            </span>{/if}
+        </span>
         <span role="cell" class="command">
           {#if run.command_id && run.mower_id}
             <a

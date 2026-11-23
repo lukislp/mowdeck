@@ -221,9 +221,9 @@
         <span class="mono">{provider.hosted_model}</span>
       {:else if provider?.effective === 'none'}
         <span class="label">{m.vision_provider_none()}</span>
-        <a class="link" href={PROVIDER_SETTINGS_ROUTE} data-testid="assist-provider-settings"
-          >{m.vision_provider_settings()}</a
-        >
+        <a class="link" href={PROVIDER_SETTINGS_ROUTE} data-testid="assist-provider-settings">
+          {m.vision_provider_settings()}
+        </a>
       {:else if assist.providerProblem}
         <span class="label">{m.vision_provider_unknown()}</span>
       {:else}
@@ -244,9 +244,9 @@
         referenceLabel={m.problem_reference()}
       />
       {#if assist.providerMissing}
-        <Button href={PROVIDER_SETTINGS_ROUTE} icon="settings" testid="assist-open-settings"
-          >{m.vision_provider_settings()}</Button
-        >
+        <Button href={PROVIDER_SETTINGS_ROUTE} icon="settings" testid="assist-open-settings">
+          {m.vision_provider_settings()}
+        </Button>
       {/if}
     {/if}
 
@@ -335,11 +335,11 @@
                 <span class="option-head">
                   <span class="option-title">{actionTitle(option.action)}</span>
                   {#if option.low_confidence}
-                    <span class="low-mark mono"
-                      >{m.vision_low_confidence_mark()} · {formatNumber(
+                    <span class="low-mark mono">
+                      {m.vision_low_confidence_mark()} · {formatNumber(
                         confidencePercent(option.confidence ?? 0),
-                      )} %</span
-                    >
+                      )} %
+                    </span>
                   {:else if option.option === 'fallback'}
                     <span class="fallback-mark mono">{m.vision_fallback_mark()}</span>
                   {/if}
@@ -378,11 +378,11 @@
           {#if proposal.fallback}
             <p class="fallback-note" data-testid="assist-fallback">
               <span class="fallback-mark mono">{m.vision_fallback_mark()}</span>
-              <span
-                >{fallbackReason(proposal) === 'none'
+              <span>
+                {fallbackReason(proposal) === 'none'
                   ? m.vision_fallback_hint()
-                  : m.vision_fallback_hint_refused()}</span
-              >
+                  : m.vision_fallback_hint_refused()}
+              </span>
             </p>
             {#if proposal.model_refused && assessment}
               <p class="refused-note" data-testid="assist-model-refused">
@@ -566,8 +566,9 @@
           disabled={provider?.effective === 'none'}
           onclick={start}
           testid="assist-start"
-          >{task === 'find_dock' ? m.vision_start_find_dock() : m.vision_start_recover()}</Button
         >
+          {task === 'find_dock' ? m.vision_start_find_dock() : m.vision_start_recover()}
+        </Button>
       {:else if assist.view === 'proposed'}
         <Button
           variant="primary"
@@ -576,24 +577,30 @@
           pending={assist.busy === 'approve'}
           disabled={assist.busy !== null}
           onclick={approve}
-          testid="assist-approve">{approveLabel(shownAction)}</Button
+          testid="assist-approve"
         >
+          {approveLabel(shownAction)}
+        </Button>
         <Button
           full
           icon="close"
           pending={assist.busy === 'reject'}
           disabled={assist.busy !== null}
           onclick={() => assist.reject()}
-          testid="assist-reject">{m.vision_reject()}</Button
+          testid="assist-reject"
         >
+          {m.vision_reject()}
+        </Button>
       {:else if assist.view === 'executing'}
         <Button
           full
           icon="stop"
           pending={assist.busy === 'reject'}
           onclick={() => assist.reject()}
-          testid="assist-cancel">{m.vision_cancel()}</Button
+          testid="assist-cancel"
         >
+          {m.vision_cancel()}
+        </Button>
       {:else if assist.view === 'outcome'}
         {#if autoWithoutPhoto}
           <Button
@@ -601,8 +608,10 @@
             full
             icon="send"
             onclick={() => assist.fresh()}
-            testid="assist-start-by-hand">{m.vision_start_by_hand()}</Button
+            testid="assist-start-by-hand"
           >
+            {m.vision_start_by_hand()}
+          </Button>
         {/if}
         {#if assist.canRetry}
           <Button
@@ -611,8 +620,10 @@
             icon="send"
             pending={assist.busy === 'retry'}
             onclick={retry}
-            testid="assist-retry">{m.vision_retry()}</Button
+            testid="assist-retry"
           >
+            {m.vision_retry()}
+          </Button>
         {/if}
         <Button full icon="close" onclick={onclose} testid="assist-done">{m.close()}</Button>
       {/if}

@@ -162,9 +162,9 @@
             {:else if name === 'random_angle'}
               <path class="lane" d="M-8 3 L-2 -7 M-6 8 L7 -3 M1 8 L8 2" />
             {:else}
-              <clipPath id="{prefix}-clip-{name}"
-                ><rect x="-9" y="-9" width="18" height="18" /></clipPath
-              >
+              <clipPath id="{prefix}-clip-{name}">
+                <rect x="-9" y="-9" width="18" height="18" />
+              </clipPath>
               <g clip-path="url(#{prefix}-clip-{name})">
                 <g transform="rotate({glyphAngle(name)})">
                   <path class="lane" d="M-14 -6 H14 M-14 0 H14 M-14 6 H14" />
@@ -199,8 +199,10 @@
             class="nudge"
             aria-label={m.start_angle_lower()}
             disabled={draft.angle !== null && draft.angle <= 0}
-            onclick={() => turn(-1)}>−</button
+            onclick={() => turn(-1)}
           >
+            −
+          </button>
           <output class="value" data-value={draft.angle ?? ''} aria-live="polite">
             {#if draft.angle === null}
               <span class="auto">{m.start_option_default()}</span>
@@ -213,8 +215,10 @@
             class="nudge"
             aria-label={m.start_angle_raise()}
             disabled={draft.angle !== null && draft.angle >= ANGLE_MAX}
-            onclick={() => turn(1)}>+</button
+            onclick={() => turn(1)}
           >
+            +
+          </button>
         </div>
         {#if unset && draft.angle !== null}
           {@render own(true, () => (draft = { ...draft, angle: null }))}
@@ -234,8 +238,10 @@
           class="nudge"
           aria-label={m.start_laps_fewer()}
           disabled={draft.laps !== null && draft.laps <= lapsFloor}
-          onclick={() => laps(-1)}>−</button
+          onclick={() => laps(-1)}
         >
+          −
+        </button>
         <output class="value" data-value={draft.laps ?? ''} aria-live="polite">
           {#if draft.laps === null}
             <span class="auto">{m.start_option_default()}</span>
@@ -248,8 +254,10 @@
           class="nudge"
           aria-label={m.start_laps_more()}
           disabled={draft.laps !== null && draft.laps >= BORDER_LAPS_MAX}
-          onclick={() => laps(1)}>+</button
+          onclick={() => laps(1)}
         >
+          +
+        </button>
       </div>
       {#if unset && draft.laps !== null}
         {@render own(true, () => (draft = { ...draft, laps: null }))}
@@ -269,8 +277,10 @@
             class="nudge"
             aria-label={m.start_spacing_narrower()}
             disabled={draft.spacingMm !== null && draft.spacingMm <= spacing[0]}
-            onclick={() => space(-1)}>−</button
+            onclick={() => space(-1)}
           >
+            −
+          </button>
           <output class="value" data-value={draft.spacingMm ?? ''} aria-live="polite">
             {#if draft.spacingMm === null}
               <span class="auto">{m.start_spacing_default()}</span>
@@ -283,8 +293,10 @@
             class="nudge"
             aria-label={m.start_spacing_wider()}
             disabled={draft.spacingMm !== null && draft.spacingMm >= spacing[1]}
-            onclick={() => space(1)}>+</button
+            onclick={() => space(1)}
           >
+            +
+          </button>
         </div>
         <span class="range mono">
           {formatNumber(spacing[0] / 10)}–{formatNumber(spacing[1] / 10)}
@@ -294,8 +306,9 @@
               type="button"
               class="reset"
               onclick={() => (draft = { ...draft, spacingMm: null })}
-              >{m.start_spacing_reset()}</button
             >
+              {m.start_spacing_reset()}
+            </button>
           {/if}
         </span>
       </div>
@@ -391,20 +404,21 @@
                   data-value={mode}
                   data-testid="{prefix}-obstacle-{mode}"
                   onclick={() => setOptions({ detection: opts.detection === mode ? null : mode })}
-                  >{obstacleLabel(mode)}</button
                 >
+                  {obstacleLabel(mode)}
+                </button>
               {/each}
             </div>
             <span class="range">
               {#if opts.detection === null}
                 <span class="auto">{m.start_option_default()}</span>
               {:else}
-                <span
-                  >{opts.detection === 'sensitive' ? m.start_obstacle_hint_sensitive() : ''}</span
-                >
-                <button type="button" class="reset" onclick={() => setOptions({ detection: null })}
-                  >{m.start_option_reset()}</button
-                >
+                <span>
+                  {opts.detection === 'sensitive' ? m.start_obstacle_hint_sensitive() : ''}
+                </span>
+                <button type="button" class="reset" onclick={() => setOptions({ detection: null })}>
+                  {m.start_option_reset()}
+                </button>
               {/if}
             </span>
           </div>
@@ -422,8 +436,9 @@
                   data-value={order}
                   data-testid="{prefix}-order-{order}"
                   onclick={() => setOptions({ order: opts.order === order ? null : order })}
-                  >{orderLabel(order)}</button
                 >
+                  {orderLabel(order)}
+                </button>
               {/each}
             </div>
             {@render own(opts.order !== null, () => setOptions({ order: null }))}
@@ -447,8 +462,9 @@
                   disabled={opts.obstacleLaps !== null && opts.obstacleLaps <= limits[0]}
                   onclick={() =>
                     setOptions({ obstacleLaps: stepObstacleLaps(opts.obstacleLaps, -1, limits) })}
-                  >−</button
                 >
+                  −
+                </button>
                 <output class="value" data-value={opts.obstacleLaps ?? ''} aria-live="polite">
                   {#if opts.obstacleLaps === null}
                     <span class="auto">{m.start_option_default()}</span>
@@ -463,8 +479,9 @@
                   disabled={opts.obstacleLaps !== null && opts.obstacleLaps >= limits[1]}
                   onclick={() =>
                     setOptions({ obstacleLaps: stepObstacleLaps(opts.obstacleLaps, 1, limits) })}
-                  >+</button
                 >
+                  +
+                </button>
               </div>
               {#if opts.obstacleLaps !== null}
                 {@render own(true, () => setOptions({ obstacleLaps: null }))}
@@ -487,19 +504,21 @@
                   aria-label={m.start_progress_lower()}
                   disabled={opts.progress <= limits[0]}
                   onclick={() => setOptions({ progress: stepProgress(opts.progress, -1, limits) })}
-                  >−</button
                 >
-                <output class="value" data-value={opts.progress} aria-live="polite"
-                  >{formatPercent(opts.progress)}</output
-                >
+                  −
+                </button>
+                <output class="value" data-value={opts.progress} aria-live="polite">
+                  {formatPercent(opts.progress)}
+                </output>
                 <button
                   type="button"
                   class="nudge"
                   aria-label={m.start_progress_raise()}
                   disabled={opts.progress >= limits[1]}
                   onclick={() => setOptions({ progress: stepProgress(opts.progress, 1, limits) })}
-                  >+</button
                 >
+                  +
+                </button>
               </div>
               <span class="meter" style:--progress="{opts.progress}%" aria-hidden="true"></span>
             </div>

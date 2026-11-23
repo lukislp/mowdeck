@@ -138,8 +138,10 @@
               aria-checked={option.value === pickerValue}
               data-value={option.value}
               data-testid={pickTestid(option.value)}
-              onclick={() => pick(option.value)}>{option.label}</button
+              onclick={() => pick(option.value)}
             >
+              {option.label}
+            </button>
           {/each}
         </div>
       {/if}

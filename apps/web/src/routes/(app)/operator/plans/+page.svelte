@@ -110,9 +110,9 @@
           <div class="marks">
             {#if plan.is_default}<span class="mark">{m.op_plan_default()}</span>{/if}
             {#if plan.trial_days > 0}
-              <span class="mark quiet-mark"
-                >{m.op_plan_trial_days({ days: formatNumber(plan.trial_days) })}</span
-              >
+              <span class="mark quiet-mark">
+                {m.op_plan_trial_days({ days: formatNumber(plan.trial_days) })}
+              </span>
             {/if}
           </div>
         </div>
@@ -165,8 +165,10 @@
             variant="ghost"
             icon="settings"
             href="/operator/plans/edit?key={encodeURIComponent(plan.key)}"
-            testid="plan-edit-{plan.key}">{m.op_plan_edit()}</Button
+            testid="plan-edit-{plan.key}"
           >
+            {m.op_plan_edit()}
+          </Button>
         </div>
       </li>
     {/each}

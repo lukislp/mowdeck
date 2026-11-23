@@ -95,9 +95,9 @@
     <div>
       <dt>{m.bs_fw_available()}</dt>
       <dd class="mono" data-testid="bs-fw-available">
-        {#if info?.available}{info.available}{:else}<span class="dim"
-            >{info ? m.bs_fw_none() : m.no_data()}</span
-          >{/if}
+        {#if info?.available}{info.available}{:else}<span class="dim">
+            {info ? m.bs_fw_none() : m.no_data()}
+          </span>{/if}
       </dd>
     </div>
   </dl>
@@ -138,16 +138,20 @@
         pending={checking}
         disabled={relays.length === 0}
         testid="bs-fw-check"
-        onclick={oncheck}>{m.bs_fw_check()}</Button
+        onclick={oncheck}
       >
+        {m.bs_fw_check()}
+      </Button>
       {#if offered}
         <Button
           variant="primary"
           icon="download"
           disabled={shownBlocker !== null}
           testid="bs-fw-install"
-          onclick={open}>{m.bs_fw_install()}</Button
+          onclick={open}
         >
+          {m.bs_fw_install()}
+        </Button>
       {/if}
     </DemoLock>
   </div>
@@ -189,8 +193,10 @@
         icon="download"
         disabled={chosenBlocker !== null}
         testid="bs-fw-go"
-        onclick={install}>{m.bs_fw_go()}</Button
+        onclick={install}
       >
+        {m.bs_fw_go()}
+      </Button>
     </div>
   {/snippet}
 </Sheet>

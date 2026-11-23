@@ -89,8 +89,10 @@
       class="nudge"
       aria-label={decreaseLabel}
       disabled={disabled || shown === null || shown <= min}
-      onclick={() => nudge(-1)}>−</button
+      onclick={() => nudge(-1)}
     >
+      −
+    </button>
     <output
       class="value"
       {id}
@@ -106,8 +108,10 @@
       class="nudge"
       aria-label={increaseLabel}
       disabled={disabled || (shown !== null && shown >= max)}
-      onclick={() => nudge(1)}>+</button
+      onclick={() => nudge(1)}
     >
+      +
+    </button>
   </div>
   <div class="scale" aria-hidden="true">
     <span class="fill" style:inline-size="{position * 100}%"></span>

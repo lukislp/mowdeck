@@ -104,12 +104,12 @@
   <div class="empty" data-testid="bridge-empty">
     <p class="hint">{m.bridge_empty()}</p>
     <div class="row">
-      <Button variant="primary" icon="plus" testid="bridge-add" onclick={onadd}
-        >{m.bridge_add()}</Button
-      >
-      <a class="guide" href={BRIDGE_GUIDE_URL} target="_blank" rel="noopener noreferrer"
-        >{m.bridge_guide()}</a
-      >
+      <Button variant="primary" icon="plus" testid="bridge-add" onclick={onadd}>
+        {m.bridge_add()}
+      </Button>
+      <a class="guide" href={BRIDGE_GUIDE_URL} target="_blank" rel="noopener noreferrer">
+        {m.bridge_guide()}
+      </a>
     </div>
   </div>
 {:else}
@@ -133,9 +133,9 @@
       {/if}
       {#if firmware}
         <span class="chip mono" data-testid="bridge-firmware">
-          {m.bridge_firmware({ version: firmware })}{#if compiled}<span class="dim"
-              >&nbsp;· {m.bridge_compiled({ date: compiled })}</span
-            >{/if}
+          {m.bridge_firmware({ version: firmware })}{#if compiled}<span class="dim">
+              &nbsp;· {m.bridge_compiled({ date: compiled })}
+            </span>{/if}
         </span>
       {:else}
         <span class="chip dim">{m.bridge_firmware_unknown()}</span>
@@ -175,16 +175,18 @@
       </div>
     </dl>
     <div class="row">
-      <Button icon="signal" pending={checking} testid="bridge-recheck" onclick={recheck}
-        >{m.bridge_recheck()}</Button
-      >
+      <Button icon="signal" pending={checking} testid="bridge-recheck" onclick={recheck}>
+        {m.bridge_recheck()}
+      </Button>
       <Button
         variant={confirmRemove ? 'danger' : 'ghost'}
         icon="trash"
         pending={removing}
         testid="bridge-remove"
-        onclick={removeLink}>{confirmRemove ? m.bridge_remove_confirm() : m.bridge_remove()}</Button
+        onclick={removeLink}
       >
+        {confirmRemove ? m.bridge_remove_confirm() : m.bridge_remove()}
+      </Button>
       {#if confirmRemove}
         <Button variant="ghost" onclick={() => (confirmRemove = false)}>{m.cancel()}</Button>
       {/if}

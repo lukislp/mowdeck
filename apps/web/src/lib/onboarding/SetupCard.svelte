@@ -39,9 +39,9 @@
   <section class="setup" aria-labelledby="setup-card-title" data-testid="setup-card">
     <div class="bar">
       <span class="label">{m.onboarding_title()}</span>
-      <Button variant="ghost" testid="setup-card-later" onclick={() => void onboarding.dismiss()}
-        >{m.onboarding_card_later()}</Button
-      >
+      <Button variant="ghost" testid="setup-card-later" onclick={() => void onboarding.dismiss()}>
+        {m.onboarding_card_later()}
+      </Button>
     </div>
     {#if onboarding.factsLoaded}
       <StepMeter steps={onboarding.steps} testid="setup-card-meter" />
@@ -54,11 +54,13 @@
           <Button
             variant="primary"
             href={stepHref(next.key, onboarding.facts)}
-            testid="setup-card-action">{text.action}</Button
+            testid="setup-card-action"
           >
-          <Button href="/setup" icon="list" testid="setup-card-open"
-            >{m.onboarding_card_open()}</Button
-          >
+            {text.action}
+          </Button>
+          <Button href="/setup" icon="list" testid="setup-card-open">
+            {m.onboarding_card_open()}
+          </Button>
         </div>
       {:else}
         <h2 id="setup-card-title">{m.onboarding_card_done_title()}</h2>
@@ -68,8 +70,10 @@
             variant="primary"
             icon="check"
             testid="setup-card-finish"
-            onclick={() => void onboarding.finish()}>{m.onboarding_finish()}</Button
+            onclick={() => void onboarding.finish()}
           >
+            {m.onboarding_finish()}
+          </Button>
         </div>
       {/if}
     {:else}
@@ -81,9 +85,9 @@
   <div class="hint" data-testid="setup-hint">
     <Icon name="list" size={18} />
     <span class="hint-text">{m.onboarding_hint_setup()}</span>
-    <Button variant="ghost" href="/setup" testid="setup-hint-open"
-      >{m.onboarding_hint_open()}</Button
-    >
+    <Button variant="ghost" href="/setup" testid="setup-hint-open">
+      {m.onboarding_hint_open()}
+    </Button>
     <Button
       variant="ghost"
       icon="close"

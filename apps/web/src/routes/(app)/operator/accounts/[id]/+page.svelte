@@ -122,9 +122,9 @@
 >
   {#snippet actions()}
     {#if detail}
-      <Button variant="primary" icon="shield" testid="operator-assign" onclick={openSheet}
-        >{m.op_assign()}</Button
-      >
+      <Button variant="primary" icon="shield" testid="operator-assign" onclick={openSheet}>
+        {m.op_assign()}
+      </Button>
     {/if}
   {/snippet}
 </TopBar>
@@ -245,9 +245,9 @@
           data-testid="assign-plan-{plan.key}"
           onclick={() => (form.plan = plan.key)}
         >
-          <span class="radio" aria-hidden="true"
-            >{#if form.plan === plan.key}<Icon name="check" size={16} />{/if}</span
-          >
+          <span class="radio" aria-hidden="true">
+            {#if form.plan === plan.key}<Icon name="check" size={16} />{/if}
+          </span>
           <span class="option-text">
             <span class="option-name">{plan.name} <span class="mono quiet">{plan.key}</span></span>
             {#if plan.description}<span class="small">{plan.description}</span>{/if}
@@ -296,9 +296,16 @@
     {/if}
   </div>
   {#snippet footer()}
-    <Button variant="primary" full icon="check" pending={saving} testid="assign-save" onclick={save}
-      >{m.op_assign_save()}</Button
+    <Button
+      variant="primary"
+      full
+      icon="check"
+      pending={saving}
+      testid="assign-save"
+      onclick={save}
     >
+      {m.op_assign_save()}
+    </Button>
   {/snippet}
 </Sheet>
 

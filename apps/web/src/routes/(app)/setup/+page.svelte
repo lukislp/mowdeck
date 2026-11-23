@@ -127,9 +127,9 @@
         </h2>
         <p>{m.onboarding_complete_text()}</p>
       </div>
-      <Button variant="primary" testid="setup-finish" onclick={() => void finish()}
-        >{m.onboarding_complete_action()}</Button
-      >
+      <Button variant="primary" testid="setup-finish" onclick={() => void finish()}>
+        {m.onboarding_complete_action()}
+      </Button>
     </section>
   {/if}
 
@@ -157,11 +157,11 @@
                 {/if}
               </span>
               <span class="title">{text.title}</span>
-              <span class="state" data-testid="setup-step-{step.key}-state"
-                >{stateLabel(step.state)}{#if step.optional}<span class="optional"
-                    >{m.onboarding_optional()}</span
-                  >{/if}</span
-              >
+              <span class="state" data-testid="setup-step-{step.key}-state">
+                {stateLabel(step.state)}{#if step.optional}<span class="optional">
+                    {m.onboarding_optional()}
+                  </span>{/if}
+              </span>
             </button>
           </h2>
           {#if open}
@@ -183,21 +183,26 @@
                   <Button
                     variant={step.state === 'open' ? 'primary' : 'secondary'}
                     href={stepHref(step.key, onboarding.facts)}
-                    testid="setup-step-{step.key}-action">{text.action}</Button
+                    testid="setup-step-{step.key}-action"
                   >
+                    {text.action}
+                  </Button>
                 {/if}
                 {#if step.state === 'open'}
                   <Button
                     variant="ghost"
                     testid="setup-step-{step.key}-skip"
                     onclick={() => void settle(onboarding.skip(step.key))}
-                    >{m.onboarding_skip()}</Button
                   >
+                    {m.onboarding_skip()}
+                  </Button>
                 {:else if step.state === 'skipped'}
                   <Button
                     testid="setup-step-{step.key}-resume"
-                    onclick={() => void onboarding.unskip(step.key)}>{m.onboarding_resume()}</Button
+                    onclick={() => void onboarding.unskip(step.key)}
                   >
+                    {m.onboarding_resume()}
+                  </Button>
                 {/if}
               </div>
             </div>
@@ -213,9 +218,9 @@
 
   {#if !complete}
     <footer class="end">
-      <Button variant="ghost" testid="setup-end" onclick={() => void end()}
-        >{m.onboarding_end()}</Button
-      >
+      <Button variant="ghost" testid="setup-end" onclick={() => void end()}>
+        {m.onboarding_end()}
+      </Button>
       <p>{m.onboarding_end_hint()}</p>
     </footer>
   {/if}

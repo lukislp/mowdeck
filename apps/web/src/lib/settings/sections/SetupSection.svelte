@@ -41,8 +41,10 @@
         variant={tour.outcome === 'new' ? 'primary' : 'secondary'}
         icon="crosshair"
         testid="tour-start"
-        onclick={() => void tour.start()}>{m.tour_start()}</Button
+        onclick={() => void tour.start()}
       >
+        {m.tour_start()}
+      </Button>
     </div>
   </div>
 </Panel>
@@ -68,8 +70,9 @@
         variant={running ? 'primary' : 'secondary'}
         icon="list"
         testid="setup-open"
-        >{running ? m.onboarding_section_resume() : m.onboarding_section_open()}</Button
       >
+        {running ? m.onboarding_section_resume() : m.onboarding_section_open()}
+      </Button>
     </div>
   </div>
 </Panel>

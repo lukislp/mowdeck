@@ -308,9 +308,9 @@
       <div class="head">
         <span class="label">{m.tour_label()}</span>
         <span class="count mono" data-testid="tour-progress">
-          <span class="md-visually-hidden"
-            >{m.tour_progress({ current: progress.current, total: progress.total })}</span
-          >
+          <span class="md-visually-hidden">
+            {m.tour_progress({ current: progress.current, total: progress.total })}
+          </span>
           <span aria-hidden="true">{counter}</span>
         </span>
       </div>
@@ -333,9 +333,9 @@
         {/if}
       </div>
       <div class="actions">
-        <button type="button" class="leave" onclick={() => tour.skip()} data-testid="tour-skip"
-          >{m.tour_skip()}</button
-        >
+        <button type="button" class="leave" onclick={() => tour.skip()} data-testid="tour-skip">
+          {m.tour_skip()}
+        </button>
         <span class="moves">
           {#if !tour.first}
             <Button onclick={() => void tour.back()} testid="tour-back">{m.tour_back()}</Button>
@@ -346,8 +346,9 @@
               icon={addMower ? 'plus' : tour.last ? 'check' : undefined}
               onclick={() => void primary()}
               testid="tour-next"
-              >{addMower ? m.mowers_add() : tour.last ? m.tour_done() : m.tour_next()}</Button
             >
+              {addMower ? m.mowers_add() : tour.last ? m.tour_done() : m.tour_next()}
+            </Button>
           </span>
         </span>
       </div>

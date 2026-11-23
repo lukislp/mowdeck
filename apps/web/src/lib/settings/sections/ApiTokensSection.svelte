@@ -311,8 +311,9 @@
       <span class="right-head">
         <span class="right-name">{permissionShort(entry.key)}</span>
         <code class="right-key">{entry.key}</code>
-        {#if warning}<span class="badge"><Icon name="bolt" size={12} />{m.tokens_powerful()}</span
-          >{/if}
+        {#if warning}<span class="badge">
+            <Icon name="bolt" size={12} />{m.tokens_powerful()}
+          </span>{/if}
       </span>
       <span class="right-desc">{permissionDescription(entry.key, entries.get(entry.key))}</span>
       {#if warning}<span class="right-warn">{warning}</span>{/if}
@@ -377,8 +378,10 @@
         variant="primary"
         icon={copyState === 'copied' ? 'check' : 'copy'}
         onclick={copy}
-        testid="token-secret-copy">{copyState === 'copied' ? m.copied() : m.copy()}</Button
+        testid="token-secret-copy"
       >
+        {copyState === 'copied' ? m.copied() : m.copy()}
+      </Button>
     </div>
     <!-- Announces the copy; "copied" is already on the button, only the manual hint is shown. -->
     <p
@@ -390,9 +393,9 @@
       {#if copyState === 'copied'}{m.copied()}{:else if copyState === 'manual'}{m.tokens_copy_manual()}{/if}
     </p>
     <div>
-      <Button variant="ghost" icon="close" onclick={dismiss} testid="token-secret-dismiss"
-        >{m.close()}</Button
-      >
+      <Button variant="ghost" icon="close" onclick={dismiss} testid="token-secret-dismiss">
+        {m.close()}
+      </Button>
     </div>
   </section>
 {/if}
@@ -433,8 +436,10 @@
             icon="trash"
             pending={purgingAll}
             testid="token-purge-all"
-            onclick={() => (confirmPurge = true)}>{m.tokens_purge_all()}</Button
+            onclick={() => (confirmPurge = true)}
           >
+            {m.tokens_purge_all()}
+          </Button>
         </div>
         <ul class="revoked-list">
           {#each revoked as token (token.id)}
@@ -485,9 +490,9 @@
     {#snippet footer()}
       <div class="confirm-footer">
         <Button variant="ghost" onclick={() => (confirmPurge = false)}>{m.cancel()}</Button>
-        <Button variant="danger" icon="trash" testid="token-purge-go" onclick={purgeAll}
-          >{m.tokens_purge_go()}</Button
-        >
+        <Button variant="danger" icon="trash" testid="token-purge-go" onclick={purgeAll}>
+          {m.tokens_purge_go()}
+        </Button>
       </div>
     {/snippet}
   </Sheet>
@@ -573,8 +578,10 @@
           icon="key"
           pending={busy}
           disabled={!name.trim() || permissions.length === 0}
-          testid="token-create">{m.tokens_create()}</Button
+          testid="token-create"
         >
+          {m.tokens_create()}
+        </Button>
       </div>
     </form>
   </Panel>

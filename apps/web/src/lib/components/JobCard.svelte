@@ -44,9 +44,9 @@
       {#if job.paused}<span class="flag" data-testid="job-paused">· {m.job_paused()}</span>{/if}
     </span>
     {#if job.percent !== null}
-      <span class="percent mono" data-testid="job-percent"
-        >{formatNumber(job.percent)}<span class="unit">%</span></span
-      >
+      <span class="percent mono" data-testid="job-percent">
+        {formatNumber(job.percent)}<span class="unit">%</span>
+      </span>
     {/if}
   </header>
 

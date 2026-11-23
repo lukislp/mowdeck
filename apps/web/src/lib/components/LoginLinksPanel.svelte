@@ -155,8 +155,10 @@
     {before}{#if provider.revoke.href}<a
         href={provider.revoke.href}
         target="_blank"
-        rel="noopener noreferrer">{provider.revoke.place()}</a
-      >{:else}<strong>{provider.revoke.place()}</strong>{/if}{after}
+        rel="noopener noreferrer"
+      >
+        {provider.revoke.place()}
+      </a>{:else}<strong>{provider.revoke.place()}</strong>{/if}{after}
   </p>
 {/snippet}
 
@@ -184,8 +186,10 @@
             <span class="body">
               <span class="name">
                 {provider.label}{#if provider.showsAccountName && link?.display_name}<span
-                    class="account-name">&nbsp;· {link.display_name}</span
-                  >{/if}
+                    class="account-name"
+                  >
+                    &nbsp;· {link.display_name}
+                  </span>{/if}
               </span>
               <span class="date">
                 {provider.texts.linkedAt()}
@@ -199,8 +203,10 @@
                   icon="close"
                   label={provider.texts.unlink()}
                   testid="{provider.id}-unlink"
-                  onclick={() => (confirmingId = provider.id)}>{m.login_links_unlink()}</Button
+                  onclick={() => (confirmingId = provider.id)}
                 >
+                  {m.login_links_unlink()}
+                </Button>
               </span>
             {:else}
               <span class="confirm" role="alert">
@@ -212,10 +218,13 @@
                     icon="close"
                     pending={working}
                     testid="{provider.id}-unlink-confirm"
-                    onclick={() => unlink(provider)}>{provider.texts.unlink()}</Button
+                    onclick={() => unlink(provider)}
                   >
-                  <Button variant="ghost" onclick={() => (confirmingId = null)}>{m.cancel()}</Button
-                  >
+                    {provider.texts.unlink()}
+                  </Button>
+                  <Button variant="ghost" onclick={() => (confirmingId = null)}>
+                    {m.cancel()}
+                  </Button>
                 </span>
               </span>
             {/if}
@@ -268,9 +277,9 @@
               pending={busy}
               disabled={!password}
               testid="{linking.id}-link-continue"
-              ><span class="provider"><Mark size={20} />{linking.texts.linkContinue()}</span
-              ></Button
             >
+              <span class="provider"><Mark size={20} />{linking.texts.linkContinue()}</span>
+            </Button>
             <Button variant="ghost" onclick={() => (linkingId = null)}>{m.cancel()}</Button>
           </div>
         </form>
@@ -283,8 +292,9 @@
               label={provider.texts.link()}
               testid="{provider.id}-link"
               onclick={() => openLink(provider)}
-              ><span class="provider"><Mark size={20} />{provider.label}</span></Button
             >
+              <span class="provider"><Mark size={20} />{provider.label}</span>
+            </Button>
           {/each}
         </div>
       {/if}

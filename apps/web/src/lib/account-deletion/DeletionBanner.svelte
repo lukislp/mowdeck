@@ -41,8 +41,10 @@
         icon="back"
         pending={deletion.busy === 'restore'}
         testid="deletion-banner-cancel"
-        onclick={cancel}>{m.deletion_cancel()}</Button
+        onclick={cancel}
       >
+        {m.deletion_cancel()}
+      </Button>
     {/if}
     {#if deletion.problem && deletion.failed === 'restore'}
       <div class="problem">

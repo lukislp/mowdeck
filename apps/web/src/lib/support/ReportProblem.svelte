@@ -79,9 +79,9 @@
   <div class="stack">
     <p class="text">{m.report_problem_text()}</p>
     <div class="action">
-      <Button icon="send" testid="report-problem" onclick={report}
-        >{m.report_problem_button()}<span class="sr"> ({m.source_new_tab()})</span></Button
-      >
+      <Button icon="send" testid="report-problem" onclick={report}>
+        {m.report_problem_button()}<span class="sr"> ({m.source_new_tab()})</span>
+      </Button>
     </div>
   </div>
 </Panel>

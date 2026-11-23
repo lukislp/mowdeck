@@ -212,8 +212,10 @@
                   <Button
                     disabled={problem !== null || row.state === 'sending' || !(spec.key in windows)}
                     testid="setting-{spec.key}-apply"
-                    onclick={() => applyWindow(spec, row, draft)}>{m.devset_window_apply()}</Button
+                    onclick={() => applyWindow(spec, row, draft)}
                   >
+                    {m.devset_window_apply()}
+                  </Button>
                 </div>
                 {#if problem === 'empty_window'}
                   <p class="hint warn">{m.devset_window_empty()}</p>

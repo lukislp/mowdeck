@@ -106,8 +106,10 @@
               label={m.passkeys_remove_named({ name: passkey.name })}
               pending={removing === passkey.id}
               disabled={removing !== null}
-              onclick={() => remove(passkey)}>{m.remove()}</Button
+              onclick={() => remove(passkey)}
             >
+              {m.remove()}
+            </Button>
           </li>
         {/each}
       </ul>

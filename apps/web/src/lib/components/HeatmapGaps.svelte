@@ -88,8 +88,10 @@
                   class="act act--go"
                   title={m.heat_gap_remow_hint()}
                   data-testid="heatmap-gap-remow"
-                  onclick={() => onremow(item.gap)}>{m.heat_gap_remow()}</button
+                  onclick={() => onremow(item.gap)}
                 >
+                  {m.heat_gap_remow()}
+                </button>
               {:else}
                 <span class="disabled-wrap" title={m.heat_gap_remow_unavailable()}>
                   <button
@@ -97,8 +99,10 @@
                     class="act"
                     disabled
                     aria-describedby="{uid}-why"
-                    data-testid="heatmap-gap-remow">{m.heat_gap_remow()}</button
+                    data-testid="heatmap-gap-remow"
                   >
+                    {m.heat_gap_remow()}
+                  </button>
                 </span>
               {/if}
               {#if around && canStart}
@@ -108,15 +112,18 @@
                   title={m.heat_gap_mow_area_hint()}
                   data-testid="heatmap-gap-mow-area"
                   onclick={() => onmowarea(around.id)}
-                  >{m.heat_gap_mow_area({ name: around.name })}</button
                 >
+                  {m.heat_gap_mow_area({ name: around.name })}
+                </button>
               {/if}
               <button
                 type="button"
                 class="act act--quiet"
                 data-testid="heatmap-gap-clear"
-                onclick={() => onselect(null)}>{m.heat_gap_clear()}</button
+                onclick={() => onselect(null)}
               >
+                {m.heat_gap_clear()}
+              </button>
               {#if !(canSpot && onremow)}
                 <p class="why" id="{uid}-why">{m.heat_gap_remow_unavailable()}</p>
               {/if}

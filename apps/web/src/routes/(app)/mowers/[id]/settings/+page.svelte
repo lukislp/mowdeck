@@ -505,9 +505,9 @@
         {#if sameKind && mower.linked_account_id}
           <div class="via" data-testid="linked-via">
             <span class="label">{m.linked_via()}</span>
-            <a href="/settings#linked-accounts" data-testid="linked-via-email"
-              >{linkedAccount?.email ?? (linkedUnreadable ? m.linked_account_unreadable() : '…')}</a
-            >
+            <a href="/settings#linked-accounts" data-testid="linked-via-email">
+              {linkedAccount?.email ?? (linkedUnreadable ? m.linked_account_unreadable() : '…')}
+            </a>
           </div>
         {/if}
         {#if legacy}
@@ -541,8 +541,10 @@
           variant="primary"
           pending={busy}
           disabled={!name.trim() || toLinked}
-          testid="mower-save">{m.save()}</Button
+          testid="mower-save"
         >
+          {m.save()}
+        </Button>
       </div>
     </form>
   </DemoLock>
@@ -646,9 +648,9 @@
     <DemoLock testid="demo-lock-mower-delete">
       <p class="hint">{m.mower_delete_body()}</p>
       <div class="danger">
-        <Button variant="danger" icon="trash" pending={busy} onclick={remove} testid="mower-delete"
-          >{confirmDelete ? m.mower_delete() : m.mower_delete_title()}</Button
-        >
+        <Button variant="danger" icon="trash" pending={busy} onclick={remove} testid="mower-delete">
+          {confirmDelete ? m.mower_delete() : m.mower_delete_title()}
+        </Button>
         {#if confirmDelete}
           <Button variant="ghost" onclick={() => (confirmDelete = false)}>{m.cancel()}</Button>
         {/if}

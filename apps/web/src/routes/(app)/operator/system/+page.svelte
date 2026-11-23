@@ -123,9 +123,9 @@
             <span class="switch" data-on={billing}>{billing ? m.switch_on() : m.switch_off()}</span>
           {/if}
         </dd>
-        <span class="note"
-          >{billing === false ? m.op_fact_billing_off() : m.op_fact_billing_on()}</span
-        >
+        <span class="note">
+          {billing === false ? m.op_fact_billing_off() : m.op_fact_billing_on()}
+        </span>
       </div>
       <div
         class="fact"
@@ -139,9 +139,9 @@
           {:else if vision === null}
             <span class="quiet small">{m.op_fact_vision_absent()}</span>
           {:else}
-            <span class="switch" data-on={vision.enabled}
-              >{vision.enabled ? m.switch_on() : m.switch_off()}</span
-            >
+            <span class="switch" data-on={vision.enabled}>
+              {vision.enabled ? m.switch_on() : m.switch_off()}
+            </span>
           {/if}
         </dd>
         <span class="note">
@@ -199,11 +199,11 @@
             <span class="path">{result.path}</span>
           </span>
           <span class="code mono">{result.status ?? m.no_data()}</span>
-          <span class="latency mono"
-            >{result.latencyMs === null
+          <span class="latency mono">
+            {result.latencyMs === null
               ? m.no_data()
-              : m.op_latency({ ms: formatNumber(result.latencyMs) })}</span
-          >
+              : m.op_latency({ ms: formatNumber(result.latencyMs) })}
+          </span>
           <ToneBadge
             {...look(result)}
             label={verdictLabel(result.verdict)}
@@ -219,9 +219,9 @@
           <span class="path">{m.op_realtime_note()}</span>
         </span>
         <span class="code mono"><Icon name="signal" size={16} /></span>
-        <span class="latency"
-          >{realtime.phase === 'ready' ? m.live_ready() : m.op_realtime_idle()}</span
-        >
+        <span class="latency">
+          {realtime.phase === 'ready' ? m.live_ready() : m.op_realtime_idle()}
+        </span>
         {#if realtime.phase === 'ready'}
           <ToneBadge tone="mowing" glyph="check" label={m.op_probe_up()} value="up" />
         {:else}

@@ -394,8 +394,10 @@
           variant="primary"
           icon="plus"
           testid="bs-add-empty"
-          onclick={() => void openRegister()}>{m.bs_add()}</Button
+          onclick={() => void openRegister()}
         >
+          {m.bs_add()}
+        </Button>
       </DemoLock>
     {:else}
       <p class="quiet small">{m.bs_no_permission()}</p>
@@ -433,8 +435,10 @@
                   type="submit"
                   variant="primary"
                   pending={busy === `rename:${base.id}`}
-                  testid="bs-rename-save">{m.save()}</Button
+                  testid="bs-rename-save"
                 >
+                  {m.save()}
+                </Button>
                 <Button variant="ghost" onclick={() => (renaming = null)}>{m.cancel()}</Button>
               </form>
             {:else}
@@ -536,8 +540,10 @@
                     icon="link"
                     pending={busy === `link:${base.id}`}
                     testid="bs-link"
-                    onclick={() => void link(base)}>{m.bs_link_mower()}</Button
+                    onclick={() => void link(base)}
                   >
+                    {m.bs_link_mower()}
+                  </Button>
                 {:else}
                   <p class="quiet small">{m.bs_link_choose_none()}</p>
                 {/if}
@@ -573,8 +579,10 @@
                 icon="trash"
                 pending={busy === `delete:${base.id}`}
                 testid="bs-delete-go"
-                onclick={() => void remove(base)}>{m.bs_delete()}</Button
+                onclick={() => void remove(base)}
               >
+                {m.bs_delete()}
+              </Button>
               <Button variant="ghost" onclick={() => (confirmDelete = null)}>{m.cancel()}</Button>
             </div>
           </div>
@@ -606,8 +614,8 @@
                 <li class="device" data-testid="bs-device" data-device={device.device_name}>
                   <span class="device-name">
                     <span>{device.device_name}</span>
-                    <span class="meta mono"
-                      >{[
+                    <span class="meta mono">
+                      {[
                         device.model,
                         device.online === false ? m.bs_register_offline() : null,
                         device.registered
@@ -617,8 +625,8 @@
                             : null,
                       ]
                         .filter(Boolean)
-                        .join(' · ')}</span
-                    >
+                        .join(' · ')}
+                    </span>
                   </span>
                   <Button
                     icon="plus"
@@ -632,8 +640,10 @@
                           device_name: device.device_name,
                         },
                         device.device_name,
-                      )}>{m.bs_register_go()}</Button
+                      )}
                   >
+                    {m.bs_register_go()}
+                  </Button>
                 </li>
               {/each}
             </ul>
@@ -642,9 +652,9 @@
       {/each}
       {#if deviceCount === 0}
         <p class="quiet" data-testid="bs-register-none">{m.bs_register_none()}</p>
-        <Button variant="ghost" href="/settings#linked-accounts" icon="link"
-          >{m.bs_register_accounts_link()}</Button
-        >
+        <Button variant="ghost" href="/settings#linked-accounts" icon="link">
+          {m.bs_register_accounts_link()}
+        </Button>
       {/if}
       {#if simulatedAllowed}
         <section class="account">
@@ -662,8 +672,10 @@
                   void register(
                     { source: 'simulated', name: m.bs_register_simulated() },
                     m.bs_register_simulated(),
-                  )}>{m.bs_register_go()}</Button
+                  )}
               >
+                {m.bs_register_go()}
+              </Button>
             </li>
           </ul>
         </section>

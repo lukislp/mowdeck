@@ -338,11 +338,11 @@
               : '—'}
           </span>
           {#if meter?.source === 'device'}
-            <span data-testid="health-blade-source" data-threshold-source={meter.thresholdSource}
-              >{meter.thresholdSource === 'custom'
+            <span data-testid="health-blade-source" data-threshold-source={meter.thresholdSource}>
+              {meter.thresholdSource === 'custom'
                 ? m.health_blade_source_device_custom()
-                : m.health_blade_source_device()}</span
-            >
+                : m.health_blade_source_device()}
+            </span>
           {:else}
             <span>
               {totals?.blade_changed_at
@@ -353,9 +353,9 @@
         </div>
         {#if canManage}
           <div class="hero-action">
-            <Button icon="blade" testid="blade-reset" onclick={() => (resetOpen = true)}
-              >{m.health_blade_reset()}</Button
-            >
+            <Button icon="blade" testid="blade-reset" onclick={() => (resetOpen = true)}>
+              {m.health_blade_reset()}
+            </Button>
           </div>
         {/if}
       </section>
@@ -612,8 +612,10 @@
           icon="check"
           pending={saving}
           testid="blade-reset-save"
-          onclick={saveReset}>{m.health_blade_save()}</Button
+          onclick={saveReset}
         >
+          {m.health_blade_save()}
+        </Button>
       {/snippet}
     </Sheet>
 

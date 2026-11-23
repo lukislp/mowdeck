@@ -326,17 +326,17 @@
                   onchange={() => void chooseAccount(option.id)}
                 />
                 <span class="who">
-                  <span class="vendor"
-                    >{providerOf.get(option.provider)?.name ?? option.provider}</span
-                  >
+                  <span class="vendor">
+                    {providerOf.get(option.provider)?.name ?? option.provider}
+                  </span>
                   <span class="email">{option.identity}</span>
                   <span class="facts">
-                    <span
-                      >{m.linked_last_sync()}
+                    <span>
+                      {m.linked_last_sync()}
                       {option.last_synced_at
                         ? formatDateTime(option.last_synced_at)
-                        : m.linked_never_synced()}</span
-                    >
+                        : m.linked_never_synced()}
+                    </span>
                     <span>{m.linked_devices_count()} {option.device_count}</span>
                   </span>
                   {#if option.last_sync_error}
@@ -363,8 +363,10 @@
               variant="ghost"
               icon="plus"
               onclick={() => (connecting = true)}
-              testid="linked-connect-new">{m.linked_connect_another()}</Button
+              testid="linked-connect-new"
             >
+              {m.linked_connect_another()}
+            </Button>
           </div>
         {/if}
       </div>
@@ -451,8 +453,10 @@
                         icon="site"
                         pending={creatingSite === device}
                         onclick={() => void addSite(device)}
-                        testid="linked-site-create-{key}">{m.linked_site_create()}</Button
+                        testid="linked-site-create-{key}"
                       >
+                        {m.linked_site_create()}
+                      </Button>
                     </div>
                   {/if}
                 </li>
@@ -487,9 +491,10 @@
             pending={busy}
             disabled={selected.length === 0 || creatingSite !== null}
             testid="linked-submit"
-            >{m.linked_submit()}
-            {#if selected.length > 0}<span class="mono">· {selected.length}</span>{/if}</Button
           >
+            {m.linked_submit()}
+            {#if selected.length > 0}<span class="mono">· {selected.length}</span>{/if}
+          </Button>
         </div>
       </form>
     {/if}

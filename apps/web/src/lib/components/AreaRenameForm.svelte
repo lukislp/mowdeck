@@ -111,19 +111,23 @@
       icon="check"
       pending={busy}
       disabled={busy || intent.kind === 'too_long'}
-      testid="area-rename-save">{m.area_rename_save()}</Button
+      testid="area-rename-save"
     >
+      {m.area_rename_save()}
+    </Button>
     {#if hasOverride}
       <Button
         variant="secondary"
         disabled={busy}
         onclick={() => void apply(null)}
-        testid="area-rename-reset">{m.area_rename_reset()}</Button
+        testid="area-rename-reset"
       >
+        {m.area_rename_reset()}
+      </Button>
     {/if}
-    <Button variant="ghost" disabled={busy} onclick={oncancel} testid="area-rename-cancel"
-      >{m.area_rename_cancel()}</Button
-    >
+    <Button variant="ghost" disabled={busy} onclick={oncancel} testid="area-rename-cancel">
+      {m.area_rename_cancel()}
+    </Button>
   </div>
 </form>
 

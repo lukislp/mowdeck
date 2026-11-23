@@ -147,10 +147,9 @@
           >
             <span class="tile-name">{option.name}</span>
             {#if !option.tested_on_hardware}
-              <span class="flag" title={m.provider_untested()}
-                ><Icon name="alert" size={14} /><span class="sr">{m.provider_untested()}</span
-                ></span
-              >
+              <span class="flag" title={m.provider_untested()}>
+                <Icon name="alert" size={14} /><span class="sr">{m.provider_untested()}</span>
+              </span>
             {/if}
           </button>
         {/each}
@@ -180,9 +179,10 @@
           {#if provider.needs_developer_account}
             <li class="badge" data-testid="provider-dev-account">
               <Icon name="key" size={16} />
-              <span
-                ><strong>{m.provider_dev_account()}.</strong> {m.provider_dev_account_hint()}</span
-              >
+              <span>
+                <strong>{m.provider_dev_account()}.</strong>
+                {m.provider_dev_account_hint()}
+              </span>
             </li>
           {/if}
         </ul>
@@ -193,9 +193,9 @@
           <ol>
             {#each provider.setup_steps ?? [] as step, index (index)}
               <li>
-                <span class="n" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span
-                  >{step}</span
-                >
+                <span class="n" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span><span>
+                  {step}
+                </span>
               </li>
             {/each}
           </ol>
@@ -205,9 +205,9 @@
         <ul class="links">
           {#each provider.links ?? [] as link (link.url)}
             <li>
-              <a href={link.url} target="_blank" rel="noopener noreferrer external"
-                >{link.label}<span aria-hidden="true"> ↗</span></a
-              >
+              <a href={link.url} target="_blank" rel="noopener noreferrer external">
+                {link.label}<span aria-hidden="true"> ↗</span>
+              </a>
             </li>
           {/each}
         </ul>
@@ -261,9 +261,9 @@
       </div>
     {/if}
     <div class="actions">
-      <Button type="submit" variant="primary" icon="link" {pending} testid="linked-connect-submit"
-        >{m.linked_connect()}</Button
-      >
+      <Button type="submit" variant="primary" icon="link" {pending} testid="linked-connect-submit">
+        {m.linked_connect()}
+      </Button>
       {#if oncancel && !pending}
         <Button variant="ghost" onclick={oncancel}>{m.cancel()}</Button>
       {/if}

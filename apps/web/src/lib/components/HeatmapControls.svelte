@@ -205,8 +205,10 @@
         tabindex={option === layer ? 0 : -1}
         data-value={option}
         data-testid="heatmap-layer-{option}"
-        onclick={() => onlayer(option)}>{LAYER_LABEL[option]()}</button
+        onclick={() => onlayer(option)}
       >
+        {LAYER_LABEL[option]()}
+      </button>
     {/each}
   </div>
 
@@ -236,8 +238,10 @@
               class="chip"
               aria-checked={cell === size}
               data-testid="heatmap-cell-{size}"
-              onclick={() => oncell(size)}>{metres(size)}</button
+              onclick={() => oncell(size)}
             >
+              {metres(size)}
+            </button>
           {/each}
         </div>
       </div>
@@ -246,8 +250,10 @@
         class="refresh"
         disabled={status === 'loading'}
         data-testid="heatmap-refresh"
-        onclick={onrefresh}>{m.heat_refresh()}</button
+        onclick={onrefresh}
       >
+        {m.heat_refresh()}
+      </button>
     </div>
 
     <div class="legend" data-testid="heatmap-legend" data-kind={kind}>
@@ -287,9 +293,9 @@
       {:else if status === 'error'}
         <span class="bad">{m.heat_error({ reason: error ?? '' })}</span>
       {:else if status === 'ready' && samples != null}
-        <span class="mono" data-testid="heatmap-samples"
-          >{m.heat_samples({ count: formatNumber(samples) })}</span
-        >
+        <span class="mono" data-testid="heatmap-samples">
+          {m.heat_samples({ count: formatNumber(samples) })}
+        </span>
         {#if coarsened && answeredCell}
           <span class="mono">· {m.heat_cell_coarsened({ size: metres(answeredCell) })}</span>
         {/if}

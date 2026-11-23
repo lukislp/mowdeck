@@ -114,9 +114,9 @@
       data-plan={subscription?.plan ?? ''}
     >
       {#if subscription}
-        <span
-          >{m.billing_status_line({ status: subscriptionStatusLabel(subscription.status) })}</span
-        >
+        <span>
+          {m.billing_status_line({ status: subscriptionStatusLabel(subscription.status) })}
+        </span>
         {#if subscriptionUntil}<span class="muted">{subscriptionUntil}</span>{/if}
       {:else}
         <span>{m.billing_status_none()}</span>
@@ -156,8 +156,9 @@
                   pending={busy === plan.key}
                   disabled={busy !== null && busy !== plan.key}
                   onclick={() => go(plan.key, () => account.checkoutUrl(plan.key))}
-                  >{current ? m.billing_subscribe() : m.billing_upgrade()}</Button
                 >
+                  {current ? m.billing_subscribe() : m.billing_upgrade()}
+                </Button>
               {/if}
             </div>
           </li>
@@ -174,8 +175,10 @@
         testid="billing-portal"
         pending={busy === 'portal'}
         disabled={busy !== null && busy !== 'portal'}
-        onclick={() => go('portal', () => account.portalUrl())}>{m.billing_portal()}</Button
+        onclick={() => go('portal', () => account.portalUrl())}
       >
+        {m.billing_portal()}
+      </Button>
       <span class="fine">{m.billing_portal_hint()}</span>
     </div>
   {/if}
@@ -209,23 +212,23 @@
             <li class="invoice" data-status={invoice.status}>
               <span class="number">{invoice.number ?? m.billing_invoice_no_number()}</span>
               <span class="date">{formatDate(invoice.issued_at)}</span>
-              <span class="amount"
-                >{formatAmount(
+              <span class="amount">
+                {formatAmount(
                   invoice.status === 'paid' ? invoice.amount_paid : invoice.amount_due,
                   invoice.currency,
-                )}</span
-              >
+                )}
+              </span>
               <span class="state">{invoiceStatusLabel(invoice.status)}</span>
               <span class="links">
                 {#if hosted}
-                  <a href={hosted} rel="noopener noreferrer" target="_blank"
-                    >{m.billing_invoice_view()}</a
-                  >
+                  <a href={hosted} rel="noopener noreferrer" target="_blank">
+                    {m.billing_invoice_view()}
+                  </a>
                 {/if}
                 {#if pdf}
-                  <a href={pdf} rel="noopener noreferrer" target="_blank"
-                    >{m.billing_invoice_pdf()}</a
-                  >
+                  <a href={pdf} rel="noopener noreferrer" target="_blank">
+                    {m.billing_invoice_pdf()}
+                  </a>
                 {/if}
               </span>
             </li>

@@ -24,8 +24,10 @@
       role="radio"
       aria-checked={option.value === value}
       data-value={option.value}
-      onclick={() => onchange(option.value)}>{option.label}</button
+      onclick={() => onchange(option.value)}
     >
+      {option.label}
+    </button>
   {/each}
 </div>
 

@@ -348,9 +348,9 @@
         referenceLabel={m.problem_reference()}
       />
       {#if cam.error !== 'unsupported' && cam.error !== 'not_in_plan'}
-        <Button icon="play" testid="camera-retry" onclick={() => void cam.open(mowerId)}
-          >{m.camera_retry()}</Button
-        >
+        <Button icon="play" testid="camera-retry" onclick={() => void cam.open(mowerId)}>
+          {m.camera_retry()}
+        </Button>
       {/if}
     </div>
   {/if}
@@ -410,11 +410,9 @@
           {/if}
           {#if cam.both || tileStats(tile)}
             <figcaption class="caption mono" data-testid="camera-tile-caption">
-              {#if tile.side}<span class="side" aria-hidden="true"
-                  >{tile.side === 'left'
-                    ? m.camera_side_left_short()
-                    : m.camera_side_right_short()}</span
-                >{/if}
+              {#if tile.side}<span class="side" aria-hidden="true">
+                  {tile.side === 'left' ? m.camera_side_left_short() : m.camera_side_right_short()}
+                </span>{/if}
               <span class:sr-only={compact}>{tileName(tile)}</span>
               {#if tileStats(tile)}<span class="stats">{tileStats(tile)}</span>{/if}
             </figcaption>

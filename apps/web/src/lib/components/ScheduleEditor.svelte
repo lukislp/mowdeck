@@ -242,9 +242,9 @@
 >
   {#snippet actions()}
     {#if id}
-      <Button variant="ghost" href="/schedules/{id}/runs" icon="list" testid="schedule-runs-link"
-        >{m.sched_runs()}</Button
-      >
+      <Button variant="ghost" href="/schedules/{id}/runs" icon="list" testid="schedule-runs-link">
+        {m.sched_runs()}
+      </Button>
     {/if}
   {/snippet}
 </TopBar>
@@ -290,12 +290,13 @@
                   pending={saving}
                   testid="schedule-delete"
                   onclick={remove}
-                  >{confirmDelete ? m.sched_delete_confirm() : m.sched_delete()}</Button
                 >
+                  {confirmDelete ? m.sched_delete_confirm() : m.sched_delete()}
+                </Button>
                 {#if confirmDelete}
-                  <Button variant="ghost" onclick={() => (confirmDelete = false)}
-                    >{m.cancel()}</Button
-                  >
+                  <Button variant="ghost" onclick={() => (confirmDelete = false)}>
+                    {m.cancel()}
+                  </Button>
                 {/if}
               </div>
             {/if}
