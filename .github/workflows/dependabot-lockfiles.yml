@@ -31,6 +31,10 @@ jobs:
       # Same uv as CI (.github/workflows/ci.yml); the Python version of the fuzz requirements
       # comes from --python-version in the file's header.
       uv-version: "0.12.24"
+      # The interpreter uv lock resolves with, from .python-version (pyproject: >=3.13,<3.14).
+      # The reusable workflow defaults to 3.12 and forbids interpreter downloads, so without
+      # it every Dependabot pull request failed with "No interpreter found for Python 3.13".
+      python-version: "3.13"
     secrets:
       app-id: ${{ secrets.LKTEC_BOT_APP_ID }}
       private-key: ${{ secrets.LKTEC_BOT_PRIVATE_KEY }}
