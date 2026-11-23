@@ -264,9 +264,9 @@
           <div class="titles">
             <h2>
               {site.name}
-              {#if site.is_default}<span class="tag" data-testid="site-default"
-                  >{m.sites_default()}</span
-                >{/if}
+              {#if site.is_default}<span class="tag" data-testid="site-default">
+                  {m.sites_default()}
+                </span>{/if}
             </h2>
             {#if address}<span class="meta">{address}</span>{/if}
             <span class="meta mono">{site.timezone}</span>
@@ -288,23 +288,23 @@
         </div>
 
         <div class="counts">
-          <span class="readout"
-            ><span class="value mono">{formatNumber(mowers.length)}</span>
-            <span class="unit">{m.sites_mowers()}</span></span
-          >
-          <span class="readout"
-            ><span class="value mono">{formatNumber(groups.length)}</span>
-            <span class="unit">{m.sites_groups()}</span></span
-          >
+          <span class="readout">
+            <span class="value mono">{formatNumber(mowers.length)}</span>
+            <span class="unit">{m.sites_mowers()}</span>
+          </span>
+          <span class="readout">
+            <span class="value mono">{formatNumber(groups.length)}</span>
+            <span class="unit">{m.sites_groups()}</span>
+          </span>
         </div>
 
         {#if mowers.length}
           <ul class="chips" aria-label={m.sites_mowers()}>
             {#each mowers as mower (mower.id)}
               <li>
-                <a href="/mowers/{mower.id}" class="chip"
-                  ><Icon name="mower" size={16} />{mower.name}</a
-                >
+                <a href="/mowers/{mower.id}" class="chip">
+                  <Icon name="mower" size={16} />{mower.name}
+                </a>
               </li>
             {/each}
           </ul>
@@ -315,13 +315,17 @@
             <Button
               icon="pause"
               testid="site-pause-{site.id}"
-              onclick={() => (bulk = { kind: 'pause_mow', site })}>{m.bulk_pause_all()}</Button
+              onclick={() => (bulk = { kind: 'pause_mow', site })}
             >
+              {m.bulk_pause_all()}
+            </Button>
             <Button
               icon="dock"
               testid="site-dock-{site.id}"
-              onclick={() => (bulk = { kind: 'return_to_dock', site })}>{m.bulk_dock_all()}</Button
+              onclick={() => (bulk = { kind: 'return_to_dock', site })}
             >
+              {m.bulk_dock_all()}
+            </Button>
           {/if}
           {#if right.manage}
             <DemoLock variant="inline" testid="demo-lock-site-move">
@@ -329,8 +333,10 @@
                 variant="ghost"
                 icon="mower"
                 testid="site-move-{site.id}"
-                onclick={() => (moveSite = site)}>{m.sites_move_here()}</Button
+                onclick={() => (moveSite = site)}
               >
+                {m.sites_move_here()}
+              </Button>
             </DemoLock>
           {/if}
           {#if right.manage && !site.is_default}
@@ -339,8 +345,9 @@
               icon="trash"
               testid="site-delete-{site.id}"
               onclick={() => remove(site)}
-              >{confirmDelete === site.id ? m.sites_delete_confirm() : m.sites_delete()}</Button
             >
+              {confirmDelete === site.id ? m.sites_delete_confirm() : m.sites_delete()}
+            </Button>
           {/if}
         </div>
       </li>
@@ -379,9 +386,9 @@
         error={issueText('timezone')}
       />
       {#if form.timezone !== deviceZone}
-        <button type="button" class="preset" onclick={() => (form.timezone = deviceZone)}
-          >{m.sched_timezone_device({ zone: deviceZone })}</button
-        >
+        <button type="button" class="preset" onclick={() => (form.timezone = deviceZone)}>
+          {m.sched_timezone_device({ zone: deviceZone })}
+        </button>
       {/if}
     </div>
     <Panel label={m.sites_address()} flush>
@@ -448,11 +455,11 @@
               bind:value={originId}
             />
           {/if}
-          <Button icon="pin" testid="site-form-origin" onclick={useOrigin}
-            >{origins.length > 1
+          <Button icon="pin" testid="site-form-origin" onclick={useOrigin}>
+            {origins.length > 1
               ? m.site_use_origin()
-              : m.sites_use_origin_of({ name: origins[0]?.name ?? '' })}</Button
-          >
+              : m.sites_use_origin_of({ name: origins[0]?.name ?? '' })}
+          </Button>
         </div>
       {/if}
     </Panel>
@@ -473,8 +480,9 @@
       pending={saving}
       testid="site-form-save"
       onclick={() => document.querySelector<HTMLFormElement>('#site-form')?.requestSubmit()}
-      >{m.save()}</Button
     >
+      {m.save()}
+    </Button>
   {/snippet}
 </Sheet>
 
@@ -495,16 +503,18 @@
           <li>
             <span class="who">
               <span class="name">{mower.name}</span>
-              <span class="meta"
-                >{places?.sites.find((s) => s.id === mower.site_id)?.name ?? ''}</span
-              >
+              <span class="meta">
+                {places?.sites.find((s) => s.id === mower.site_id)?.name ?? ''}
+              </span>
             </span>
             <Button
               icon="chevron"
               pending={moving === mower.id}
               testid="move-{mower.id}"
-              onclick={() => move(mower.id, target)}>{m.sites_move()}</Button
+              onclick={() => move(mower.id, target)}
             >
+              {m.sites_move()}
+            </Button>
           </li>
         {/each}
       </ul>

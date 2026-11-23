@@ -72,9 +72,9 @@
         aria-hidden="true"
       >
         {#if bar.wet}<span class="drop"></span>{/if}
-        {#if ticks.includes(i)}<span class="tick"
-            >{i === nowIndex && nowLabel ? nowLabel : hourLabel(bar.start)}</span
-          >{/if}
+        {#if ticks.includes(i)}<span class="tick">
+            {i === nowIndex && nowLabel ? nowLabel : hourLabel(bar.start)}
+          </span>{/if}
       </span>
     {/each}
   </div>

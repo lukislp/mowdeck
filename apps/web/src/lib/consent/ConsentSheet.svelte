@@ -89,14 +89,18 @@
         icon="check"
         pending={consent.busy}
         testid="consent-agree"
-        onclick={() => void consent.agree()}>{m.consent_agree()}</Button
+        onclick={() => void consent.agree()}
       >
+        {m.consent_agree()}
+      </Button>
       <Button
         variant="ghost"
         disabled={consent.busy}
         testid="consent-decline"
-        onclick={() => consent.decline()}>{m.consent_decline()}</Button
+        onclick={() => consent.decline()}
       >
+        {m.consent_decline()}
+      </Button>
     </div>
   {/snippet}
 </Sheet>

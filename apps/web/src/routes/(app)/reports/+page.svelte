@@ -351,10 +351,9 @@
                   <td class="num" class:bad={row.faults > 0}>{formatNumber(row.faults)}</td>
                   <td class="num">
                     <span class="avail">
-                      <span class="meter" aria-hidden="true"
-                        ><span class="fill" style:inline-size="{row.availability * 100}%"
-                        ></span></span
-                      >{percent(row.availability)}<small>%</small>
+                      <span class="meter" aria-hidden="true">
+                        <span class="fill" style:inline-size="{row.availability * 100}%"></span>
+                      </span>{percent(row.availability)}<small>%</small>
                     </span>
                   </td>
                 </tr>
@@ -365,10 +364,9 @@
                 <th scope="row">{m.reports_total()}</th>
                 <td class="num">{hoursText(totals.mowingHours)}<small>{HOURS}</small></td>
                 <td class="num">{hoursText(totals.bladeHours)}<small>{HOURS}</small></td>
-                <td class="num"
-                  >{distance(totals.distanceM).text}<small>{distance(totals.distanceM).unit}</small
-                  ></td
-                >
+                <td class="num">
+                  {distance(totals.distanceM).text}<small>{distance(totals.distanceM).unit}</small>
+                </td>
                 <td class="num">{formatNumber(totals.jobs)}</td>
                 <td class="num">{formatNumber(totals.faults)}</td>
                 <td class="num">{percent(totals.availability)}<small>%</small></td>
@@ -433,9 +431,9 @@
           testid="report-dialect"
         />
         <div class="export">
-          <Button variant="primary" icon="download" testid="report-csv" onclick={download}
-            >{m.reports_csv()}</Button
-          >
+          <Button variant="primary" icon="download" testid="report-csv" onclick={download}>
+            {m.reports_csv()}
+          </Button>
           <Button icon="table" testid="report-copy" onclick={copy}>{m.reports_copy()}</Button>
         </div>
       </Panel>

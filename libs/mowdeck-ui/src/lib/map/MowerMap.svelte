@@ -1158,9 +1158,9 @@
       data-testid="mow-path-legend"
     >
       <li class="legend-title">
-        {labels.path}{#if pathPreview && labels.pathPreview}<span class="legend-caption"
-            >{labels.pathPreview}</span
-          >{/if}
+        {labels.path}{#if pathPreview && labels.pathPreview}<span class="legend-caption">
+            {labels.pathPreview}
+          </span>{/if}
       </li>
       {#if pathHasProgress && labels.pathDone}<li data-path="done">{labels.pathDone}</li>{/if}
       {#if labels.pathAhead}<li data-path="ahead">{labels.pathAhead}</li>{/if}
@@ -1323,8 +1323,10 @@
                 class="chip"
                 aria-checked={rtkCellSize === size}
                 data-testid="map-rtk-cell-{size}"
-                onclick={() => (rtkCellSize = size)}>{labels.rtkCell(size)}</button
+                onclick={() => (rtkCellSize = size)}
               >
+                {labels.rtkCell(size)}
+              </button>
             {/each}
           </div>
         </div>
@@ -1337,16 +1339,20 @@
               class="chip chip--text"
               aria-checked={rtkAggregate === 'worst'}
               data-testid="map-rtk-worst"
-              onclick={() => (rtkAggregate = 'worst')}>{labels.rtkWorst}</button
+              onclick={() => (rtkAggregate = 'worst')}
             >
+              {labels.rtkWorst}
+            </button>
             <button
               type="button"
               role="radio"
               class="chip chip--text"
               aria-checked={rtkAggregate === 'majority'}
               data-testid="map-rtk-majority"
-              onclick={() => (rtkAggregate = 'majority')}>{labels.rtkMajority}</button
+              onclick={() => (rtkAggregate = 'majority')}
             >
+              {labels.rtkMajority}
+            </button>
           </div>
         </div>
       {/if}

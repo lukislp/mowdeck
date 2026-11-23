@@ -35,8 +35,10 @@
       type="button"
       class="got-it"
       data-testid="firsttime-{hint}-dismiss"
-      onclick={() => void onboarding.dismissHint(hint)}>{m.firsttime_dismiss()}</button
+      onclick={() => void onboarding.dismissHint(hint)}
     >
+      {m.firsttime_dismiss()}
+    </button>
   </aside>
 {/if}
 

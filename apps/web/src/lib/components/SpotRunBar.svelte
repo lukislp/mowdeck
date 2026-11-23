@@ -103,16 +103,16 @@
           })}
         </span>
         <span>{points}</span>
-        <span class="badge" data-rtk={rtkFix ?? 'unknown'} data-testid="spot-run-rtk"
-          >{rtkFixShort((rtkFix ?? 'unknown') as RtkFix)}</span
-        >
-        <span class="badge" data-blades={run.dry_run ? 'off' : 'on'} data-testid="spot-run-blades"
-          >{run.dry_run ? m.spot_run_dry() : m.spot_run_blades_on()}</span
-        >
+        <span class="badge" data-rtk={rtkFix ?? 'unknown'} data-testid="spot-run-rtk">
+          {rtkFixShort((rtkFix ?? 'unknown') as RtkFix)}
+        </span>
+        <span class="badge" data-blades={run.dry_run ? 'off' : 'on'} data-testid="spot-run-blades">
+          {run.dry_run ? m.spot_run_dry() : m.spot_run_blades_on()}
+        </span>
         {#if spotReasonLabel(run.reason, { bridge })}
-          <span class="reason" data-testid="spot-run-reason"
-            >{spotReasonLabel(run.reason, { bridge })}</span
-          >
+          <span class="reason" data-testid="spot-run-reason">
+            {spotReasonLabel(run.reason, { bridge })}
+          </span>
         {/if}
       </div>
     </div>
@@ -149,9 +149,9 @@
             : m.spot_end_failed()}
       </strong>
       {#if spotReasonLabel(ended.reason, { bridge })}
-        <span data-testid="spot-end-reason"
-          >{m.spot_end_reason({ reason: spotReasonLabel(ended.reason, { bridge }) ?? '' })}</span
-        >
+        <span data-testid="spot-end-reason">
+          {m.spot_end_reason({ reason: spotReasonLabel(ended.reason, { bridge }) ?? '' })}
+        </span>
       {/if}
       <span class="mono">
         {ended.progress_percent} % · {m.path_status_done({

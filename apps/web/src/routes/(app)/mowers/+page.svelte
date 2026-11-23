@@ -188,9 +188,9 @@
       reference={problem.correlationId}
       referenceLabel={m.problem_reference()}
     />
-    <Button icon="play" testid="mowers-retry" onclick={() => void load()}
-      >{m.loading_retry()}</Button
-    >
+    <Button icon="play" testid="mowers-retry" onclick={() => void load()}>
+      {m.loading_retry()}
+    </Button>
   </div>
 {/if}
 {#if list === null && problem}

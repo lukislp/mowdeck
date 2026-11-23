@@ -35,9 +35,9 @@
 {#if slow}
   <span class="slow" data-testid="loading-slow">
     <span>{m.loading_slow()}</span>
-    <button type="button" class="retry" data-testid="loading-retry" onclick={retry}
-      >{m.loading_retry()}</button
-    >
+    <button type="button" class="retry" data-testid="loading-retry" onclick={retry}>
+      {m.loading_retry()}
+    </button>
   </span>
 {:else}
   {m.loading()}

@@ -235,9 +235,9 @@
                 emptyText={m.no_data()}
               />
             </div>
-            <Button href="/mowers/{chosen.id}" icon="chevron" full testid="fleet-card-open"
-              >{m.fleet_open_mower()}</Button
-            >
+            <Button href="/mowers/{chosen.id}" icon="chevron" full testid="fleet-card-open">
+              {m.fleet_open_mower()}
+            </Button>
           </div>
         {/if}
         <div class="filters">
@@ -282,12 +282,12 @@
             <h2 class="label">{m.bulk_title()}</h2>
             <p class="scope">{scope}</p>
             <div class="bulk-row">
-              <Button icon="pause" testid="fleet-pause-all" onclick={() => (bulk = 'pause_mow')}
-                >{m.bulk_pause_all()}</Button
-              >
-              <Button icon="dock" testid="fleet-dock-all" onclick={() => (bulk = 'return_to_dock')}
-                >{m.bulk_dock_all()}</Button
-              >
+              <Button icon="pause" testid="fleet-pause-all" onclick={() => (bulk = 'pause_mow')}>
+                {m.bulk_pause_all()}
+              </Button>
+              <Button icon="dock" testid="fleet-dock-all" onclick={() => (bulk = 'return_to_dock')}>
+                {m.bulk_dock_all()}
+              </Button>
             </div>
           </section>
         {/if}

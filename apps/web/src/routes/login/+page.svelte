@@ -459,9 +459,9 @@
           <p class="full-text">{m.login_demo_full_text()}</p>
           <div class="readout">
             <span class="readout-label">{m.login_demo_full_next()}</span>
-            <span class="readout-value" aria-hidden="true" data-testid="login-demo-countdown"
-              >{clock(fullLeft)}</span
-            >
+            <span class="readout-value" aria-hidden="true" data-testid="login-demo-countdown">
+              {clock(fullLeft)}
+            </span>
             <span class="md-visually-hidden" role="status">{fullSpoken}</span>
           </div>
           <Button
@@ -469,8 +469,10 @@
             full
             pending={demoBusy}
             testid="login-demo-retry"
-            onclick={tryDemo}>{m.login_demo_full_retry()}</Button
+            onclick={tryDemo}
           >
+            {m.login_demo_full_retry()}
+          </Button>
         </div>
       {:else if recreating}
         <div class="recreating" role="status" data-testid="login-demo-recreating">
@@ -504,8 +506,10 @@
           full
           pending={demoBusy}
           testid="login-demo-start"
-          onclick={tryDemo}>{m.login_demo_button()}</Button
+          onclick={tryDemo}
         >
+          {m.login_demo_button()}
+        </Button>
         <p class="note" data-testid="login-demo-note">
           {sandbox
             ? m.login_demo_note_sandbox({
@@ -523,9 +527,9 @@
         <span>{returnLink ? m.login_app_done() : m.login_app_notice()}</span>
       </p>
       {#if returnLink}
-        <Button href={returnLink} variant="primary" full icon="phone" testid="login-app-return"
-          >{m.login_app_return()}</Button
-        >
+        <Button href={returnLink} variant="primary" full icon="phone" testid="login-app-return">
+          {m.login_app_return()}
+        </Button>
       {:else if confirming}
         <div class="confirm" data-testid="login-app-confirm">
           <p>
@@ -537,11 +541,13 @@
             icon="phone"
             pending={handing}
             testid="login-app-continue"
-            onclick={handOver}>{m.login_app_continue()}</Button
+            onclick={handOver}
           >
-          <Button variant="ghost" full disabled={handing} onclick={cancelHandOver}
-            >{m.cancel()}</Button
-          >
+            {m.login_app_continue()}
+          </Button>
+          <Button variant="ghost" full disabled={handing} onclick={cancelHandOver}>
+            {m.cancel()}
+          </Button>
         </div>
       {/if}
     {/if}
@@ -563,8 +569,10 @@
               pending={passkeyBusy}
               disabled={busy || githubBusy || appleBusy}
               testid="login-passkey"
-              onclick={withPasskey}>{m.login_passkey()}</Button
+              onclick={withPasskey}
             >
+              {m.login_passkey()}
+            </Button>
           {/if}
           {#if githubButton}
             <Button
@@ -574,8 +582,9 @@
               disabled={busy || passkeyBusy || appleBusy}
               testid="login-github"
               onclick={withGitHub}
-              ><span class="provider"><GitHubMark />{m.login_github()}</span></Button
             >
+              <span class="provider"><GitHubMark />{m.login_github()}</span>
+            </Button>
           {/if}
           {#if appleButton}
             <Button
@@ -585,15 +594,16 @@
               disabled={busy || passkeyBusy || githubBusy}
               testid="login-apple"
               onclick={withApple}
-              ><span class="provider"><AppleMark />{m.login_apple()}</span></Button
             >
+              <span class="provider"><AppleMark />{m.login_apple()}</span>
+            </Button>
           {/if}
           {#if waiting}
             <p class="waiting" role="status">
               <span>{m.login_app_waiting()}</span>
-              <button type="button" class="link" onclick={() => waiting?.abort()}
-                >{m.cancel()}</button
-              >
+              <button type="button" class="link" onclick={() => waiting?.abort()}>
+                {m.cancel()}
+              </button>
             </p>
           {/if}
         </div>
@@ -630,8 +640,10 @@
           full
           pending={busy}
           disabled={!username || !password || passkeyBusy || githubBusy || appleBusy}
-          testid="login-submit">{m.login_submit()}</Button
+          testid="login-submit"
         >
+          {m.login_submit()}
+        </Button>
       </form>
     {/if}
     {#if !appRequest}

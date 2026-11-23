@@ -48,16 +48,18 @@
   <SafetyCheck variant={safety.variant} bind:checked />
   {#snippet footer()}
     <div class="footer">
-      <Button variant="ghost" testid="safety-cancel" onclick={() => safety.cancel()}
-        >{m.cancel()}</Button
-      >
+      <Button variant="ghost" testid="safety-cancel" onclick={() => safety.cancel()}>
+        {m.cancel()}
+      </Button>
       <Button
         variant="primary"
         icon="check"
         disabled={!checked}
         testid="safety-confirm"
-        onclick={() => safety.confirm()}>{m.safety_go()}</Button
+        onclick={() => safety.confirm()}
       >
+        {m.safety_go()}
+      </Button>
     </div>
   {/snippet}
 </Sheet>

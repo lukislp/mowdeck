@@ -360,10 +360,9 @@
                 icon={form.removeKey ? 'back' : 'trash'}
                 onclick={() => (form = { ...form, removeKey: !form.removeKey, apiKey: '' })}
                 testid="ai-key-remove"
-                >{form.removeKey
-                  ? m.ai_provider_key_keep_action()
-                  : m.ai_provider_key_remove()}</Button
               >
+                {form.removeKey ? m.ai_provider_key_keep_action() : m.ai_provider_key_remove()}
+              </Button>
             {/if}
             {#if missingKey}
               <p class="note">{m.ai_provider_key_missing()}</p>
@@ -398,15 +397,19 @@
             icon="check"
             pending={busy === 'save'}
             disabled={busy !== null}
-            testid="ai-save">{m.ai_provider_save()}</Button
+            testid="ai-save"
           >
+            {m.ai_provider_save()}
+          </Button>
           <Button
             icon="pulse"
             pending={busy === 'test'}
             disabled={busy !== null || !settings.configured}
             onclick={runTest}
-            testid="ai-test">{m.ai_provider_test()}</Button
+            testid="ai-test"
           >
+            {m.ai_provider_test()}
+          </Button>
           {#if settings.configured}
             <Button
               variant="danger"
@@ -414,8 +417,10 @@
               pending={busy === 'delete'}
               disabled={busy !== null}
               onclick={remove}
-              testid="ai-delete">{m.ai_provider_delete()}</Button
+              testid="ai-delete"
             >
+              {m.ai_provider_delete()}
+            </Button>
           {/if}
         </div>
       </form>
@@ -509,16 +514,20 @@
               <Button
                 icon="check"
                 testid="ai-consent-review"
-                onclick={() => void consent.ensure('any')}>{m.consent_review()}</Button
+                onclick={() => void consent.ensure('any')}
               >
+                {m.consent_review()}
+              </Button>
             {/if}
             {#if agreement.granted_at}
               <Button
                 variant="danger"
                 icon="trash"
                 testid="ai-consent-withdraw"
-                onclick={() => void withdrawConsent()}>{m.consent_withdraw_action()}</Button
+                onclick={() => void withdrawConsent()}
               >
+                {m.consent_withdraw_action()}
+              </Button>
             {/if}
           </div>
         </div>

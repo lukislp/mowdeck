@@ -114,13 +114,13 @@
   </div>
   {#if !searchMode && data && data.total > PAGE_SIZE}
     <div class="pager">
-      <span class="range"
-        >{m.op_page_range({
+      <span class="range">
+        {m.op_page_range({
           from: formatNumber(offset + 1),
           to: formatNumber(last),
           total: formatNumber(data.total),
-        })}</span
-      >
+        })}
+      </span>
       <Button
         variant="ghost"
         icon="back"
@@ -179,16 +179,15 @@
           <span class="glyph"><Icon name="user" size={18} /></span>
           <span class="who">
             <span class="name">{row.name}</span>
-            <span class="meta"
-              >{accountKindLabel(row.kind)} ·
-              <span class:warn={row.status !== 'active'}>{accountStatusLabel(row.status)}</span
-              ></span
-            >
+            <span class="meta">
+              {accountKindLabel(row.kind)} ·
+              <span class:warn={row.status !== 'active'}>{accountStatusLabel(row.status)}</span>
+            </span>
           </span>
         </span>
-        <span class="cell mono" role="cell" data-label={m.op_col_owner()}
-          >{row.owner_username ?? m.no_data()}</span
-        >
+        <span class="cell mono" role="cell" data-label={m.op_col_owner()}>
+          {row.owner_username ?? m.no_data()}
+        </span>
         <span class="cell" role="cell" data-label={m.op_col_plan()}>
           {#if row.plan?.assigned}
             <span class="plan-key">{row.plan.assigned.plan}</span>
@@ -210,9 +209,9 @@
             <span class="quiet">{m.op_plan_unknown()}</span>
           {/if}
         </span>
-        <span class="cell mono" role="cell" data-label={m.op_col_created()}
-          >{formatDate(row.created_at)}</span
-        >
+        <span class="cell mono" role="cell" data-label={m.op_col_created()}>
+          {formatDate(row.created_at)}
+        </span>
       </a>
     {/each}
   </div>

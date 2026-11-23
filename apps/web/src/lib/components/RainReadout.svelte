@@ -77,17 +77,17 @@
       <span class="value" class:wet={now.raining} data-testid="rain-now">
         {#if now.raining}
           {m.rain_now()}
-          {#if now.mm !== null}<span class="mono"
-              >· {m.rain_now_mm({ mm: formatNumber(now.mm, 1) })}</span
-            >{/if}
+          {#if now.mm !== null}<span class="mono">
+              · {m.rain_now_mm({ mm: formatNumber(now.mm, 1) })}
+            </span>{/if}
         {:else}
           {m.rain_dry()}
         {/if}
       </span>
       {#if now.probability !== null}
-        <span class="mono quiet"
-          >{m.rain_chance({ percent: formatNumber(Math.round(now.probability * 100)) })}</span
-        >
+        <span class="mono quiet">
+          {m.rain_chance({ percent: formatNumber(Math.round(now.probability * 100)) })}
+        </span>
       {/if}
     </p>
     {#if bars.length}

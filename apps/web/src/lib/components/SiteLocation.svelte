@@ -194,9 +194,9 @@
             error={issues.timezone ?? saveProblem?.fieldError('timezone') ?? null}
           />
           {#if timezone !== deviceZone}
-            <button type="button" class="preset" onclick={() => (timezone = deviceZone)}
-              >{m.sched_timezone_device({ zone: deviceZone })}</button
-            >
+            <button type="button" class="preset" onclick={() => (timezone = deviceZone)}>
+              {m.sched_timezone_device({ zone: deviceZone })}
+            </button>
           {/if}
         </div>
         <Field
@@ -220,9 +220,9 @@
       </div>
       <div class="row">
         {#if origin}
-          <Button icon="pin" testid="site-use-origin" onclick={useOrigin}
-            >{m.site_use_origin()}</Button
-          >
+          <Button icon="pin" testid="site-use-origin" onclick={useOrigin}>
+            {m.site_use_origin()}
+          </Button>
         {/if}
         {#if latitude || longitude}
           <Button
@@ -230,8 +230,10 @@
             onclick={() => {
               latitude = '';
               longitude = '';
-            }}>{m.site_clear_coordinates()}</Button
+            }}
           >
+            {m.site_clear_coordinates()}
+          </Button>
         {/if}
       </div>
       {#if !located}
@@ -246,8 +248,9 @@
         />
       {/if}
       <div>
-        <Button type="submit" variant="primary" pending={busy} testid="site-save">{m.save()}</Button
-        >
+        <Button type="submit" variant="primary" pending={busy} testid="site-save">
+          {m.save()}
+        </Button>
       </div>
     </form>
   {/if}

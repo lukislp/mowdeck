@@ -61,15 +61,17 @@
   });
 </script>
 
-<svelte:head
-  ><title>{isLegalPage(key) ? title(key) : m.legal_nav()} · {m.app_name()}</title></svelte:head
->
+<svelte:head>
+  <title>{isLegalPage(key) ? title(key) : m.legal_nav()} · {m.app_name()}</title>
+</svelte:head>
 
 {#snippet inline(content: Inline[])}
   {#each content as part, index (index)}
     {#if part.kind === 'strong'}<strong>{part.text}</strong>{:else if part.kind === 'link'}<a
-        href={part.href}>{part.text}</a
-      >{:else}{part.text}{/if}
+        href={part.href}
+      >
+        {part.text}
+      </a>{:else}{part.text}{/if}
   {/each}
 {/snippet}
 
@@ -91,8 +93,9 @@
       <article data-testid="legal-content">
         {#each blocks as block, index (index)}
           {#if block.kind === 'heading'}
-            <svelte:element this={`h${block.level}`}>{@render inline(block.content)}</svelte:element
-            >
+            <svelte:element this={`h${block.level}`}>
+              {@render inline(block.content)}
+            </svelte:element>
           {:else if block.kind === 'paragraph'}
             <p>{@render inline(block.content)}</p>
           {:else if block.ordered}

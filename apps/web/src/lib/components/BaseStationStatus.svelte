@@ -64,9 +64,9 @@
     </div>
     <div class="tile" data-testid="bs-satellites">
       <span class="label">{m.bs_satellites()}</span>
-      <span class="value mono big"
-        >{state.satellites != null ? formatNumber(state.satellites) : '—'}</span
-      >
+      <span class="value mono big">
+        {state.satellites != null ? formatNumber(state.satellites) : '—'}
+      </span>
     </div>
     <div class="tile" data-testid="bs-solution">
       <span class="label">{m.bs_solution()}</span>
@@ -74,11 +74,11 @@
     </div>
     <div class="tile" data-testid="bs-wifi">
       <span class="label">{m.bs_wifi()}</span>
-      <span class="value mono"
-        >{state.wifi_dbm != null
+      <span class="value mono">
+        {state.wifi_dbm != null
           ? formatNumber(state.wifi_dbm)
-          : '—'}{#if state.wifi_dbm != null}<span class="unit">{DBM}</span>{/if}</span
-      >
+          : '—'}{#if state.wifi_dbm != null}<span class="unit">{DBM}</span>{/if}
+      </span>
     </div>
     <div class="tile" data-testid="bs-position">
       <span class="label">{m.bs_position()}</span>

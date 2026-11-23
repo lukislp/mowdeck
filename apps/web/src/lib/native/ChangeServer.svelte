@@ -57,17 +57,19 @@
           icon="link"
           pending={busy}
           testid="{testid}-confirm"
-          onclick={change}>{m.native_change_server_confirm_action()}</Button
+          onclick={change}
         >
-        <Button variant="ghost" disabled={busy} onclick={() => (confirming = false)}
-          >{m.cancel()}</Button
-        >
+          {m.native_change_server_confirm_action()}
+        </Button>
+        <Button variant="ghost" disabled={busy} onclick={() => (confirming = false)}>
+          {m.cancel()}
+        </Button>
       </div>
     {:else}
       <div>
-        <Button variant="secondary" icon="link" {testid} onclick={() => (confirming = true)}
-          >{m.native_change_server()}</Button
-        >
+        <Button variant="secondary" icon="link" {testid} onclick={() => (confirming = true)}>
+          {m.native_change_server()}
+        </Button>
       </div>
     {/if}
   </div>

@@ -65,8 +65,10 @@
       for="{uid}-range"
       data-unknown={shown == null ? 'true' : undefined}
       data-testid="drive-speed-value"
-      aria-busy={pending ? 'true' : undefined}>{formatDriveSpeed(shown, setting)}</output
+      aria-busy={pending ? 'true' : undefined}
     >
+      {formatDriveSpeed(shown, setting)}
+    </output>
   </div>
   <div class="slider" style:--fill="{fill}%">
     <input

@@ -198,9 +198,9 @@
 >
   {#snippet actions()}
     {#if canCreate}
-      <Button href="/schedules/new" variant="primary" icon="plus" testid="schedule-new"
-        >{m.sched_new()}</Button
-      >
+      <Button href="/schedules/new" variant="primary" icon="plus" testid="schedule-new">
+        {m.sched_new()}
+      </Button>
     {/if}
   {/snippet}
 </TopBar>
@@ -240,9 +240,9 @@
         data-id={schedule.id}
       >
         <div class="head">
-          <a class="name" href="/schedules/{schedule.id}" data-testid="schedule-link"
-            >{schedule.name}</a
-          >
+          <a class="name" href="/schedules/{schedule.id}" data-testid="schedule-link">
+            {schedule.name}
+          </a>
           <span class="target">
             <Icon name={schedule.target_type === 'group' ? 'list' : 'mower'} size={16} />
             {targetName(schedule)}
@@ -265,23 +265,23 @@
               {#if !schedule.enabled}
                 <span class="muted">{m.sched_disabled()}</span>
               {:else if view.next}
-                <span class="mono when"
-                  >{formatFiring(view.next.at, schedule.timezone, locale)}</span
-                >
-                <span class="mono countdown"
-                  >{formatCountdown(view.next.at, clock.now, locale)}</span
-                >
+                <span class="mono when">
+                  {formatFiring(view.next.at, schedule.timezone, locale)}
+                </span>
+                <span class="mono countdown">
+                  {formatCountdown(view.next.at, clock.now, locale)}
+                </span>
                 {#if view.skipped}
-                  <span class="skip" data-testid="schedule-skipped"
-                    ><Icon name="skip" size={14} />{m.sched_skipped_one({
+                  <span class="skip" data-testid="schedule-skipped">
+                    <Icon name="skip" size={14} />{m.sched_skipped_one({
                       when: formatFiring(view.skipped.at, schedule.timezone, locale),
-                    })}</span
-                  >
+                    })}
+                  </span>
                 {/if}
               {:else}
-                <span class="muted"
-                  >{previews[schedule.id] === undefined ? m.loading() : m.no_data()}</span
-                >
+                <span class="muted">
+                  {previews[schedule.id] === undefined ? m.loading() : m.no_data()}
+                </span>
               {/if}
             </dd>
           </div>
@@ -339,9 +339,9 @@
               />
             </div>
           {:else}
-            <span class="state mono" data-testid="schedule-state"
-              >{schedule.enabled ? m.sched_state_on() : m.sched_state_off()}</span
-            >
+            <span class="state mono" data-testid="schedule-state">
+              {schedule.enabled ? m.sched_state_on() : m.sched_state_off()}
+            </span>
           {/if}
           <div class="buttons">
             {#if right.edit}
@@ -351,23 +351,29 @@
                 pending={busy === schedule.id}
                 disabled={!schedule.enabled || !view.next}
                 testid="schedule-skip"
-                onclick={() => skipNext(schedule)}>{m.sched_skip_next()}</Button
+                onclick={() => skipNext(schedule)}
               >
+                {m.sched_skip_next()}
+              </Button>
             {/if}
             {#if right.control}
               <Button
                 variant="secondary"
                 icon="play"
                 testid="schedule-run"
-                onclick={() => openRun(schedule)}>{m.sched_run_now()}</Button
+                onclick={() => openRun(schedule)}
               >
+                {m.sched_run_now()}
+              </Button>
             {/if}
             <Button
               variant="ghost"
               href="/schedules/{schedule.id}/runs"
               icon="list"
-              testid="schedule-runs">{m.sched_runs()}</Button
+              testid="schedule-runs"
             >
+              {m.sched_runs()}
+            </Button>
             {#if right.edit}
               <Button
                 variant="ghost"
@@ -435,8 +441,10 @@
         icon="play"
         pending={runBusy}
         testid="run-confirm"
-        onclick={runNow}>{m.sched_run_confirm()}</Button
+        onclick={runNow}
       >
+        {m.sched_run_confirm()}
+      </Button>
     {/if}
   {/snippet}
 </Sheet>

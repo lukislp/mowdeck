@@ -123,9 +123,9 @@
   }
 </script>
 
-<svelte:head
-  ><title>{creating ? m.op_plan_new() : (plan?.name ?? key)} · {m.app_name()}</title></svelte:head
->
+<svelte:head>
+  <title>{creating ? m.op_plan_new() : (plan?.name ?? key)} · {m.app_name()}</title>
+</svelte:head>
 
 <TopBar
   title={creating ? m.op_plan_new() : m.op_plan_edit_title({ name: plan?.name ?? key ?? '' })}
@@ -269,9 +269,9 @@
                 data-testid="plan-feature-{feature.key}"
                 onclick={() => (form.features = toggleFeature(form.features, feature.key, !on))}
               >
-                <span class="box" aria-hidden="true"
-                  >{#if on || allFeatures}<Icon name="check" size={16} />{/if}</span
-                >
+                <span class="box" aria-hidden="true">
+                  {#if on || allFeatures}<Icon name="check" size={16} />{/if}
+                </span>
                 <span class="who">
                   <span class="name">{featureLabel(feature.key, feature.description)}</span>
                   <span class="meta">{feature.key}</span>
@@ -314,9 +314,9 @@
     {/if}
     <div class="span footer">
       <Button variant="ghost" href="/operator/plans">{m.cancel()}</Button>
-      <Button variant="primary" type="submit" icon="check" pending={saving} testid="plan-save"
-        >{m.save()}</Button
-      >
+      <Button variant="primary" type="submit" icon="check" pending={saving} testid="plan-save">
+        {m.save()}
+      </Button>
     </div>
   </form>
 {/if}

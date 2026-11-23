@@ -187,12 +187,12 @@
     {#if lexicon}
       <p class="intro">
         {m.lexi_intro({ vendor: lexicon.vendor_name })}
-        <span class="tally mono" data-testid="lexicon-summary"
-          >{m.lexi_summary({
+        <span class="tally mono" data-testid="lexicon-summary">
+          {m.lexi_summary({
             entries: formatNumber(lexicon.entries),
             unverified: formatNumber(lexicon.unverified),
-          })}</span
-        >
+          })}
+        </span>
       </p>
     {/if}
 
@@ -278,14 +278,14 @@
                   <span class="cat">{errorCategoryLabel(entry.category)}</span>
                   {#if isCurrent}<span class="badge now">{m.lexi_current()}</span>{/if}
                   {#if count > 0}
-                    <span class="badge seen" data-testid="lexicon-seen"
-                      >{m.lexi_seen({ count: formatNumber(count) })}</span
-                    >
+                    <span class="badge seen" data-testid="lexicon-seen">
+                      {m.lexi_seen({ count: formatNumber(count) })}
+                    </span>
                   {/if}
                   {#if !entry.verified}
-                    <span class="badge unverified" data-testid="lexicon-unverified"
-                      >{m.lexi_unverified()}</span
-                    >
+                    <span class="badge unverified" data-testid="lexicon-unverified">
+                      {m.lexi_unverified()}
+                    </span>
                   {/if}
                 </span>
               </summary>
@@ -299,17 +299,17 @@
     {/if}
 
     <div class="foot">
-      <span class="tally mono" data-testid="lexicon-count"
-        >{m.lexi_count({ shown: formatNumber(entries.length), total: formatNumber(total) })}</span
-      >
+      <span class="tally mono" data-testid="lexicon-count">
+        {m.lexi_count({ shown: formatNumber(entries.length), total: formatNumber(total) })}
+      </span>
       <span class="actions">
         {#if isFiltered(filters)}
           <Button variant="ghost" onclick={reset} testid="lexicon-reset">{m.lexi_reset()}</Button>
         {/if}
         {#if entries.length < total}
-          <Button pending={more} onclick={() => void loadMore()} testid="lexicon-more"
-            >{m.lexi_more()}</Button
-          >
+          <Button pending={more} onclick={() => void loadMore()} testid="lexicon-more">
+            {m.lexi_more()}
+          </Button>
         {/if}
       </span>
     </div>

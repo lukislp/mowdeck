@@ -159,9 +159,9 @@
   <Panel label={m.passkeys_title()} testid="passkeys-panel">
     {#snippet actions()}
       {#if canCreate && !adding}
-        <Button variant="ghost" icon="plus" testid="passkey-add" onclick={openAdd}
-          >{m.passkeys_add()}</Button
-        >
+        <Button variant="ghost" icon="plus" testid="passkey-add" onclick={openAdd}>
+          {m.passkeys_add()}
+        </Button>
       {/if}
     {/snippet}
     <p class="intro">{m.passkeys_intro()}</p>
@@ -206,10 +206,13 @@
                       icon="trash"
                       pending={working}
                       testid="passkey-remove-confirm"
-                      onclick={() => remove(passkey)}>{m.remove()}</Button
+                      onclick={() => remove(passkey)}
                     >
-                    <Button variant="ghost" onclick={() => (confirming = null)}>{m.cancel()}</Button
-                    >
+                      {m.remove()}
+                    </Button>
+                    <Button variant="ghost" onclick={() => (confirming = null)}>
+                      {m.cancel()}
+                    </Button>
                   </span>
                 </span>
               {:else}
@@ -217,15 +220,19 @@
                   variant="ghost"
                   icon="edit"
                   testid="passkey-rename-{passkey.name}"
-                  onclick={() => openRename(passkey)}>{m.passkeys_rename()}</Button
+                  onclick={() => openRename(passkey)}
                 >
+                  {m.passkeys_rename()}
+                </Button>
                 <Button
                   variant="ghost"
                   icon="trash"
                   label={m.passkeys_remove_named({ name: passkey.name })}
                   testid="passkey-remove-{passkey.name}"
-                  onclick={() => (confirming = passkey.id)}>{m.remove()}</Button
+                  onclick={() => (confirming = passkey.id)}
                 >
+                  {m.remove()}
+                </Button>
               {/if}
             </span>
           </li>
@@ -266,8 +273,10 @@
             icon="key"
             pending={busy}
             disabled={!password}
-            testid="passkey-create">{m.passkeys_create()}</Button
+            testid="passkey-create"
           >
+            {m.passkeys_create()}
+          </Button>
           <Button variant="ghost" onclick={() => (adding = false)}>{m.cancel()}</Button>
         </div>
       </form>
@@ -291,8 +300,10 @@
       pending={working}
       disabled={!newName.trim()}
       testid="passkey-rename-save"
-      onclick={rename}>{m.save()}</Button
+      onclick={rename}
     >
+      {m.save()}
+    </Button>
   {/snippet}
 </Sheet>
 

@@ -77,9 +77,9 @@
             data-tone={correctionTone(gnss.correction_age_s)}
             data-testid="rx-correction"
           >
-            <span class="num"
-              >{age ? `${formatNumber(age.value, age.digits)} ${age.unit}` : '—'}</span
-            >
+            <span class="num">
+              {age ? `${formatNumber(age.value, age.digits)} ${age.unit}` : '—'}
+            </span>
             <span class="key">{m.rx_correction()}</span>
           </span>
         </span>

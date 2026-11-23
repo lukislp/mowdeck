@@ -180,17 +180,19 @@
       </div>
     {/if}
     <div class="actions">
-      <Button icon="signal" pending={checking} testid="firmware-check" onclick={oncheck}
-        >{m.firmware_check()}</Button
-      >
+      <Button icon="signal" pending={checking} testid="firmware-check" onclick={oncheck}>
+        {m.firmware_check()}
+      </Button>
       {#if offered}
         <Button
           variant="primary"
           icon="download"
           disabled={blocker !== null}
           testid="firmware-install"
-          onclick={() => (confirming = true)}>{m.firmware_install()}</Button
+          onclick={() => (confirming = true)}
         >
+          {m.firmware_install()}
+        </Button>
       {/if}
     </div>
     {#if offered && blocker}
@@ -220,8 +222,10 @@
         icon="download"
         disabled={blocker !== null}
         testid="firmware-confirm-go"
-        onclick={install}>{m.firmware_confirm_go()}</Button
+        onclick={install}
       >
+        {m.firmware_confirm_go()}
+      </Button>
     </div>
   {/snippet}
 </Sheet>

@@ -20,13 +20,13 @@
   <div class="banner" role="status" data-testid="plan-banner" data-status={plan.status}>
     <Icon name="alert" size={20} />
     <div class="text">
-      <strong
-        >{plan.status === 'grace'
+      <strong>
+        {plan.status === 'grace'
           ? plan.grace_until
             ? m.plan_banner_grace_until({ date: formatDate(plan.grace_until) })
             : m.plan_grace_title()
-          : m.plan_expired_title()}</strong
-      >
+          : m.plan_expired_title()}
+      </strong>
       <span>{m.plan_restricted_body()}</span>
     </div>
     <a class="link" href="/settings#plan">{m.plan_banner_open()}</a>

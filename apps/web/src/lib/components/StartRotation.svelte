@@ -67,8 +67,10 @@
                 class="chip mono"
                 aria-pressed={flow.rotateStep === preset}
                 data-testid="start-rotate-step-{preset}"
-                onclick={() => (flow.rotateStep = preset)}>+{preset}°</button
+                onclick={() => (flow.rotateStep = preset)}
               >
+                +{preset}°
+              </button>
             {/each}
           </div>
           <p class="hint small" data-testid="start-rotate-hint">

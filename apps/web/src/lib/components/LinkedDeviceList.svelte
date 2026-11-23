@@ -75,14 +75,14 @@
   <div class="head">
     <span class="sync">
       <span class="label">{m.linked_last_sync()}</span>
-      <span class="mono" data-testid="linked-last-sync"
-        >{lastSyncedAt ? formatDateTime(lastSyncedAt) : m.linked_never_synced()}</span
-      >
+      <span class="mono" data-testid="linked-last-sync">
+        {lastSyncedAt ? formatDateTime(lastSyncedAt) : m.linked_never_synced()}
+      </span>
     </span>
     {#if onsync}
-      <Button icon="signal" pending={syncing} {disabled} onclick={onsync} testid="linked-resync"
-        >{syncing ? m.linked_syncing() : m.linked_resync()}</Button
-      >
+      <Button icon="signal" pending={syncing} {disabled} onclick={onsync} testid="linked-resync">
+        {syncing ? m.linked_syncing() : m.linked_resync()}
+      </Button>
     {/if}
   </div>
 
@@ -92,9 +92,9 @@
     <fieldset>
       <legend>
         <span>{m.linked_devices_label()}</span>
-        <span class="count mono" data-testid="linked-selected-count"
-          >{m.linked_selected_count({ count: selected.length })}</span
-        >
+        <span class="count mono" data-testid="linked-selected-count">
+          {m.linked_selected_count({ count: selected.length })}
+        </span>
       </legend>
       <ul>
         {#each rows as device (device.device_name)}
@@ -139,9 +139,9 @@
                 {/if}
               </span>
               {#if failure}
-                <span class="fail" id="linked-fail-{key}" data-testid="linked-device-failure-{key}"
-                  >{failure}</span
-                >
+                <span class="fail" id="linked-fail-{key}" data-testid="linked-device-failure-{key}">
+                  {failure}
+                </span>
               {/if}
             </span>
             <ToneBadge

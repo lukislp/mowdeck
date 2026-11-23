@@ -107,8 +107,10 @@
       pending={marking}
       disabled={inbox.unread === 0}
       testid="inbox-mark-all"
-      onclick={markAll}>{m.notif_mark_all()}</Button
+      onclick={markAll}
     >
+      {m.notif_mark_all()}
+    </Button>
     <Button
       href="/settings#notifications"
       icon="settings"
@@ -189,8 +191,10 @@
                     icon="shield"
                     pending={acking === item.id}
                     testid="inbox-ack"
-                    onclick={() => acknowledge(item)}>{m.notif_ack()}</Button
+                    onclick={() => acknowledge(item)}
                   >
+                    {m.notif_ack()}
+                  </Button>
                   <span class="ack-hint">{m.notif_ack_hint()}</span>
                 {/if}
                 {#if where}

@@ -197,9 +197,9 @@
           {status.reason === 'no_provider' ? m.chat_no_provider() : m.chat_provider_unavailable()}
         </p>
         {#if status.reason === 'no_provider'}
-          <Button href={PROVIDER_SETTINGS_ROUTE} icon="link" testid="chat-provider-settings"
-            >{m.chat_no_provider_link()}</Button
-          >
+          <Button href={PROVIDER_SETTINGS_ROUTE} icon="link" testid="chat-provider-settings">
+            {m.chat_no_provider_link()}
+          </Button>
         {/if}
       </div>
     {:else}
@@ -240,8 +240,10 @@
               type="button"
               class="example"
               data-testid="chat-example"
-              onclick={() => void ask(example)}>{example}</button
+              onclick={() => void ask(example)}
             >
+              {example}
+            </button>
           {/each}
         </div>
       {/if}
@@ -271,9 +273,10 @@
                 >
                   <span class="no">{String(index + 1).padStart(2, '0')}</span>
                   <div class="what">
-                    <strong class="verb"
-                      ><Icon name={icon(action)} size={16} /> {actionLabel(action.kind)}</strong
-                    >
+                    <strong class="verb">
+                      <Icon name={icon(action)} size={16} />
+                      {actionLabel(action.kind)}
+                    </strong>
                     <dl>
                       {#if action.area_ids.length}
                         <div>
@@ -323,17 +326,19 @@
           <footer class="order-foot">
             {#if proposal.executable}<p class="hint">{m.chat_order_hint()}</p>{/if}
             <div class="buttons">
-              <Button variant="ghost" onclick={discard} testid="chat-discard"
-                >{m.chat_discard()}</Button
-              >
+              <Button variant="ghost" onclick={discard} testid="chat-discard">
+                {m.chat_discard()}
+              </Button>
               {#if proposal.executable}
                 <Button
                   variant="primary"
                   icon="check"
                   pending={running}
                   onclick={() => void confirm()}
-                  testid="chat-confirm">{m.chat_confirm()}</Button
+                  testid="chat-confirm"
                 >
+                  {m.chat_confirm()}
+                </Button>
               {/if}
             </div>
           </footer>

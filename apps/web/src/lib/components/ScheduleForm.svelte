@@ -441,20 +441,22 @@
                 class="day"
                 aria-pressed={form.days.includes(day)}
                 data-day={day}
-                onclick={() => toggleDay(day)}>{weekdayShort(day, locale)}</button
+                onclick={() => toggleDay(day)}
               >
+                {weekdayShort(day, locale)}
+              </button>
             {/each}
           </div>
           <div class="presets">
-            <button type="button" class="preset" onclick={() => setDays(WEEKDAYS.slice(0, 5))}
-              >{m.sched_preset_workdays()}</button
-            >
-            <button type="button" class="preset" onclick={() => setDays(['sat', 'sun'])}
-              >{m.sched_preset_weekend()}</button
-            >
-            <button type="button" class="preset" onclick={() => setDays(WEEKDAYS)}
-              >{m.sched_daily()}</button
-            >
+            <button type="button" class="preset" onclick={() => setDays(WEEKDAYS.slice(0, 5))}>
+              {m.sched_preset_workdays()}
+            </button>
+            <button type="button" class="preset" onclick={() => setDays(['sat', 'sun'])}>
+              {m.sched_preset_weekend()}
+            </button>
+            <button type="button" class="preset" onclick={() => setDays(WEEKDAYS)}>
+              {m.sched_daily()}
+            </button>
           </div>
           {#if err('days')}<span class="error" role="alert">{err('days')}</span>{/if}
         </fieldset>
@@ -526,9 +528,9 @@
           error={err('timezone')}
         />
         {#if form.timezone !== deviceZone}
-          <button type="button" class="preset" onclick={() => (form.timezone = deviceZone)}
-            >{m.sched_timezone_device({ zone: deviceZone })}</button
-          >
+          <button type="button" class="preset" onclick={() => (form.timezone = deviceZone)}>
+            {m.sched_timezone_device({ zone: deviceZone })}
+          </button>
         {/if}
       </div>
     </div>
@@ -591,19 +593,19 @@
   <Panel label={m.sched_section_pattern()} testid="sched-mow">
     <div class="fields">
       <div class="applies" data-testid="sched-mow-members">
-        <span class="label"
-          >{form.targetType === 'group'
+        <span class="label">
+          {form.targetType === 'group'
             ? m.sched_mow_applies_group({ count: members.length })
-            : m.sched_mow_applies_mower()}</span
-        >
+            : m.sched_mow_applies_mower()}
+        </span>
         {#if memberRows.length}
           <ul class="members">
             {#each memberRows as row (row.id)}
               <li data-mower={row.id} data-known={row.known}>
                 <span class="member-name">{row.name}</span>
-                <span class="member-model mono"
-                  >{row.known ? (row.model ?? m.no_data()) : m.sched_mow_caps_unknown()}</span
-                >
+                <span class="member-model mono">
+                  {row.known ? (row.model ?? m.no_data()) : m.sched_mow_caps_unknown()}
+                </span>
               </li>
             {/each}
           </ul>
@@ -667,8 +669,10 @@
                         class="step-chip mono"
                         aria-pressed={parseNumber(form.rotationStep) === step}
                         data-testid="sched-rotation-step-{step}"
-                        onclick={() => (form.rotationStep = String(step))}>+{step}°</button
+                        onclick={() => (form.rotationStep = String(step))}
                       >
+                        +{step}°
+                      </button>
                     {/each}
                   </div>
                   <Field
@@ -710,21 +714,27 @@
               class="mini turn"
               aria-label={m.sched_rotation_up()}
               disabled={i === 0}
-              onclick={() => moveAngle(i, -1)}><Icon name="back" size={16} /></button
+              onclick={() => moveAngle(i, -1)}
             >
+              <Icon name="back" size={16} />
+            </button>
             <button
               type="button"
               class="mini turn"
               aria-label={m.sched_rotation_down()}
               disabled={i === form.rotation.length - 1}
-              onclick={() => moveAngle(i, 1)}><Icon name="chevron" size={16} /></button
+              onclick={() => moveAngle(i, 1)}
             >
+              <Icon name="chevron" size={16} />
+            </button>
             <button
               type="button"
               class="mini"
               aria-label={m.remove()}
-              onclick={() => removeAngle(i)}><Icon name="close" size={16} /></button
+              onclick={() => removeAngle(i)}
             >
+              <Icon name="close" size={16} />
+            </button>
           </li>
         {/each}
       </ol>
@@ -741,21 +751,25 @@
         icon="plus"
         disabled={!angleValid || form.rotation.length >= LIMITS.rotation}
         testid="sched-rotation-add"
-        onclick={addAngle}>{m.sched_rotation_add()}</Button
+        onclick={addAngle}
       >
+        {m.sched_rotation_add()}
+      </Button>
     </div>
     <div class="presets">
       {#each rotationPresets as preset (preset.label)}
         <button
           type="button"
           class="preset mono"
-          onclick={() => (form.rotation = [...preset.angles])}>{preset.label}</button
+          onclick={() => (form.rotation = [...preset.angles])}
         >
+          {preset.label}
+        </button>
       {/each}
       {#if form.rotation.length}
-        <button type="button" class="preset" onclick={() => (form.rotation = [])}
-          >{m.sched_rotation_clear()}</button
-        >
+        <button type="button" class="preset" onclick={() => (form.rotation = [])}>
+          {m.sched_rotation_clear()}
+        </button>
       {/if}
     </div>
   {/snippet}
@@ -836,9 +850,9 @@
         referenceLabel={m.problem_reference()}
       />
     {/if}
-    <Button type="submit" variant="primary" icon="check" {pending} testid="sched-save"
-      >{submitLabel}</Button
-    >
+    <Button type="submit" variant="primary" icon="check" {pending} testid="sched-save">
+      {submitLabel}
+    </Button>
     {@render footer?.()}
   </div>
 </form>

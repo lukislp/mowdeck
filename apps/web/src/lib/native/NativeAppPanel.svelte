@@ -161,8 +161,10 @@
             icon="bell"
             pending={busy}
             testid="native-apns-enable"
-            onclick={enableApns}>{m.native_apns_enable()}</Button
+            onclick={enableApns}
           >
+            {m.native_apns_enable()}
+          </Button>
         </div>
       {/if}
     {/if}
@@ -179,10 +181,9 @@
           pending={busy || nativeShell.widgets === 'pending'}
           testid="native-widgets-toggle"
           onclick={toggleWidgets}
-          >{nativeShell.widgets === 'on'
-            ? m.native_widgets_disable()
-            : m.native_widgets_enable()}</Button
         >
+          {nativeShell.widgets === 'on' ? m.native_widgets_disable() : m.native_widgets_enable()}
+        </Button>
       </div>
     {/if}
 
@@ -199,9 +200,9 @@
         {#if ntfyLink}
           <a class="link" href={ntfyLink} data-testid="native-ntfy-open">{m.native_ntfy_open()}</a>
         {/if}
-        <a class="link" href="https://ntfy.sh/docs/subscribe/phone/" rel="external noopener"
-          >{m.native_ntfy_get()}</a
-        >
+        <a class="link" href="https://ntfy.sh/docs/subscribe/phone/" rel="external noopener">
+          {m.native_ntfy_get()}
+        </a>
       </div>
     {/if}
   </div>

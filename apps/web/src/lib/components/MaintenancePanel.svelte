@@ -93,8 +93,10 @@
           disabled={blocker !== null}
           pending={result?.status === 'pending'}
           testid="maint-{action}-open"
-          onclick={() => (confirming = action)}>{text.label}</Button
+          onclick={() => (confirming = action)}
         >
+          {text.label}
+        </Button>
       </li>
     {/each}
   </ul>
@@ -127,8 +129,10 @@
         icon={confirming ? ICONS[confirming] : undefined}
         disabled={confirmBlocker !== null}
         testid="maint-confirm-go"
-        onclick={run}>{m.maint_confirm_go()}</Button
+        onclick={run}
       >
+        {m.maint_confirm_go()}
+      </Button>
     </div>
   {/snippet}
 </Sheet>

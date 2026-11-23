@@ -40,14 +40,14 @@
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "8.0.0",
     "@testing-library/svelte": "5.4.2",
-    "@testing-library/user-event": "14.6.12",
+    "@testing-library/user-event": "14.6.13",
     "@types/leaflet": "1.9.22",
-    "@vitest/coverage-v8": "5.1.0",
+    "@vitest/coverage-v8": "5.1.1",
     "jsdom": "31.0.1",
-    "svelte": "5.57.3",
+    "svelte": "5.58.0",
     "svelte-check": "4.7.8",
     "typescript": "6.0.3",
     "vite": "8.3.8",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   }
 }

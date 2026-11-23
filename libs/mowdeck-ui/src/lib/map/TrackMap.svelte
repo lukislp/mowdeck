@@ -529,8 +529,10 @@
           aria-checked={entry.id === chosen?.id}
           disabled={!usable.includes(entry)}
           data-testid="track-map-layer-{entry.id}"
-          onclick={() => (layer = entry.id)}>{entry.label}</button
+          onclick={() => (layer = entry.id)}
         >
+          {entry.label}
+        </button>
       {/each}
     </div>
   {/if}

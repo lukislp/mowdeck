@@ -48,9 +48,9 @@
     <span class="stamp" data-testid="source-version">{version ?? 'dev'}</span>
     <span class="licence">{LICENSE_SHORT}</span>
     <a class="link" {href} target="_blank" rel="noopener noreferrer" data-testid="source-code-link">
-      {m.source_code()}<span class="arrow" aria-hidden="true">↗</span><span class="sr"
-        >({m.source_new_tab()})</span
-      >
+      {m.source_code()}<span class="arrow" aria-hidden="true">↗</span><span class="sr">
+        ({m.source_new_tab()})
+      </span>
     </a>
   </nav>
 {:else}
@@ -66,11 +66,11 @@
       <div class="row">
         <dt>{m.source_licence()}</dt>
         <dd>
-          <a class="mono" href={LICENSE_URL} target="_blank" rel="noopener noreferrer"
-            >{LICENSE_NAME}<span class="arrow" aria-hidden="true">↗</span><span class="sr"
-              >({m.source_new_tab()})</span
-            ></a
-          >
+          <a class="mono" href={LICENSE_URL} target="_blank" rel="noopener noreferrer">
+            {LICENSE_NAME}<span class="arrow" aria-hidden="true">↗</span><span class="sr">
+              ({m.source_new_tab()})
+            </span>
+          </a>
         </dd>
       </div>
       <div class="row">
@@ -82,10 +82,11 @@
             target="_blank"
             rel="noopener noreferrer"
             data-testid="source-code-link"
-            >{displayUrl(href)}<span class="arrow" aria-hidden="true">↗</span><span class="sr"
-              >({m.source_new_tab()})</span
-            ></a
           >
+            {displayUrl(href)}<span class="arrow" aria-hidden="true">↗</span><span class="sr">
+              ({m.source_new_tab()})
+            </span>
+          </a>
         </dd>
       </div>
     </dl>

@@ -401,9 +401,9 @@
             role="toolbar"
             aria-label={m.zones_draw()}
           >
-            <span class="drawbar-count mono" data-testid="zones-corner-count"
-              >{m.zones_corners({ n: draft.length })}</span
-            >
+            <span class="drawbar-count mono" data-testid="zones-corner-count">
+              {m.zones_corners({ n: draft.length })}
+            </span>
             <span class="drawbar-hint" role="status" aria-live="polite">
               {#if draft.length === 0}
                 {m.zones_drawing_hint()}
@@ -422,17 +422,19 @@
                 onclick={() => (draft = draft ? undoCorner(draft) : null)}
                 label={m.zones_undo()}
               />
-              <Button variant="ghost" icon="close" testid="zones-cancel" onclick={cancelDrawing}
-                >{m.cancel()}</Button
-              >
+              <Button variant="ghost" icon="close" testid="zones-cancel" onclick={cancelDrawing}>
+                {m.cancel()}
+              </Button>
               <Button
                 variant="primary"
                 icon="check"
                 disabled={!!problemOfDraft}
                 pending={busy && !!redrawing}
                 testid="zones-finish"
-                onclick={finishDrawing}>{m.zones_finish()}</Button
+                onclick={finishDrawing}
               >
+                {m.zones_finish()}
+              </Button>
             </span>
           </div>
         {/if}
@@ -475,17 +477,17 @@
             <span class="now-badge is-in"><Icon name="pin" size={16} /></span>
             <span class="now-text">
               <strong>{m.zones_now_in({ name: currentZoneName(overview) ?? '' })}</strong>
-              <span class="now-since"
-                >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
-              >
+              <span class="now-since">
+                {m.zones_since({ time: shortTime(overview.presence.since) })}
+              </span>
             </span>
           {:else if overview.presence}
             <span class="now-badge"><Icon name="pin" size={16} /></span>
             <span class="now-text">
               <strong>{m.zones_now_outside()}</strong>
-              <span class="now-since"
-                >{m.zones_since({ time: shortTime(overview.presence.since) })}</span
-              >
+              <span class="now-since">
+                {m.zones_since({ time: shortTime(overview.presence.since) })}
+              </span>
             </span>
           {:else}
             <span class="now-badge"><Icon name="pin" size={16} /></span>
@@ -512,8 +514,10 @@
             full
             disabled={!map || mapFailed}
             testid="zones-draw"
-            onclick={() => startDrawing()}>{m.zones_draw()}</Button
+            onclick={() => startDrawing()}
           >
+            {m.zones_draw()}
+          </Button>
         {/if}
       {/if}
       {#if actionProblem && !sheet}
@@ -532,9 +536,9 @@
               </li>
             {/each}
           </ul>
-          <Button variant="ghost" icon="fleet" href="/mowers/{id}" testid="zones-vendor-open"
-            >{m.zones_vendor_open()}</Button
-          >
+          <Button variant="ghost" icon="fleet" href="/mowers/{id}" testid="zones-vendor-open">
+            {m.zones_vendor_open()}
+          </Button>
         </section>
       {/if}
 
@@ -564,16 +568,16 @@
                     onclick={() => (selected = selected === zone.id ? null : zone.id)}
                   >
                     <span class="zone-name" data-testid="zone-name">{zone.name}</span>
-                    <span class="zone-area mono"
-                      >{m.zones_area({
+                    <span class="zone-area mono">
+                      {m.zones_area({
                         area: formatNumber(zone.area_m2, zone.area_m2 < 100 ? 1 : 0),
-                      })}</span
-                    >
+                      })}
+                    </span>
                   </button>
-                  <span class="zone-bar" aria-hidden="true"
-                    ><span style:inline-size="{Math.round((shares.get(zone.id) ?? 0) * 100)}%"
-                    ></span></span
-                  >
+                  <span class="zone-bar" aria-hidden="true">
+                    <span style:inline-size="{Math.round((shares.get(zone.id) ?? 0) * 100)}%"
+                    ></span>
+                  </span>
                   <span class="zone-facts" data-testid="zone-time">
                     {m.zones_time({ time: formatZoneTime(total?.seconds ?? 0) })}
                     {#if total && total.mowing_seconds > 0}
@@ -584,24 +588,26 @@
                     {/if}
                   </span>
                   {#if zone.start_plan_ref}
-                    <span class="zone-link"
-                      >{m.zones_linked({ name: planName(zone.start_plan_ref) })}</span
-                    >
+                    <span class="zone-link">
+                      {m.zones_linked({ name: planName(zone.start_plan_ref) })}
+                    </span>
                   {/if}
                   {#if canControl}
                     <span class="zone-actions">
                       {#if zone.start_plan_ref}
-                        <Button icon="play" testid="zone-start" onclick={() => startIn(zone)}
-                          >{m.zones_start()}</Button
-                        >
+                        <Button icon="play" testid="zone-start" onclick={() => startIn(zone)}>
+                          {m.zones_start()}
+                        </Button>
                       {/if}
                       <Button
                         variant="ghost"
                         icon="edit"
                         testid="zone-edit"
                         disabled={!!draft}
-                        onclick={() => openEdit(zone)}>{m.zones_edit()}</Button
+                        onclick={() => openEdit(zone)}
                       >
+                        {m.zones_edit()}
+                      </Button>
                     </span>
                   {/if}
                 </li>
@@ -664,8 +670,10 @@
           full
           pending={busy}
           testid="zone-delete-confirm"
-          onclick={() => remove(zone)}>{m.zones_delete()}</Button
+          onclick={() => remove(zone)}
         >
+          {m.zones_delete()}
+        </Button>
       {:else if sheet?.kind === 'edit'}
         {@const zone = sheet.zone}
         <div class="sheet-row">
@@ -673,14 +681,18 @@
             variant="ghost"
             icon="trash"
             testid="zone-delete"
-            onclick={() => (sheet = { kind: 'delete', zone })}>{m.zones_delete()}</Button
+            onclick={() => (sheet = { kind: 'delete', zone })}
           >
+            {m.zones_delete()}
+          </Button>
           <Button
             variant="ghost"
             icon="crosshair"
             testid="zone-redraw"
-            onclick={() => startDrawing(zone.id)}>{m.zones_redraw()}</Button
+            onclick={() => startDrawing(zone.id)}
           >
+            {m.zones_redraw()}
+          </Button>
         </div>
         <Button
           variant="primary"
@@ -688,8 +700,10 @@
           pending={busy}
           disabled={!name.trim()}
           testid="zone-save"
-          onclick={() => saveEdit(zone)}>{m.zones_save()}</Button
+          onclick={() => saveEdit(zone)}
         >
+          {m.zones_save()}
+        </Button>
       {:else if sheet?.kind === 'new'}
         <Button
           variant="primary"
@@ -697,8 +711,10 @@
           pending={busy}
           disabled={!name.trim()}
           testid="zone-save"
-          onclick={saveNew}>{m.zones_save()}</Button
+          onclick={saveNew}
         >
+          {m.zones_save()}
+        </Button>
       {/if}
     {/snippet}
   </Sheet>

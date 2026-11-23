@@ -114,11 +114,13 @@
         icon="trash"
         pending={deletion.busy === 'remove'}
         disabled={!confirms(typed, word)}
-        testid="deletion-confirm">{action}</Button
+        testid="deletion-confirm"
       >
-      <Button variant="ghost" disabled={deletion.busy === 'remove'} onclick={keep}
-        >{m.deletion_keep()}</Button
-      >
+        {action}
+      </Button>
+      <Button variant="ghost" disabled={deletion.busy === 'remove'} onclick={keep}>
+        {m.deletion_keep()}
+      </Button>
     </div>
   </form>
 {/snippet}
@@ -155,9 +157,9 @@
               {@render confirmForm(m.deletion_confirm_me())}
             {:else}
               <div>
-                <Button variant="danger" icon="trash" testid="deletion-start" onclick={start}
-                  >{m.deletion_start_me()}</Button
-                >
+                <Button variant="danger" icon="trash" testid="deletion-start" onclick={start}>
+                  {m.deletion_start_me()}
+                </Button>
               </div>
             {/if}
           {:else if view.kind === 'account'}
@@ -184,9 +186,9 @@
               {@render confirmForm(m.deletion_confirm_account({ date: plannedDate }))}
             {:else}
               <div>
-                <Button variant="danger" icon="trash" testid="deletion-start" onclick={start}
-                  >{m.deletion_start_account()}</Button
-                >
+                <Button variant="danger" icon="trash" testid="deletion-start" onclick={start}>
+                  {m.deletion_start_account()}
+                </Button>
               </div>
             {/if}
           {:else if view.kind === 'blocked'}
@@ -210,8 +212,10 @@
                   variant="secondary"
                   icon="user"
                   href={sectionHref('users')}
-                  testid="deletion-to-users">{m.deletion_blocked_users()}</Button
+                  testid="deletion-to-users"
                 >
+                  {m.deletion_blocked_users()}
+                </Button>
               </div>
             {/if}
           {:else if view.kind === 'scheduled'}
@@ -228,8 +232,10 @@
                   icon="back"
                   pending={deletion.busy === 'restore'}
                   testid="deletion-cancel"
-                  onclick={cancel}>{m.deletion_cancel()}</Button
+                  onclick={cancel}
                 >
+                  {m.deletion_cancel()}
+                </Button>
               </div>
             {:else}
               <p class="text">{m.deletion_scheduled_member()}</p>

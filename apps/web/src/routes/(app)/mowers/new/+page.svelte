@@ -195,8 +195,10 @@
           variant="primary"
           pending={busy}
           disabled={!name.trim() || !schema}
-          testid="mower-submit">{m.mower_register_submit()}</Button
+          testid="mower-submit"
         >
+          {m.mower_register_submit()}
+        </Button>
       </div>
     </form>
   {/if}

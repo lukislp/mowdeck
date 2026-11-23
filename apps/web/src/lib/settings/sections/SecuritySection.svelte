@@ -228,9 +228,9 @@
       <a class="gauge" href="#security-passkeys" data-testid="security-gauge-passkeys">
         <span class="g-label">{m.sec_gauge_passkeys()}</span>
         <span class="g-value num">{overview.passkeys}</span>
-        <span class="g-meta"
-          >{overview.passkeys ? m.sec_passkeys_some() : m.sec_passkeys_none()}</span
-        >
+        <span class="g-meta">
+          {overview.passkeys ? m.sec_passkeys_some() : m.sec_passkeys_none()}
+        </span>
       </a>
     </li>
     <li>
@@ -273,12 +273,14 @@
             icon="logout"
             pending={working === flagged.id}
             testid="security-flagged-revoke"
-            onclick={() => revoke(flagged)}>{m.sec_flag_revoke()}</Button
+            onclick={() => revoke(flagged)}
           >
+            {m.sec_flag_revoke()}
+          </Button>
         {/if}
-        <Button variant="ghost" testid="security-flagged-mine" onclick={clearFlag}
-          >{m.sec_flag_mine()}</Button
-        >
+        <Button variant="ghost" testid="security-flagged-mine" onclick={clearFlag}>
+          {m.sec_flag_mine()}
+        </Button>
       </div>
     </div>
   {:else if flaggedId}
@@ -295,9 +297,9 @@
             class:flagged={session.id === flaggedId}
             data-testid="session-{session.current ? 'current' : session.id}"
           >
-            <span class="mark" aria-hidden="true"
-              ><Icon name={deviceIcon(session.client)} size={20} /></span
-            >
+            <span class="mark" aria-hidden="true">
+              <Icon name={deviceIcon(session.client)} size={20} />
+            </span>
             <div class="what">
               <span class="device">
                 {deviceText(session)}
@@ -320,16 +322,20 @@
                     variant="danger"
                     pending={working === session.id}
                     testid="session-revoke-confirm"
-                    onclick={() => revoke(session)}>{m.sec_revoke_confirm()}</Button
+                    onclick={() => revoke(session)}
                   >
+                    {m.sec_revoke_confirm()}
+                  </Button>
                   <Button variant="ghost" onclick={() => (confirming = null)}>{m.cancel()}</Button>
                 {:else}
                   <Button
                     variant="ghost"
                     icon="logout"
                     testid="session-revoke-{session.id}"
-                    onclick={() => (confirming = session.id)}>{m.sec_revoke()}</Button
+                    onclick={() => (confirming = session.id)}
                   >
+                    {m.sec_revoke()}
+                  </Button>
                 {/if}
               </div>
             {/if}
@@ -346,18 +352,22 @@
                 icon="logout"
                 pending={working === 'others'}
                 testid="sessions-revoke-others-confirm"
-                onclick={revokeOthers}>{m.sec_others_confirm({ count: others.length })}</Button
+                onclick={revokeOthers}
               >
-              <Button variant="ghost" onclick={() => (confirmingOthers = false)}
-                >{m.cancel()}</Button
-              >
+                {m.sec_others_confirm({ count: others.length })}
+              </Button>
+              <Button variant="ghost" onclick={() => (confirmingOthers = false)}>
+                {m.cancel()}
+              </Button>
             </div>
           {:else}
             <Button
               icon="logout"
               testid="sessions-revoke-others"
-              onclick={() => (confirmingOthers = true)}>{m.sec_others()}</Button
+              onclick={() => (confirmingOthers = true)}
             >
+              {m.sec_others()}
+            </Button>
           {/if}
         {/if}
         <p class="hint">{m.sec_sessions_hint()}</p>
@@ -393,12 +403,12 @@
               <li class="token" data-testid="security-token-{token.id}">
                 <div class="what">
                   <span class="device">{token.name}</span>
-                  <span class="meta"
-                    ><code>{token.prefix}…</code> · {m.sec_token_expires({
+                  <span class="meta">
+                    <code>{token.prefix}…</code> · {m.sec_token_expires({
                       days: Math.max(0, daysLeft(token.expires_at, now)),
                     })}{#if token.last_used_at}
-                      · {m.sec_active({ age: formatAge(token.last_used_at, now) })}{/if}</span
-                  >
+                      · {m.sec_active({ age: formatAge(token.last_used_at, now) })}{/if}
+                  </span>
                 </div>
                 <div class="act">
                   <Button
@@ -406,8 +416,10 @@
                     icon="trash"
                     pending={working === token.id}
                     testid="security-token-revoke-{token.id}"
-                    onclick={() => revokeToken(token)}>{m.sec_token_revoke()}</Button
+                    onclick={() => revokeToken(token)}
                   >
+                    {m.sec_token_revoke()}
+                  </Button>
                 </div>
               </li>
             {/each}

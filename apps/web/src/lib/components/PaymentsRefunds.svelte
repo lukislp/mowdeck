@@ -168,9 +168,9 @@
               </div>
             {:else}
               <div class="actions">
-                <Button icon="check" onclick={() => void ask(refund)} testid="settle-{refund.id}"
-                  >{m.op_pay_settle()}</Button
-                >
+                <Button icon="check" onclick={() => void ask(refund)} testid="settle-{refund.id}">
+                  {m.op_pay_settle()}
+                </Button>
               </div>
             {/if}
           </li>

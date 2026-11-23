@@ -396,9 +396,9 @@
         <section class="status" data-testid="tracking-status">
           <div class="state" role="status" aria-live="polite">
             {#if active}
-              <span class="chip live"
-                ><span class="dot" aria-hidden="true"></span>{m.tracking_status_active()}</span
-              >
+              <span class="chip live">
+                <span class="dot" aria-hidden="true"></span>{m.tracking_status_active()}
+              </span>
             {:else}
               <span class="chip"><Icon name="check" size={16} />{m.tracking_status_ended()}</span>
             {/if}
@@ -410,9 +410,9 @@
               <dt>{m.tracking_label_last()}</dt>
               <dd>
                 {#if last}
-                  <strong class="age" data-testid="tracking-age"
-                    >{m.tracking_last_seen({ age: formatAge(last.at, now) })}</strong
-                  >
+                  <strong class="age" data-testid="tracking-age">
+                    {m.tracking_last_seen({ age: formatAge(last.at, now) })}
+                  </strong>
                 {:else}
                   {m.tracking_no_position()}
                 {/if}
@@ -456,33 +456,39 @@
 
         <div class="actions">
           {#if canControl}
-            <Button icon="send" full testid="tracking-share" onclick={() => (sheet = 'share')}
-              >{m.tracking_share()}</Button
-            >
+            <Button icon="send" full testid="tracking-share" onclick={() => (sheet = 'share')}>
+              {m.tracking_share()}
+            </Button>
           {/if}
           <Button
             icon="download"
             full
             pending={busy === 'report'}
             testid="tracking-report"
-            onclick={report}>{m.tracking_report()}</Button
+            onclick={report}
           >
+            {m.tracking_report()}
+          </Button>
           {#if canControl && active}
             <Button
               variant="danger"
               icon="stop"
               full
               testid="tracking-stop"
-              onclick={() => (sheet = 'stop')}>{m.tracking_stop()}</Button
+              onclick={() => (sheet = 'stop')}
             >
+              {m.tracking_stop()}
+            </Button>
           {:else if canControl}
             <Button
               variant="ghost"
               icon="trash"
               full
               testid="tracking-delete"
-              onclick={() => (sheet = 'delete')}>{m.tracking_delete()}</Button
+              onclick={() => (sheet = 'delete')}
             >
+              {m.tracking_delete()}
+            </Button>
           {/if}
         </div>
       {:else}
@@ -497,8 +503,10 @@
               full
               pending={busy === 'start'}
               testid="tracking-start"
-              onclick={start}>{m.tracking_start()}</Button
+              onclick={start}
             >
+              {m.tracking_start()}
+            </Button>
           {/if}
         </section>
       {/if}
@@ -520,23 +528,26 @@
               {#each activeLinks as link (link.id)}
                 <li>
                   <div>
-                    <span>{m.tracking_link_created({ time: formatDateTime(link.created_at) })}</span
-                    >
-                    <span class="mono"
-                      >{m.tracking_link_expires({ time: formatDateTime(link.expires_at) })} · {m.tracking_link_uses(
+                    <span>
+                      {m.tracking_link_created({ time: formatDateTime(link.created_at) })}
+                    </span>
+                    <span class="mono">
+                      {m.tracking_link_expires({ time: formatDateTime(link.expires_at) })} · {m.tracking_link_uses(
                         { count: formatNumber(link.uses) },
                       )}{link.last_used_at
                         ? ` · ${m.tracking_link_last_used({ age: formatAge(link.last_used_at, now) })}`
-                        : ''}</span
-                    >
+                        : ''}
+                    </span>
                   </div>
                   {#if canControl}
                     <Button
                       variant="ghost"
                       icon="close"
                       pending={busy === 'link'}
-                      onclick={() => revoke(link)}>{m.tracking_link_revoke()}</Button
+                      onclick={() => revoke(link)}
                     >
+                      {m.tracking_link_revoke()}
+                    </Button>
                   {/if}
                 </li>
               {/each}
@@ -591,9 +602,9 @@
     {#if actionProblem}<ProblemNotice title={problemMessage(actionProblem)} />{/if}
     {#snippet footer()}
       <Button onclick={closeSheet}>{m.cancel()}</Button>
-      <Button variant="danger" icon="trash" pending={busy === 'delete'} onclick={remove}
-        >{m.tracking_delete()}</Button
-      >
+      <Button variant="danger" icon="trash" pending={busy === 'delete'} onclick={remove}>
+        {m.tracking_delete()}
+      </Button>
     {/snippet}
   </Sheet>
 
@@ -617,13 +628,13 @@
         />
       </label>
       <div class="row">
-        <Button icon="copy" onclick={copyLink} testid="tracking-share-copy"
-          >{m.tracking_share_copy()}</Button
-        >
+        <Button icon="copy" onclick={copyLink} testid="tracking-share-copy">
+          {m.tracking_share_copy()}
+        </Button>
         {#if canShare()}
-          <Button icon="send" variant="primary" onclick={shareLink}
-            >{m.tracking_share_send()}</Button
-          >
+          <Button icon="send" variant="primary" onclick={shareLink}>
+            {m.tracking_share_send()}
+          </Button>
         {/if}
       </div>
     {:else}
@@ -640,8 +651,10 @@
         full
         pending={busy === 'link'}
         testid="tracking-share-create"
-        onclick={makeLink}>{m.tracking_share_create()}</Button
+        onclick={makeLink}
       >
+        {m.tracking_share_create()}
+      </Button>
     {/if}
   </Sheet>
 {/if}

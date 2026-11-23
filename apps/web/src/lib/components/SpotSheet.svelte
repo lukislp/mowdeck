@@ -151,9 +151,9 @@
       <label class="slider">
         <span class="slider-head">
           <span>{m.spot_radius()}</span>
-          <output class="mono" data-testid="spot-radius-value"
-            >{m.spot_radius_value({ value: formatNumber(flow.radiusM, 1) })}</output
-          >
+          <output class="mono" data-testid="spot-radius-value">
+            {m.spot_radius_value({ value: formatNumber(flow.radiusM, 1) })}
+          </output>
         </span>
         <input
           type="range"
@@ -175,11 +175,18 @@
           class="act"
           disabled={flow.corners === 0}
           data-testid="spot-undo"
-          onclick={() => flow.undoCorner()}>{m.spot_undo_corner()}</button
+          onclick={() => flow.undoCorner()}
         >
-        <button type="button" class="act" data-testid="spot-redraw" onclick={() => flow.drawShape()}
-          >{m.spot_redraw()}</button
+          {m.spot_undo_corner()}
+        </button>
+        <button
+          type="button"
+          class="act"
+          data-testid="spot-redraw"
+          onclick={() => flow.drawShape()}
         >
+          {m.spot_redraw()}
+        </button>
       </div>
     {/if}
     <p class="where" data-testid="spot-area" data-ok={flow.areaId ? 'true' : 'false'}>
@@ -248,9 +255,9 @@
     <label class="slider">
       <span class="slider-head">
         <span>{m.spot_speed()}</span>
-        <output class="mono" data-testid="spot-speed-value"
-          >{m.spot_speed_value({ value: formatNumber(flow.settings.speedMps, 2) })}</output
-        >
+        <output class="mono" data-testid="spot-speed-value">
+          {m.spot_speed_value({ value: formatNumber(flow.settings.speedMps, 2) })}
+        </output>
       </span>
       <input
         type="range"
@@ -341,9 +348,9 @@
   <section class="block conds-block" aria-labelledby="{uid}-conds" bind:this={conditionsEl}>
     <h3 class="label" id="{uid}-conds">
       {m.spot_conditions()}
-      <span class="mono count" data-testid="spot-conditions-count"
-        >{green}/{flow.conditions.length}</span
-      >
+      <span class="mono count" data-testid="spot-conditions-count">
+        {green}/{flow.conditions.length}
+      </span>
     </h3>
     <ul class="conds" data-testid="spot-conditions">
       {#each flow.conditions as condition (condition.id)}
@@ -431,12 +438,9 @@
     pending={flow.starting}
     onclick={() => flow.start()}
     testid="spot-start"
-    >{flow.starting
-      ? m.spot_starting()
-      : flow.bladesOn
-        ? m.spot_start()
-        : m.spot_start_dry()}</Button
   >
+    {flow.starting ? m.spot_starting() : flow.bladesOn ? m.spot_start() : m.spot_start_dry()}
+  </Button>
 {/snippet}
 
 {#snippet peek()}
@@ -510,9 +514,9 @@
       {@render previewDetails()}
     </section>
     <div class="buttons">
-      <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel"
-        >{m.cancel()}</Button
-      >
+      <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel">
+        {m.cancel()}
+      </Button>
     </div>
   </div>
 {/snippet}
@@ -562,9 +566,9 @@
         {@render previewDetails()}
         {@render startError()}
         <div class="buttons">
-          <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel"
-            >{m.cancel()}</Button
-          >
+          <Button variant="ghost" onclick={() => flow.cancel()} testid="spot-cancel">
+            {m.cancel()}
+          </Button>
           <div class="go">{@render startButton()}</div>
         </div>
       </div>

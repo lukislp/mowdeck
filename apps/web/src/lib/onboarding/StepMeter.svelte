@@ -17,10 +17,9 @@
 </script>
 
 <div class="meter" data-testid={testid} data-done={done} data-total={steps.length}>
-  <span class="count" aria-hidden="true"
-    >{String(done).padStart(2, '0')}<span class="of">/{String(steps.length).padStart(2, '0')}</span
-    ></span
-  >
+  <span class="count" aria-hidden="true">
+    {String(done).padStart(2, '0')}<span class="of">/{String(steps.length).padStart(2, '0')}</span>
+  </span>
   <span class="scale" aria-hidden="true">
     {#each steps as step (step.key)}
       <span class="seg" data-state={step.state}></span>

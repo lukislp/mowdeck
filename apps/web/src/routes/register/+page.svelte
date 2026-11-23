@@ -66,9 +66,9 @@
   {#if demo.config}
     <!-- The public demo (ADR 0068) has no registration; Identity refuses it as well. -->
     <p class="closed" data-testid="register-demo-closed">{m.register_demo_closed()}</p>
-    <Button href="/login" variant="primary" full testid="register-demo-login"
-      >{m.login_demo_button()}</Button
-    >
+    <Button href="/login" variant="primary" full testid="register-demo-login">
+      {m.login_demo_button()}
+    </Button>
   {:else if demo.loaded}
     <form class="form" onsubmit={submit} novalidate>
       <Field
@@ -118,8 +118,10 @@
         full
         pending={busy}
         disabled={!username || !password || !accountName}
-        testid="register-submit">{m.register_submit()}</Button
+        testid="register-submit"
       >
+        {m.register_submit()}
+      </Button>
     </form>
     <a class="switch" href="/login">{m.register_have_account()}</a>
   {/if}

@@ -228,8 +228,9 @@
             {#each member.assignments ?? [] as assignment (assignment.id)}
               <li class="tag assignment" data-testid="assignment-{assignment.id}">
                 <span>{roleNames.get(assignment.role_id) ?? ''}</span>
-                <span class="where" data-level={assignment.level.type}>{levelText(assignment)}</span
-                >
+                <span class="where" data-level={assignment.level.type}>
+                  {levelText(assignment)}
+                </span>
                 {#if !member.is_owner}
                   <button
                     type="button"
@@ -253,8 +254,10 @@
                 variant="ghost"
                 icon="plus"
                 testid="assign-{member.username}"
-                onclick={() => openAssign(member)}>{m.users_assign()}</Button
+                onclick={() => openAssign(member)}
               >
+                {m.users_assign()}
+              </Button>
               {#if passkeys && member.subuser}
                 <Button
                   variant="ghost"
@@ -264,8 +267,10 @@
                     (passkeysFor = {
                       id: member.id,
                       name: member.display_name || member.username,
-                    })}>{m.users_passkeys()}</Button
+                    })}
                 >
+                  {m.users_passkeys()}
+                </Button>
               {/if}
             </div>
           {/if}
@@ -331,8 +336,10 @@
             icon="plus"
             pending={busy}
             disabled={!username || !password || (!!roleId && !level(levelType, levelId))}
-            testid="user-submit">{m.users_create()}</Button
+            testid="user-submit"
           >
+            {m.users_create()}
+          </Button>
         </div>
       </form>
     </Panel>
@@ -377,8 +384,10 @@
       pending={assigning}
       disabled={!assignRole || !level(assignType, assignId)}
       testid="assign-save"
-      onclick={assign}>{m.users_assign()}</Button
+      onclick={assign}
     >
+      {m.users_assign()}
+    </Button>
   {/snippet}
 </Sheet>
 

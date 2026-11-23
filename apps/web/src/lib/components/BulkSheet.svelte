@@ -169,8 +169,10 @@
           pending={phase === 'sending'}
           disabled={!mowers.length || !targets.length}
           testid="bulk-confirm"
-          onclick={send}>{kind ? bulkKindLabel(kind) : ''}</Button
+          onclick={send}
         >
+          {kind ? bulkKindLabel(kind) : ''}
+        </Button>
       </div>
     {/if}
   {/snippet}

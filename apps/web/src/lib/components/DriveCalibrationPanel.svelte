@@ -111,9 +111,9 @@
               <span class="kind" data-kind={row.kind}>{row.kindLabel}</span>
             </th>
             <td class="num mono">{row.command}</td>
-            <td class="num mono measured" data-missing={row.missing ? 'true' : undefined}
-              >{row.measured}</td
-            >
+            <td class="num mono measured" data-missing={row.missing ? 'true' : undefined}>
+              {row.measured}
+            </td>
             <td class="num mono">{row.reports}</td>
             <td class="num mono">{row.interval}</td>
             <td class="outcome">
@@ -150,16 +150,16 @@
       <div class="info">
         <div class="head">
           <span class="lamp" aria-hidden="true"></span>
-          <span class="state" role="status"
-            >{calibrationStateLabel(status && flow.active ? status.state : 'preparing')}</span
-          >
+          <span class="state" role="status">
+            {calibrationStateLabel(status && flow.active ? status.state : 'preparing')}
+          </span>
           {#if flow.active && progress.n > 0}
-            <span class="mono step" data-testid="calib-progress"
-              >{m.calib_step_progress({
+            <span class="mono step" data-testid="calib-progress">
+              {m.calib_step_progress({
                 i: formatNumber(progress.i),
                 n: formatNumber(progress.n),
-              })}</span
-            >
+              })}
+            </span>
           {/if}
         </div>
         {#if current}
@@ -242,8 +242,10 @@
                 pending={flow.saving}
                 disabled={!allowed}
                 testid="calib-save"
-                onclick={() => void save()}>{m.calib_save()}</Button
+                onclick={() => void save()}
               >
+                {m.calib_save()}
+              </Button>
             {/if}
           </div>
         </div>
@@ -253,9 +255,9 @@
     <div class="start" data-testid="calib-start-block">
       <h4 class="label">
         {m.calib_conditions()}
-        <span class="mono count" data-testid="calib-conditions-count"
-          >{green}/{conditions.length}</span
-        >
+        <span class="mono count" data-testid="calib-conditions-count">
+          {green}/{conditions.length}
+        </span>
       </h4>
       <ul class="conds" data-testid="calib-conditions">
         {#each conditions as condition (condition.id)}
@@ -295,8 +297,10 @@
           pending={flow.starting}
           disabled={!startable}
           testid="calib-start"
-          onclick={() => void flow.start()}>{m.calib_start()}</Button
+          onclick={() => void flow.start()}
         >
+          {m.calib_start()}
+        </Button>
         {#if !allowed}
           <span class="hint">{m.calib_not_allowed()}</span>
         {/if}
@@ -335,8 +339,9 @@
           disabled={!allowed}
           testid="calib-remove"
           onclick={() => void remove()}
-          >{flow.confirmRemove ? m.calib_remove_confirm() : m.calib_remove()}</Button
         >
+          {flow.confirmRemove ? m.calib_remove_confirm() : m.calib_remove()}
+        </Button>
         {#if flow.confirmRemove}
           <Button variant="ghost" onclick={() => flow.cancelRemove()}>{m.cancel()}</Button>
         {/if}

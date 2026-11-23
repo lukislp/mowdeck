@@ -213,8 +213,10 @@
         pending={syncing}
         disabled={!provider}
         onclick={sync}
-        testid="linked-account-sync">{m.linked_sync()}</Button
+        testid="linked-account-sync"
       >
+        {m.linked_sync()}
+      </Button>
       <Button
         variant="ghost"
         icon="key"
@@ -225,8 +227,10 @@
           syncIssue = null;
           clearSecrets();
         }}
-        testid="linked-account-password-toggle">{m.linked_new_password_toggle()}</Button
+        testid="linked-account-password-toggle"
       >
+        {m.linked_new_password_toggle()}
+      </Button>
       <span class="spacer"></span>
       <Button
         variant="danger"
@@ -234,8 +238,9 @@
         pending={removing}
         onclick={remove}
         testid={confirming ? 'linked-account-delete-confirm' : 'linked-account-delete'}
-        >{confirming ? m.linked_delete_confirm() : m.linked_delete()}</Button
       >
+        {confirming ? m.linked_delete_confirm() : m.linked_delete()}
+      </Button>
       {#if confirming && !removing}
         <Button variant="ghost" onclick={() => (confirming = false)}>{m.cancel()}</Button>
       {/if}
