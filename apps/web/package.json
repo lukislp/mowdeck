@@ -25,7 +25,7 @@
     "@scalar/api-reference": "1.83.0",
     "@sveltejs/adapter-static": "4.0.1",
     "@sveltejs/kit": "3.4.0",
-    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.2",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "8.0.0",
     "@testing-library/svelte": "5.4.2",
